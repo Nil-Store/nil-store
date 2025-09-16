@@ -518,6 +518,8 @@ cols = 32 768      (indexed 0 … 32 767)
 Row `i` has two 1 MiB windows **W₂i** and **W₂i+1**; their Merkle root is `h_row[i]`.  Their limb sums form `Δ_row[i]`, committed as `delta_head[i]` (§ 3.7).
 **Merkle arity (normative option):** Implementations MAY use a higher‑arity (e.g., 16‑ary) tree to reduce path length; if so, the sibling count and witness encoding MUST be reflected in § 4.3.1 and Annex B KATs.
 
+**Informative (relationship to NilFS shards).** Reed–Solomon shards (metaspec §3.2) are **data‑layer** units that determine where bytes live on the network. After a shard reaches an SP, the shard’s bytes are sealed into **sectors** and committed per this section. PoS² operates on the sealed sector’s **row/column** layout (2 MiB rows, 64 B leaves) independent of how many NilFS shards contributed bytes to that sector. In other words: NilFS sharding affects placement and repair; PoS² attests to liveness and integrity of whatever bytes are sealed in the sector.
+
 \### 4.2 Challenge Derivation (Beacon Mix)
 
 For epoch counter `ctr` and chain beacon block‑hash `B_t`:

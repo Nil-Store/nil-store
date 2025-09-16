@@ -71,9 +71,38 @@ NilFS abstracts data management complexity, automating the preparation, distribu
 1.  **Content-Defined Chunking (CDC):** Ingested objects are automatically split using CDC (e.g., Rabin fingerprinting) to maximize deduplication. Chunks are organized into a Merkle DAG (CIDv1 compatible).
 2.  **Data Unit Packing:** Chunks are serialized and packed into standardized **Data Units (DUs)**. DU sizes are powers-of-two (1 MiB to 8 GiB). SPs interact only with DUs.
 
+#### 3.1.1 Upload Walkthrough (Informative)
+
+This walkthrough illustrates what happens when a client uploads an object **F** to NilStore:
+
+1) **Chunk & DAG (CDC).** The client runs content‑defined chunking (e.g., Rabin) over **F**, producing a Merkle‑DAG (CIDv1‑compatible).
+2) **Pack into DUs.** Chunks are serialized into one or more **Data Units (DUs)** (power‑of‑two size between 1 MiB and 8 GiB). Each DU is self‑contained.
+3) **Commit & deal intent.** The client computes a DU commitment (`C_root`) and prepares `CreateDeal` parameters (price, term, redundancy, QoS).
+4) **Erasure coding.** Each DU is encoded with Reed–Solomon **RS(n,k)** (default **(12,9)**), yielding **n** shards (k data + n−k parity).
+5) **Deterministic placement.** For every shard `j`, compute a Nil‑Lattice **ring‑cell** target via
+   `pos := Hash(CID_DU ∥ ClientSalt_32B ∥ j) → (r,θ)` and enforce placement constraints (one shard per SP per cell; cross‑cell distance threshold).
+6) **Deal creation (L2).** The client calls **`CreateDeal`** on L2, posting `C_root`, locking $STOR escrow, and minting a **Deal NFT**.
+7) **Miner uptake (L2+L1).** Selected SPs bond $STOR, fetch their assigned shards, and seal them into sectors on L1 using **`nilseal`**, producing row commitments `h_row` and delta heads `delta_head` needed by **PoS²**.
+8) **Epoch service.** During each epoch, SPs (a) serve retrievals; clients sign **Ed25519 receipts**; SPs aggregate receipts into a Poseidon Merkle (`BW_root`), and (b) post an epoch **PoS²** proof binding storage and bandwidth.
+9) **Settlement & rewards.** L1 recursively aggregates PoS² and posts a validity proof to L2 (**ZK‑Bridge**). L2 updates `{poss2_root, bw_root, epoch_id}` and releases vested fees / $BW rewards per distribution rules.
+10) **Repair (as needed).** If shard availability drops below threshold, the network triggers **Autonomous Repair**—repaired shards must open against the original DU commitment (no drift).
+
+**Message flow (illustrative):**
+```
+Client  →  SDK:  CDC+DAG → DU pack → RS(n,k) → placement map
+Client  →  L2:  CreateDeal(C_root, terms) → Deal NFT
+SP      ←  L2:  MinerUptake(collateral)   ← selected SPs
+SP      ↔  L1:  Seal (h_row, delta_head)  ; Epoch PoS²(bw_root)
+Clients ↔  SP:  Retrieval ↔ Receipts(Ed25519) → SP aggregates
+L1      →  L2:  ZK-Bridge(recursive SNARK) → state update & vesting
+```
+
 ### 3.2 Erasure Coding and Placement
 
-DUs are erasure‑coded using **systematic Reed‑Solomon over GF(2^8)** with **symbol size = 1 KiB** (normative). The default profile is (n=12, k=9), derived from `n = k + ⌈k / 4⌉` (1.33× redundancy). Implementations **MUST** re‑encode on churn events and publish the RS parameters in the deal metadata.
+**Normative (Redundancy & Sharding).** Each DU is encoded with **systematic Reed–Solomon over GF(2^8)** using **symbol_size = 1 KiB**. A DU is striped into **k** equal data stripes; **n−k** parity stripes are computed; stripes are concatenated per‑shard to form **n shards** of near‑equal size. The default profile is **RS(n=12, k=9)** (≈ **1.33×** overhead), tolerating **f = n−k = 3** arbitrary shard losses **without** data loss.
+**Normative (Placement constraints).** At most **one shard per SP per ring‑cell**; shards of the same DU MUST be placed across distinct ring‑cells with a minimum topological separation (governance‑tunable).
+**Normative (Repair triggers).** A **RepairNeeded** event is raised when `healthy_shards ≤ k+1`. Repairs MUST produce openings **against the original DU commitment**; re‑committing a DU is invalid.
+**Deal metadata MUST include:** `{RS_n, RS_k, symbol_size, ClientSalt_32B, lattice_params, placement_constraints, repair_threshold}`.
 
 *   **Deterministic Placement (Nil-Lattice):** Shards are placed on a directed hex-ring lattice to maximize topological distance. The coordinate (r, θ) is determined by:
     `pos := Hash(CID_DU ∥ ClientSalt_32B ∥ SlotIndex) → (r, θ)`
@@ -251,3 +280,20 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 | Retrieval RTT (p95)     | ≤ 400 ms (across 5 geo regions)      |
 | On-chain Verify Gas (L2)| ≤ 120k Gas                           |
 | Durability              | ≥ 11 nines (modeled)                 |
+
+## Annex A: Threat & Abuse Scenarios and Mitigations (Informative)
+
+| Scenario | Attack surface | Detect / Prevent (Design) | Normative anchor(s) |
+| --- | --- | --- | --- |
+| **Wash‑retrieval / Self‑dealing** | SP scripts fake clients to farm $BW receipts | Challenge‑nonce + expiry in receipts; watchers or L1 verify Ed25519 off‑chain/on‑chain; PoS² only commits to **Poseidon receipt root** and byte‑sum; per‑DU/epoch service caps; /16 down‑weighting | §6.1 (Receipt schema & verification model), §6.2 (BW_root), §5.2.1 (caps) |
+| **RTT Oracle collusion** | Gateways/attesters collude to post low RTT | Stake‑weighted attesters; challenge‑response tokens; ASN/region diversity; randomized assignments; slashable fraud proofs with raw transcripts | §4.2 (RTT Oracle) |
+| **Commitment drift in repair** | Repaired shards bound to a *new* commitment | Repaired shards MUST open against the **original DU KZG**; reject new commitments | §3.3 (Autonomous Repair) |
+| **Bridge/rollup trust** | VK swap or replay of old epoch | L2 bridge pins `vk_hash`; public inputs `{epoch_id, DA_state_root, poss2_root, bw_root}`; monotone `epoch_id`; timelocked VK upgrades | §2.4 (ZK‑Bridge) |
+| **Lattice capture (ring‑cell cartel)** | SPs concentrate shards topologically | One‑shard‑per‑SP‑per‑cell; minimum cell distance; DAO can raise separation if concentration increases | §3.2 (Placement constraints), §9 (Governance) |
+| **Shard withholding (availability)** | SP stores but doesn’t serve | Vesting tied to valid PoS²; $BW distribution requires receipts; slashing for missed epochs | §7.3 (Vesting/Slashing), §6 (PoS²) |
+| **Beacon grinding** | Bias challenges | BLS VRF uniqueness; BATMAN threshold; on‑chain pairing check; domain separation | spec §5 (VRF), metaspec §6.2 (Challenge) |
+| **Merkle truncation misuse** | Excessive path truncation weakens PoS² | Prefer higher‑arity Merkle or longer per‑sibling bytes; security bound documented | spec §4.3.1 (witness); §4.1 (arity option) |
+| **Economic instability** | Excess $BW inflation via spam | Epoch cap `I_epoch_max`; α bounds; per‑DU caps; tips burned; RTT oracle weights | §5.2 (BW), §4.2 (RTT Oracle) |
+| **Deal fraud / mispricing** | Non‑delivery after payment | Escrowed $STOR; vesting gated by PoS²; repair bounties | §7.2–7.3, §3.3 |
+
+**Reviewer note:** Items labeled *Normative* above correspond to concrete MUST/SHALL language in the main text; others are informative guidance tied to governance levers.
