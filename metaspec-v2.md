@@ -102,11 +102,77 @@ L1      →  L2:  ZK-Bridge(recursive SNARK) → state update & vesting
 **Normative (Redundancy & Sharding).** Each DU is encoded with **systematic Reed–Solomon over GF(2^8)** using **symbol_size = 1 KiB**. A DU is striped into **k** equal data stripes; **n−k** parity stripes are computed; stripes are concatenated per‑shard to form **n shards** of near‑equal size. The default profile is **RS(n=12, k=9)** (≈ **1.33×** overhead), tolerating **f = n−k = 3** arbitrary shard losses **without** data loss.
 **Normative (Placement constraints).** At most **one shard per SP per ring‑cell**; shards of the same DU MUST be placed across distinct ring‑cells with a minimum topological separation (governance‑tunable).
 **Normative (Repair triggers).** A **RepairNeeded** event is raised when `healthy_shards ≤ k+1`. Repairs MUST produce openings **against the original DU commitment**; re‑committing a DU is invalid.
-**Deal metadata MUST include:** `{RS_n, RS_k, symbol_size, ClientSalt_32B, lattice_params, placement_constraints, repair_threshold}`.
+**Deal metadata MUST include:**
+`{profile_type, RS_n?, RS_k?, rows?, cols?, symbol_size, ClientSalt_32B, lattice_params, placement_constraints, repair_threshold, epoch_written?}`.
+
+Notes:
+- `profile_type ∈ {"RS-Standard","RS-2D-Hex","dial"}`.
+- Fields marked `?` are present if required by the resolved profile (see §3.2.y–§3.2.z).
+- `epoch_written` is set when the DU is first committed on-chain and is used by routing during reconfiguration (see §7.4).
 
 *   **Deterministic Placement (Nil-Lattice):** Shards are placed on a directed hex-ring lattice to maximize topological distance. The coordinate (r, θ) is determined by:
     `pos := Hash(CID_DU ∥ ClientSalt_32B ∥ SlotIndex) → (r, θ)`
-    The `ClientSalt` ensures cross-deal uniqueness.
+The `ClientSalt` ensures cross-deal uniqueness.
+
+### 3.2.y RS‑2D‑Hex Profile (Optional)
+
+#### 3.2.y.0 Objective
+The RS‑2D‑Hex profile couples two‑dimensional erasure coding with NilStore’s hex‑lattice.
+It maps row redundancy → radial rings and column redundancy → angular slices, enabling O(|DU|/n) repair bandwidth under churn.
+
+#### 3.2.y.1 Encoding
+- Partition the DU into an [r × c] symbol matrix (baseline r = f+1, c = 2f+1).
+- Column‑wise RS(n,r) → primary slivers; row‑wise RS(n,c) → secondary slivers.
+- Each SP is assigned a (primary_i, secondary_i) sliver pair.
+
+#### 3.2.y.2 Commitments & Metadata
+- Each sliver MUST be bound by a vector commitment (KZG or nilhash); the DU MUST expose a blob commitment `C_root`.
+- Deal metadata MUST carry `{rows, cols, symbol_size, commitment_root, placement_constraints}`.
+
+#### 3.2.y.3 Lattice Placement (Normative)
+- Row→rings: All slivers in a given row MUST lie on distinct radial rings.
+- Col→slices: All slivers in a given column MUST lie on distinct angular slices.
+- Cross‑cell: An SP MUST NOT hold >1 sliver in the same (r,θ) cell.
+
+#### 3.2.y.4 Read & Repair
+- Read: Collect ≥ 2f+1 secondary slivers across rings, reconstruct DU, re‑encode, verify `C_root`.
+- Repair:
+  - Secondary sliver repair: query f+1 neighbors on the same ring.
+  - Primary sliver repair: query 2f+1 neighbors on the same slice.
+- All repairs MUST open against the original DU commitment (§3.3).
+
+#### 3.2.y.5 Integration with PoS²
+RS‑2D‑Hex affects only NilFS shard layout; PoS² remains file‑agnostic and unmodified (§6).
+
+#### 3.2.y.6 Governance
+- Default RS(12,9) remains mandatory.
+- RS‑2D‑Hex MAY be enabled per pool/class; SPs MUST advertise support at deal negotiation.
+
+### 3.2.z Durability Dial Abstraction
+
+#### 3.2.z.0 Objective
+Expose a user‑visible durability_target ∈ [0.90, 0.999999999] that deterministically resolves to a governance‑approved redundancy profile (RS‑Standard or RS‑2D‑Hex).
+
+#### 3.2.z.1 Mapping & Metadata
+- Client sets `profile_type="dial"` and `durability_target`.
+- The resolver MUST produce `resolved_profile := {RS_n, RS_k} | {rows, cols}` and placement constraints.
+- Deal metadata MUST record `{profile_type="dial", durability_target, resolved_profile}`.
+
+#### 3.2.z.2 Late‑Joiner Bootstrap (Completeness)
+Any SP missing its assigned sliver after dispersal MUST be able to reconstruct it without the writer online, using row/column intersections per the resolved profile. This guarantees eventual completeness.
+
+#### 3.2.z.3 Encoded Metadata (Scalability)
+For RS‑2D‑Hex, sliver‑commitment metadata MUST be encoded linearly (e.g., 1D RS over the metadata vector). SPs store only their share; gateways/clients reconstruct on demand.
+
+#### 3.2.z.4 Writer Inconsistency Proofs (Fraud)
+If a received sliver is inconsistent with `C_root`, an SP MUST be able to produce an inconsistency proof (`{symbols, inclusion proofs}`) sufficient for third‑party re‑encoding and mismatch verification.
+Upon ≥ f+1 posted proofs, the DU SHALL be marked invalid, excluded from PoS² rewards, and the writer’s escrow slashed (§7.3).
+
+#### 3.2.z.5 Lattice Coupling
+Resolved profiles MUST respect §3.2.y placement rules for 2D cases, and the standard ring‑cell separation for RS.
+
+#### 3.2.z.6 Governance
+NilDAO maintains the mapping table (durability target → profile), caps allowed ranges, and sets cost multipliers per profile.
 
 ### 3.3 Autonomous Repair Protocol
 
@@ -204,6 +270,34 @@ The PoS² SNARK proves two statements simultaneously:
     *   The SNARK verifies the consistency of `BW_root`.
     *   The SNARK asserts that the total bytes served meets a minimum threshold (`Σ bytes ≥ B_min`).
 
+### 6.3 Probabilistic Retrieval Sampling (QoS Auditing)
+
+#### 6.3.0 Objective
+Strengthen retrieval QoS without suspending reads by sampling and verifying a governance‑tunable fraction of receipts each epoch. This mechanism is additive to PoS² and does not alter the proof object.
+
+#### 6.3.1 Sampling Set Derivation
+1) At epoch boundary `t`, derive `seed_t := Blake2s-256("NilStore-Sample" ‖ beacon_t ‖ epoch_id)`, where `beacon_t` is the Nil‑VRF epoch beacon.
+2) For each SP’s `BW_root`, expand `seed_t` into a PRF stream and select a fraction `p` of receipts for verification (`0.5% ≤ p ≤ 10%`, default 2%).
+3) The sample MUST be unpredictable to SPs prior to epoch end and sized so that expected coverage ≥ 1 receipt per active SP.
+
+#### 6.3.2 Verification Procedure
+Watchers (or DA validators) MUST, for each sampled receipt:
+- Verify Ed25519 client signature and expiry.
+- Check `ChallengeNonce` uniqueness and binding to the DU slice.
+- Verify RTT transcript via the QoS Oracle (§4.2) meets declared bounds.
+- Verify inclusion in `BW_root` (Poseidon path).
+Aggregate results into `SampleReport_t`.
+
+#### 6.3.3 Enforcement
+- Pass: If ≥ (1−ε) of sampled receipts per SP verify (`ε` default 1%), rewards vest as normal.
+- Fail: Deduct failing receipts from counted bytes; if failures > ε, apply quadratic slashing to bonded $STOR; repeat offenders MAY be suspended pending DAO vote.
+
+#### 6.3.4 Governance Dials
+NilDAO MAY tune: sampling fraction `p`, tolerance `ε`, slashing ratio, and a system‑wide escalation that raises `p` up to 100% if anomaly rate exceeds `ε_sys`.
+
+#### 6.3.5 Security & Liveness
+Sampling renders expected value of receipt fraud negative under rational slashing. Unlike asynchronous challenges that pause reads, NilStore maintains continuous liveness; PoS² remains valid regardless of sampling outcomes.
+
 ## 7. The Deal Lifecycle
 
 ### 7.1 Quoting and Negotiation (Off-Chain)
@@ -232,6 +326,32 @@ The PoS² SNARK proves two statements simultaneously:
     `Penalty = 0.05 × (Consecutive_Missed_Epochs)²`
     The penalty resets upon submission of a valid proof.
 
+### 7.4 Multi‑Stage Epoch Reconfiguration
+
+#### 7.4.0 Objective
+Ensure uninterrupted availability during committee churn by directing writes to epoch e+1 immediately, while reads remain served by epoch e until the new committee reaches readiness quorum.
+
+#### 7.4.1 Metadata
+Each DU MUST carry `epoch_written`. During handover, gateways/clients route reads by `epoch_written`; if `epoch_written < current_epoch`, they MAY continue reading from the old committee until readiness is signaled.
+
+#### 7.4.2 Committee Readiness Signaling
+New‑epoch SPs MUST signal readiness once all assigned slivers are bootstrapped. A signed message: `{epoch_id, SP_ID, slivers_bootstrapped, timestamp, sig_SP}` is posted on L1. When ≥ 2f+1 SPs signal, the DA chain emits `CommitteeReady(epoch_id)`.
+
+#### 7.4.3 Routing Rules
+- Writes: MUST target the current (newest) epoch.
+- Reads:
+  - If `epoch_written = current_epoch`, read from current.
+  - If `epoch_written < current_epoch`, prefer old committee until `CommitteeReady`, then switch to new.
+Gateways MUST NOT request slivers from SPs that have not signaled readiness.
+
+#### 7.4.4 Failure Modes
+- SPs failing to signal by the epoch deadline are slashed per policy.
+- If quorum is not reached by `Δ_ready_timeout`, the DAO MAY trigger emergency repair bounties.
+- False readiness is slashable and MAY cause temporary suspension from deal uptake.
+
+#### 7.4.5 Governance Dials
+DAO‑tunable: `Δ_ready_timeout` (default 24h), quorum (default 2f+1), slashing ratios, and the emergency bounty path.
+
 ## 8. Advanced Features: Spectral Risk Oracle (σ)
 
 To manage systemic risk and enable sophisticated financial instruments, NilStore incorporates an on-chain volatility oracle (σ).
@@ -248,7 +368,7 @@ The network is governed by the NilDAO, utilizing stake-weighted ($STOR) voting o
 
 ### 9.1 Scope
 
-The DAO controls economic parameters (α, slashing ratios, bounty percentages), network upgrades, and the treasury.
+The DAO controls economic parameters (α, slashing ratios, bounty percentages), QoS sampling dials (`p`, `ε`, `ε_sys`), multi‑stage reconfiguration thresholds (`Δ_ready_timeout`, quorum), network upgrades, and the treasury.
 
 ### 9.2 Upgrade Process
 
@@ -280,6 +400,8 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 | Retrieval RTT (p95)     | ≤ 400 ms (across 5 geo regions)      |
 | On-chain Verify Gas (L2)| ≤ 120k Gas                           |
 | Durability              | ≥ 11 nines (modeled)                 |
+| Sampling FP/FN rate       | ≤ 0.5% / ≤ 0.1% (monthly audit)    |
+| Handover ready time (p50) | ≤ 2 h (RS‑2D‑Hex), ≤ 6 h (RS)       |
 
 ## Annex A: Threat & Abuse Scenarios and Mitigations (Informative)
 
@@ -295,5 +417,9 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 | **Merkle truncation misuse** | Excessive path truncation weakens PoS² | Prefer higher‑arity Merkle or longer per‑sibling bytes; security bound documented | spec §4.3.1 (witness); §4.1 (arity option) |
 | **Economic instability** | Excess $BW inflation via spam | Epoch cap `I_epoch_max`; α bounds; per‑DU caps; tips burned; RTT oracle weights | §5.2 (BW), §4.2 (RTT Oracle) |
 | **Deal fraud / mispricing** | Non‑delivery after payment | Escrowed $STOR; vesting gated by PoS²; repair bounties | §7.2–7.3, §3.3 |
+
+| **Receipt inflation via colluding gateways** | Faked signatures/RTT | Probabilistic sampling (§6.3); RTT oracle transcripts; slashing (`ε` threshold) | §6.3, §4.2 |
+| **Writer inconsistency (2D profiles)** | Malicious sliver encodings | Encoded metadata; f+1 inconsistency proofs → mark invalid; writer slashing | §3.2.z.3 |
+| **Epoch handover stalls** | New committee not ready | Multi‑stage reconfiguration; readiness signaling; emergency bounties | §7.4 |
 
 **Reviewer note:** Items labeled *Normative* above correspond to concrete MUST/SHALL language in the main text; others are informative guidance tied to governance levers.
