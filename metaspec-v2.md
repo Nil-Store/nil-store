@@ -41,7 +41,8 @@ NilStore employs a hybrid architecture that decouples Data Availability (DA) con
 
 The Data Availability Chain is a minimal L1 (built using Cosmos-SDK/Tendermint BFT) optimized for NilStore's cryptographic operations.
 
-*   **Function:** Verifying KZG openings and PoS² SNARKs efficiently via pre-compiles (avoiding expensive EVM gas costs), managing $STOR staking, and executing slashing logic. It does not run a general-purpose VM.
+*   **Function:** Verifying KZG openings and PoS² SNARKs efficiently via pre‑compiles (avoiding expensive EVM gas costs), managing $STOR staking, and executing slashing logic. It does not run a general‑purpose VM.
+*   **Required pre‑compiles (normative):** (a) BLAKE2s‑256, (b) Poseidon (for Merkle paths), and (c) KZG (G1/G2 ops; multi‑open). Chains lacking these MUST expose equivalent syscalls in the DA module.
 *   **Rationale:** The intensive cryptographic operations required for daily proof verification are best handled natively.
 
 ### 2.3 The Settlement Layer (L2)
@@ -252,7 +253,7 @@ $BW is the utility token rewarding data retrieval. It is elastic and minted base
 
 Inflation per epoch (I_epoch) is calculated using a sublinear function to incentivize usage while controlling inflation:
 
-`I_epoch = clamp( α · sqrt(Total_Bytes_Served_NetworkWide), 0, I_epoch_max )`
+`I_epoch = clamp( α · sqrt(Total_Bytes_Served_NetworkWide), 0, I_epoch_max )`  // **Normative bound:** set `I_epoch_max ≤ 0.15%` of circulating $BW per epoch (DAO‑tunable within [0.05%, 0.15%]).
 where:
 - `α ∈ [α_min, α_max]` (DAO‑tunable);
 - `I_epoch_max` caps epoch inflation (DAO‑tunable);
@@ -285,7 +286,8 @@ To account for bandwidth, clients sign receipts upon successful retrieval.
 *   **Receipt Schema (Normative):**
     `Receipt := { CID_DU, Bytes, ChallengeNonce, ExpiresAt, Tip_BW, Miner_ID, Client_Pubkey, Sig_Ed25519 [, GatewaySig?] }`
     - `ChallengeNonce` is issued per‑session by the SP/gateway and bound to the DU slice; `ExpiresAt` prevents replay.
-    - **Verification model:** Ed25519 signatures are verified **off‑chain by watchers and/or on the DA chain**; PoS² only commits to a **Poseidon Merkle root** of receipts and proves byte‑sum consistency. In‑circuit Ed25519 verification is **not required**.
+    - **Verification model:** Ed25519 signatures are verified **off‑chain by watchers and/or on the DA chain**; PoS² only commits to a **Poseidon Merkle root** of receipts and proves byte‑sum consistency. In‑circuit Ed25519 verification is **not required**.  
+      **Normative anchor:** At least **2% of receipts by byte‑volume per epoch** MUST be verified on the DA chain (randomly sampled via § 6.3) and escalate automatically under anomaly (§ 6.3.4).
 
 ### 6.2 PoS² Binding (Storage + Bandwidth)
 
@@ -350,7 +352,7 @@ Sampling renders expected value of receipt fraud negative under rational slashin
     *   **Per‑replica Work Bound (`Δ_work`)**: 60 s (baseline profile), the minimum wall‑clock work per replica referenced by the Core Spec’s § 6.2 security invariant. Implementations **MUST** ensure `t_recreate_replica ≥ 5·Δ_work` (see Nilcoin Core v2.0 § 6.2).
     *   **Block Time** (Tendermint BFT): 6 s.
 *   **Slashing Rule (Normative):** Missed PoS² proofs trigger a quadratic penalty on the bonded $STOR collateral:
-    `Penalty = 0.05 × (Consecutive_Missed_Epochs)²`
+    `Penalty = min(0.50, 0.05 × (Consecutive_Missed_Epochs)²)`
     The penalty resets upon submission of a valid proof.
 
 ### 7.4 Multi‑Stage Epoch Reconfiguration
@@ -402,7 +404,7 @@ The DAO controls economic parameters (α, slashing ratios, bounty percentages), 
 ### 9.2 Upgrade Process
 
 *   **Standard Upgrades:** Require a proposal, a voting period, and a mandatory 72-hour execution timelock.
-*   **Emergency Circuit (Hot-Patch):** A predefined 2-of-2 multisig (e.g., Protocol Architect and Security Lead) can enact emergency patches.
+*   **Emergency Circuit (Hot-Patch):** A predefined **3‑of‑5** multisig (e.g., Protocol Architect, Security Lead, DAO Steward, External Auditor, Community Rep) can enact narrowly scoped emergency patches.
     *   **Sunset Clause (Normative):** Emergency patches automatically expire 14 days after activation unless ratified by a full DAO vote.
 
 ### 9.3 Freeze Points

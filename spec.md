@@ -394,7 +394,7 @@ A **shear step** maps `(x,y) → (x + y , y) mod (p,q)`.
 
 After finishing pass `p−1`, compute a digest of the entire pass's data that is sensitive to chunk order.
 
-`ChunkHashes_{p-1} = [SHA256(chunk_0^{p-1}), SHA256(chunk_1^{p-1}), ...]`
+`ChunkHashes_{p-1} = [Blake2s‑256(chunk_0^{p-1}), Blake2s‑256(chunk_1^{p-1}), ...]`
 `ChunkDigest_{p-1} = MerkleRoot(ChunkHashes_{p-1})`
 `ζ_p = little‑endian 32 bits of BLAKE2s-256( salt ‖ p ‖ ChunkDigest_{p-1} )`
 
@@ -563,11 +563,11 @@ struct Proof64 {
 
 | Purpose               | Bytes                   | Encoding                                                          |
 | --------------------- | ----------------------- | ----------------------------------------------------------------- |
-| Merkle path (15 lev.) | 15 × 7 = 105 bytes      | Each sibling hash truncated to 7 bytes (Blake2s‑XOF), order‑preserving |
+| Merkle path (15 lev.) | 15 × 12 = 180 bytes     | Each sibling hash truncated to 12 bytes (≈96‑bit) using Blake2s‑XOF, order‑preserving |
 | Homomorphic delta `Δ` | 4 bytes                 | `u32` little‑endian                                               |
 | Reserved              | 3 bytes                 | Padding                                                           |
-| **Total**             | **112 bytes**           |                                                                   |
-**Note:** If truncation bounds prove insufficient in security review, increase per‑sibling bytes or switch to a higher‑arity tree (§ 4.1) to shorten paths without truncation.
+| **Total**             | **187 bytes**           |                                                                   |
+**Normative bound:** Per‑sibling truncation **MUST be ≥ 12 bytes (96‑bit)** for main‑net profiles. Lower truncation (e.g., 7 bytes) is permitted **only** on testnets and MUST be flagged in the profile ID; higher‑arity trees MAY be used to control witness size (§ 4.1).
 
 \### 4.4 Prover Algorithm `pos2_prove`
 
