@@ -555,7 +555,7 @@ struct Proof64 {
     u16  idx_row;     // little‑endian
     u16  idx_col;
     u32  reserved = 0;
-    u8   witness[112];   // accommodates 15 binary Merkle siblings
+    u8   witness[187];   // 15 siblings × 12 B = 180, plus 4 B Δ and 3 B pad
 }
 ```
 
@@ -577,7 +577,7 @@ fn pos2_prove(path, row_i, col_j, ρ) -> Proof64 {
     let leaf_offset = row_i*2MiB + col_j*64B;
     let leaf = read(path, leaf_offset, 64);
 
-    // 2. Build compressed Merkle path (56 B)
+    // 2. Build compressed Merkle path (180 B)
     let witness = truncated_path(row_i, col_j, path);
 
     // 3. Compute Δ over the eight 1 MiB windows
@@ -586,8 +586,8 @@ fn pos2_prove(path, row_i, col_j, ρ) -> Proof64 {
         Δ += limb_sum(wnd);               // mod Q
     }
 
-    // 4. Assemble proof
-    let final_witness = witness_path ‖ Δ.to_le_bytes(4) ‖ [0;3];
+    // 4. Assemble proof (witness_path ‖ Δ (4 B) ‖ pad (3 B))
+    let final_witness = witness ‖ Δ.to_le_bytes(4) ‖ [0;3];
     return Proof64 {
         idx_row = row_i,
         idx_col = col_j,
@@ -606,12 +606,12 @@ function poss2_verify(
 ) external pure returns (bool ok) {
     // --- Merkle inclusion check -----------------
     bytes32 leaf = blake2s_256(readLeaf(p.idx_row, p.idx_col));
-    bytes32 root = reconstruct(leaf, p.witness);      // ≤ 7 hashes
+    bytes32 root = reconstruct(leaf, p.witness);      // 15 siblings (binary path)
     if (root != hRow) return false;
 
     // --- Homomorphic delta check ----------------
-    // Extract Δ from the witness field
-    uint32 Δ = bytes_to_u32_le(p.witness[49..53]);
+    // Extract Δ from the witness field (bytes 180..184)
+    uint32 Δ = bytes_to_u32_le(p.witness[180..184]);
     bytes32 chk = blake2s_256(abi.encode("P2Δ", p.idx_row, Δ));
     if (chk != deltaHead) return false;
 
