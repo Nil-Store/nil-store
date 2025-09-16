@@ -21,7 +21,7 @@ NilStore retains strong cryptographic guarantees while reducing the "sealing" pr
 ### 1.2 Key Innovations
 
 *   **PoS² (Proof-of-Spacetime-Squared):** A merged SNARK attesting to both continued data storage and bandwidth served within an epoch.
-*   **CPU-Only Sealing:** <5 minutes for 64 GiB on commodity hardware.
+*   **CPU‑Only Sealing (baseline/target):** **Baseline** ≤ 8 min for **32 GiB** on an 8‑core 2025 CPU (see Nilcoin Core v2.0 § 9); **Target** ≤ 5–8 min for **64 GiB** (subject to disk bandwidth and profile). State targets as *target* until reproduced in Annex benchmarks.
 *   **Nil-Mesh Routing:** Heisenberg-lifted K-shortest paths for optimized latency and Sybil resistance.
 *   **Dual-Token Economy:** Decoupling long-term capacity commitment ($STOR) from immediate utility ($BW).
 *   **Hybrid Settlement:** A specialized L1 for efficient proof verification bridged via ZK-Rollup to an EVM L2 for liquidity and composability.
@@ -52,7 +52,11 @@ Settlement occurs on a ZK-Rollup (using PlonK/Kimchi) bridged to a major EVM eco
 
 ### 2.4 The ZK-Bridge
 
-The L1 aggregates all epoch PoS² proofs into a single recursive SNARK. This proof is posted to the L2 bridge contract, securely updating the state without trusted relayers or multisigs.
+The L1 aggregates all epoch PoS² proofs into a single recursive SNARK and posts it to the L2 bridge contract. **Normative circuit boundary**:
+1) **Public inputs**: `{epoch_id, DA_state_root, poss2_root, bw_root, validator_set_hash}`.
+2) **Verification key**: `vk_hash = sha256(vk_bytes)` pinned in the L2 bridge at deployment; upgrades require DAO action and timelock.
+3) **State mapping**: On accept, the bridge **atomically** updates `{poss2_root, bw_root, epoch_id}`; monotonic `epoch_id` prevents replay.
+4) **Failure domains**: any mismatch in roots or non‑monotonic epoch causes a hard reject. No trusted relayers or multisigs are required because validity is enforced by the proof and pinned `vk_hash`.
 
 ### 2.5 Cryptographic Core Dependency
 
@@ -69,7 +73,7 @@ NilFS abstracts data management complexity, automating the preparation, distribu
 
 ### 3.2 Erasure Coding and Placement
 
-DUs are erasure-coded using systematic Reed-Solomon (RS) codes. The default profile is (n=12, k=9), derived from `n = k + ⌈k / 4⌉` (1.33x redundancy).
+DUs are erasure‑coded using **systematic Reed‑Solomon over GF(2^8)** with **symbol size = 1 KiB** (normative). The default profile is (n=12, k=9), derived from `n = k + ⌈k / 4⌉` (1.33× redundancy). Implementations **MUST** re‑encode on churn events and publish the RS parameters in the deal metadata.
 
 *   **Deterministic Placement (Nil-Lattice):** Shards are placed on a directed hex-ring lattice to maximize topological distance. The coordinate (r, θ) is determined by:
     `pos := Hash(CID_DU ∥ ClientSalt_32B ∥ SlotIndex) → (r, θ)`
@@ -80,7 +84,7 @@ DUs are erasure-coded using systematic Reed-Solomon (RS) codes. The default prof
 The network autonomously maintains durability through a bounty system.
 
 1.  **Detection:** If DU availability drops below the resilience threshold (e.g., k+1), a `RepairNeeded` event is triggered.
-2.  **Execution:** Any node can reconstruct the missing shards and generate a fresh KZG commitment.
+2.  **Execution:** Any node can reconstruct the missing shards **and MUST produce openings against the original DU KZG commitment** (no new commitment is accepted). The repair submission includes a Merkle proof to the DU’s original `C_root` plus KZG openings for the repaired shards.
 3.  **Resilience Bounty:** The first node to submit proof of correct regeneration claims the bounty (default: 5% of the remaining escrowed fee for that DU).
 
 ## 4. Network Layer (Nil-Mesh)
@@ -99,7 +103,11 @@ Nil-Mesh utilizes the geometric properties of the Nil-Lattice for efficient path
 Verifiable Quality of Service (QoS) is crucial for performance and security.
 
 *   **Attestation:** Nodes continuously monitor and sign Round-Trip Time (RTT) attestations with peers.
-*   **On-Chain Oracle:** Gateways periodically post RTT digests (Poseidon Merkle roots) to the DA chain.
+*   **On‑Chain Oracle:** A **stake‑weighted attester set** posts RTT digests (Poseidon Merkle roots) to the DA chain. **Normative**:
+    1) **Challenge‑response**: clients issue random tokens; SPs must echo tokens within `T_max`; vantage nodes verify end‑to‑end.
+    2) **Diversity**: attesters span ≥ 5 regions and ≥ 8 ASNs; assignments are epoch‑randomized.
+    3) **Slashing**: equivocation or forged attestations are slashable with on‑chain fraud proofs (submit raw transcripts).
+    4) **Sybil control**: weight attesters by bonded $STOR and decay weights for co‑located /24s.
 *   **Usage:**
     1.  **Path Selection:** Clients use the Oracle to select the fastest 'k' providers.
     2.  **Fraud Prevention:** The Oracle verifies that bandwidth receipts are genuine (verifying RTT > network floor), preventing Sybil self-dealing.
@@ -122,7 +130,11 @@ $BW is the utility token rewarding data retrieval. It is elastic and minted base
 
 Inflation per epoch (I_epoch) is calculated using a sublinear function to incentivize usage while controlling inflation:
 
-`I_epoch = α · sqrt(Total_Bytes_Served_NetworkWide)`
+`I_epoch = clamp( α · sqrt(Total_Bytes_Served_NetworkWide), 0, I_epoch_max )`
+where:
+- `α ∈ [α_min, α_max]` (DAO‑tunable);
+- `I_epoch_max` caps epoch inflation (DAO‑tunable);
+- per‑DU and per‑Miner **service caps** apply to the counted bytes to mitigate wash‑trading.
 
 *   α (Alpha) is a governance-tunable constant scaling the inflation rate.
 
@@ -149,8 +161,9 @@ The economic model is enforced cryptographically through the PoS² consensus mec
 To account for bandwidth, clients sign receipts upon successful retrieval.
 
 *   **Receipt Schema (Normative):**
-    `Receipt := { CID_DU, Bytes, Nonce, Tip_BW, Miner_ID, Client_Pubkey, Sig_Ed25519 }`
-    (Ed25519 is used for fast, mobile-friendly signing).
+    `Receipt := { CID_DU, Bytes, ChallengeNonce, ExpiresAt, Tip_BW, Miner_ID, Client_Pubkey, Sig_Ed25519 [, GatewaySig?] }`
+    - `ChallengeNonce` is issued per‑session by the SP/gateway and bound to the DU slice; `ExpiresAt` prevents replay.
+    - **Verification model:** Ed25519 signatures are verified **off‑chain by watchers and/or on the DA chain**; PoS² only commits to a **Poseidon Merkle root** of receipts and proves byte‑sum consistency. In‑circuit Ed25519 verification is **not required**.
 
 ### 6.2 PoS² Binding (Storage + Bandwidth)
 
@@ -182,9 +195,10 @@ The PoS² SNARK proves two statements simultaneously:
 
 *   **Vesting:** The escrowed fee is released linearly to the SP each epoch, contingent on a valid PoS² submission.
 *   **Consensus Parameters (Normative):**
-    *   Epoch Length (T_epoch): 86,400 seconds (24 hours).
-    *   Proof Submission Window (Δ_submit): 1,800 seconds (30 minutes) after epoch end.
-    *   Block Time (Tendermint BFT): 6 seconds.
+    *   **Epoch Length (`T_epoch`)**: 86,400 s (24 h).
+    *   **Proof Window (`Δ_submit`)**: 1,800 s (30 min) after epoch end — this is the *network scheduling window* for accepting PoS² proofs.
+    *   **Per‑replica Work Bound (`Δ_work`)**: 60 s (baseline profile), the minimum wall‑clock work per replica referenced by the Core Spec’s § 6.2 security invariant. Implementations **MUST** ensure `t_recreate_replica ≥ 5·Δ_work` (see Nilcoin Core v2.0 § 6.2).
+    *   **Block Time** (Tendermint BFT): 6 s.
 *   **Slashing Rule (Normative):** Missed PoS² proofs trigger a quadratic penalty on the bonded $STOR collateral:
     `Penalty = 0.05 × (Consecutive_Missed_Epochs)²`
     The penalty resets upon submission of a valid proof.

@@ -516,6 +516,7 @@ cols = 32 768      (indexed 0 … 32 767)
 ```
 
 Row `i` has two 1 MiB windows **W₂i** and **W₂i+1**; their Merkle root is `h_row[i]`.  Their limb sums form `Δ_row[i]`, committed as `delta_head[i]` (§ 3.7).
+**Merkle arity (normative option):** Implementations MAY use a higher‑arity (e.g., 16‑ary) tree to reduce path length; if so, the sibling count and witness encoding MUST be reflected in § 4.3.1 and Annex B KATs.
 
 \### 4.2 Challenge Derivation (Beacon Mix)
 
@@ -529,7 +530,7 @@ offset = (row * 2 MiB) + (col * 64 B)                        // byte index
 ```
 
 The prover **must** read eight 1 MiB windows covering
-`offset - 3 MiB … offset + 4 MiB` (wrap modulo `S`).  This is ≤ 6 MiB I/O even when crossing sector boundary.
+`offset - 3 MiB … offset + 4 MiB` (wrap modulo `S`).  This is **≤ 8 MiB** I/O even when crossing a sector boundary.
 
 `ctr` increments monotonically; replaying an old proof with the same counter is rejected on‑chain.
 
@@ -540,19 +541,19 @@ struct Proof64 {
     u16  idx_row;     // little‑endian
     u16  idx_col;
     u32  reserved = 0;
-    u8   witness[56];
+    u8   witness[112];   // accommodates 15 binary Merkle siblings
 }
 ```
 
 \#### 4.3.1 Witness layout (baseline “S‑q1”)
 
-| Purpose               | Bytes                  | Encoding                                                        |
-| --------------------- | ---------------------- | --------------------------------------------------------------- |
-| Merkle path (≤ 7)     | 7 × 7 = 49 bytes       | Each sibling hash truncated to 7 bytes (Blake2s-xof)            |
-| Homomorphic delta `Δ` | 4 bytes                | `u32` little-endian                                             |
-| Reserved              | 3 bytes                | Padding                                                         |
-| **Total** | **56 bytes** |                                                                 |
-Compression is lossless for security ≥ 110 bits (§ 7.5).
+| Purpose               | Bytes                   | Encoding                                                          |
+| --------------------- | ----------------------- | ----------------------------------------------------------------- |
+| Merkle path (15 lev.) | 15 × 7 = 105 bytes      | Each sibling hash truncated to 7 bytes (Blake2s‑XOF), order‑preserving |
+| Homomorphic delta `Δ` | 4 bytes                 | `u32` little‑endian                                               |
+| Reserved              | 3 bytes                 | Padding                                                           |
+| **Total**             | **112 bytes**           |                                                                   |
+**Note:** If truncation bounds prove insufficient in security review, increase per‑sibling bytes or switch to a higher‑arity tree (§ 4.1) to shorten paths without truncation.
 
 \### 4.4 Prover Algorithm `pos2_prove`
 
@@ -604,7 +605,7 @@ function poss2_verify(
 }
 ```
 
-Gas upper bound (Berlin): **9 700 ± 50** with pre‑compiled Blake2s.
+Gas upper bound (NilStore L1): **≈ 9.7k** assuming a **Blake2s precompile** with cost model `C_hash × (#hashes) + C_misc`. This figure is **chain‑specific** and MUST be re‑benchmarked on parameter changes.
 
 \### 4.6 Performance Targets
 
@@ -813,10 +814,10 @@ The **Council** enacts parameter changes after receiving a recommendation from t
 \### 6.2 Security Invariant
 
 ```
-t_recreate_replica(row)  ≥  5 · Δ
+t_recreate_replica(row)  ≥  5 · Δ_work
 ```
 
-`Δ` is the on‑chain proof‑submission window (default 60 s).  Any dial proposal must empirically demonstrate that honest hardware meets the inequality while an empty‑disk adversary does not.
+`Δ_work` is the **per‑replica work bound** (default 60 s in baseline profile) and is related to the metaspec’s network window `Δ_submit` (default 1 800 s) via `Δ_work ≪ Δ_submit`. Any dial proposal must empirically demonstrate that honest hardware meets the inequality while an empty‑disk adversary does not.
 
 \### 6.3 Review Cadence & Metrics
 
