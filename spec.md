@@ -81,6 +81,18 @@ digest  = Blake2s‑256( Version ‖ DomainID ‖ payload )
 
 Further IDs are allocated by Nilcoin governance (informative Appendix D).
 
+\#### 0.4.1 String Domain Tags (Blake2s separators)
+
+For transparency and auditability, Core defines the following fixed ASCII domain strings used with Blake2s‑256 across modules:
+
+| Tag                  | Purpose                                  | Section    |
+| -------------------- | ---------------------------------------- | ---------- |
+| `"NIL_VRF_OUT"`     | VRF output compression                    | § 5.2      |
+| `"NIL_BEACON"`      | Epoch beacon derivation from VRF output   | § 5.3      |
+| `"NilStore-Sample"` | Retrieval‑sampling seed from epoch beacon | § 5.7 (new) |
+| `"SAMPLE-EXP"`      | PRF expansion for sampling indices        | § 5.7 (new) |
+| `"P2Δ"`             | Delta‑head binding for PoS²               | § 3.7      |
+
 \### 0.5 Change‑Control and Notice
 
 * Parameter changes follow § 6 governance rules.
@@ -628,7 +640,14 @@ Gas upper bound (NilStore L1): **≈ 9.7k** assuming a **Blake2s precompile** 
 
 ---
 
-*Section § 5 defines the Nil‑VRF used to derive the `salt` input of `nilseal` and the proof‑epoch beacon above.*
+\### 4.9 Retrieval Sampling (informative)
+
+Retrieval sampling referenced by the metaspec is an audit‑only mechanism that operates over bandwidth‑receipt Merkle roots (`BW_root`) and watcher verification. It is orthogonal to `poss²` and does not alter circuits or public inputs.
+
+• PoS² inputs remain as defined in this section; the L2‑pinned `vk_hash` is unchanged.
+• Sampling randomness derives from the VRF epoch beacon via § 5.5.
+
+*Section § 5 defines the Nil‑VRF used to derive the `salt` input of `nilseal`, the proof‑epoch beacon above, and the sampling seed used off‑circuit by retrieval auditors.*
 
 ---
 
@@ -710,7 +729,7 @@ For epoch counter `ctr`:
 beacon_t = Blake2s‑256("NIL_BEACON" ‖ y);
 ```
 
-The 32‑byte `beacon_t` feeds **§ 4.2** challenge derivation.
+The 32‑byte `beacon_t` feeds **§ 4.2** challenge derivation and seeds the retrieval‑sampling RNG per **§ 5.7**.
 
 ---
 
@@ -782,6 +801,27 @@ All changes require updated KATs in Annex A.5.
 * BATMAN vectors: `(ctr, pkAgg, piAgg, beacon)` for `N=5`, `t=4`.
 
 ---
+
+\### 5.7 Sampling Seed & Expansion (normative)
+
+NilStore’s retrieval‑sampling RNG derives from the epoch beacon and does not interact with any `poss²` circuit.
+
+Definition (per‑epoch):
+
+```
+seed_t := Blake2s‑256("NilStore-Sample" ‖ beacon_t ‖ epoch_id)
+```
+
+Expansion (deterministic PRF stream for sampling indices):
+
+```
+ExpandSample(seed_t, i) := Blake2s‑256("SAMPLE-EXP" ‖ seed_t ‖ u32_le(i))
+```
+
+Notes:
+- `seed_t` and `ExpandSample` are used off‑chain by watchers/validators to select receipts for auditing.
+- Domain strings are fixed ASCII constants (see § 0.4.1).
+- No changes to `poss²` public inputs or verification keys.
 
 *Sections § 6 through § 9 discuss governance, security proofs, and performance metrics building on this VRF construction.*
 
@@ -973,6 +1013,8 @@ Measurements taken on Ubuntu 24.04, Rust 1.79 `-C target-cpu=native`.
 | `nilseal.toml` | Shear‑permutation traces for pass 0, 1 on a 4 MiB sample sector           |
 | `poss2.toml`   | Proof64 objects for four beacon samples                                   |
 | `vrf.toml`     | Key, proof, output vectors for solo and BATMAN aggregation                |
+| `vrf_beacon.toml` | Inputs and outputs for `"NIL_BEACON"` → `beacon_t` derivation          |
+| `sampling_seed.toml` | `(epoch_id, beacon_t)` → `seed_t` and first 4 `ExpandSample` outputs |
 | `constants_q2` | q₂ constants (ψₖ, k⁻¹, Montgomery)                                        |
 
 All decimal values are little‑endian; group elements are compressed hex.
