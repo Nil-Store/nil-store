@@ -103,12 +103,13 @@ L1      →  L2:  ZK-Bridge(recursive SNARK) → state update & vesting
 **Normative (Placement constraints).** At most **one shard per SP per ring‑cell**; shards of the same DU MUST be placed across distinct ring‑cells with a minimum topological separation (governance‑tunable).
 **Normative (Repair triggers).** A **RepairNeeded** event is raised when `healthy_shards ≤ k+1`. Repairs MUST produce openings **against the original DU commitment**; re‑committing a DU is invalid.
 **Deal metadata MUST include:**
-`{profile_type, RS_n?, RS_k?, rows?, cols?, symbol_size, ClientSalt_32B, lattice_params, placement_constraints, repair_threshold, epoch_written?}`.
+`{profile_type, RS_n?, RS_k?, rows?, cols?, symbol_size, ClientSalt_32B, lattice_params, placement_constraints, repair_threshold, epoch_written, meta_root?, meta_scheme?}`.
 
 Notes:
 - `profile_type ∈ {"RS-Standard","RS-2D-Hex","dial"}`.
-- Fields marked `?` are present if required by the resolved profile (see §3.2.y–§3.2.z).
-- `epoch_written` is set when the DU is first committed on-chain and is used by routing during reconfiguration (see §7.4).
+- `epoch_written` records the epoch the DU was first committed and is REQUIRED for routing (§7.4).
+- `meta_root` (Poseidon) and `meta_scheme` are REQUIRED when the resolved profile uses encoded metadata (all RS‑2D‑Hex profiles; optional for RS).
+- Fields marked `?` are present if required by the resolved profile and/or metadata scheme (see §3.2.y–§3.2.z).
 
 *   **Deterministic Placement (Nil-Lattice):** Shards are placed on a directed hex-ring lattice to maximize topological distance. The coordinate (r, θ) is determined by:
     `pos := Hash(CID_DU ∥ ClientSalt_32B ∥ SlotIndex) → (r, θ)`
@@ -164,9 +165,35 @@ Any SP missing its assigned sliver after dispersal MUST be able to reconstruct i
 #### 3.2.z.3 Encoded Metadata (Scalability)
 For RS‑2D‑Hex, sliver‑commitment metadata MUST be encoded linearly (e.g., 1D RS over the metadata vector). SPs store only their share; gateways/clients reconstruct on demand.
 
+#### 3.2.z.3.1 Encoded Metadata Object (Normative)
+
+meta_scheme: `RS1D(n_meta, k_meta)` with default `k_meta = f+1` and `n_meta = n`.
+Each Storage Provider stores one `MetaShard`:
+
+`MetaShard := { du_id, shard_index, payload, sig_SP }`
+
+- `payload` encodes that SP’s share of the sliver‑commitment vector (and per‑sliver nilhash/KZG commitments as needed).
+- `sig_SP` binds the shard to `du_id` and `shard_index`.
+- All `MetaShard.payload` chunks are Poseidon‑Merkleized to form `meta_root` recorded in Deal metadata (§3.2).
+
+Verification (clients/gateways):
+1) Fetch ≥ `k_meta` `MetaShard`s with Merkle proofs to `meta_root`.
+2) Reconstruct the commitment vector.
+3) Verify sliver openings against the DU commitment during reads/repairs.
+
+Implementations MAY cache reconstructed metadata; caches MUST be invalidated on DU invalidation events (§3.2.z.4).
+
 #### 3.2.z.4 Writer Inconsistency Proofs (Fraud)
-If a received sliver is inconsistent with `C_root`, an SP MUST be able to produce an inconsistency proof (`{symbols, inclusion proofs}`) sufficient for third‑party re‑encoding and mismatch verification.
-Upon ≥ f+1 posted proofs, the DU SHALL be marked invalid, excluded from PoS² rewards, and the writer’s escrow slashed (§7.3).
+
+If an SP detects inconsistency between a received sliver and `C_root`, it MUST produce an `InconsistencyProof`:
+
+`InconsistencyProof := { du_id, sliver_index, symbols[], openings[], meta_inclusion[], witness_meta_root, witness_C_root }`
+
+- `symbols[]` and `openings[]` provide the minimum symbol‑level data needed to re‑encode and check commitment equality.
+- `meta_inclusion[]` are Merkle proofs to `meta_root` for the relevant sliver commitments.
+- `witness_meta_root` and `witness_C_root` bind to on‑chain Deal metadata and DU commit.
+
+On‑chain action: Any party MAY call `MarkInconsistent(C_root, evidence_root)` on L1 (DA chain), where `evidence_root` is a Poseidon‑Merkle root of ≥ f+1 `InconsistencyProof`s from distinct SPs. If valid, the DU is marked invalid, excluded from PoS²/BW accounting, and the writer’s escrowed $STOR is slashed per §7.3.
 
 #### 3.2.z.5 Lattice Coupling
 Resolved profiles MUST respect §3.2.y placement rules for 2D cases, and the standard ring‑cell separation for RS.
@@ -278,7 +305,7 @@ Strengthen retrieval QoS without suspending reads by sampling and verifying a go
 #### 6.3.1 Sampling Set Derivation
 1) At epoch boundary `t`, derive `seed_t := Blake2s-256("NilStore-Sample" ‖ beacon_t ‖ epoch_id)`, where `beacon_t` is the Nil‑VRF epoch beacon.
 2) For each SP’s `BW_root`, expand `seed_t` into a PRF stream and select a fraction `p` of receipts for verification (`0.5% ≤ p ≤ 10%`, default 2%).
-3) The sample MUST be unpredictable to SPs prior to epoch end and sized so that expected coverage ≥ 1 receipt per active SP.
+3) The sample MUST be unpredictable to SPs prior to epoch end and sized so that expected coverage ≥ 1 receipt per active SP. Auditor assignment SHOULD be stake‑weighted and region/ASN‑diverse (per §4.2) to avoid correlated blind‑spots and to bound per‑auditor load.
 
 #### 6.3.2 Verification Procedure
 Watchers (or DA validators) MUST, for each sampled receipt:
@@ -293,7 +320,7 @@ Aggregate results into `SampleReport_t`.
 - Fail: Deduct failing receipts from counted bytes; if failures > ε, apply quadratic slashing to bonded $STOR; repeat offenders MAY be suspended pending DAO vote.
 
 #### 6.3.4 Governance Dials
-NilDAO MAY tune: sampling fraction `p`, tolerance `ε`, slashing ratio, and a system‑wide escalation that raises `p` up to 100% if anomaly rate exceeds `ε_sys`.
+NilDAO MAY tune: sampling fraction `p`, tolerance `ε`, slashing ratio, and a system‑wide escalation that raises `p` up to 100% if anomaly rate exceeds `ε_sys`. Default system‑wide anomaly tolerance is `ε_sys = 0.25%` (DAO‑tunable). Escalation SHOULD increase `p` stepwise (e.g., 2% → 5% → 10% → 100%) and MUST be announced in‑protocol.
 
 #### 6.3.5 Security & Liveness
 Sampling renders expected value of receipt fraud negative under rational slashing. Unlike asynchronous challenges that pause reads, NilStore maintains continuous liveness; PoS² remains valid regardless of sampling outcomes.
@@ -337,6 +364,8 @@ Each DU MUST carry `epoch_written`. During handover, gateways/clients route read
 #### 7.4.2 Committee Readiness Signaling
 New‑epoch SPs MUST signal readiness once all assigned slivers are bootstrapped. A signed message: `{epoch_id, SP_ID, slivers_bootstrapped, timestamp, sig_SP}` is posted on L1. When ≥ 2f+1 SPs signal, the DA chain emits `CommitteeReady(epoch_id)`.
 
+Readiness Audit (Normative). Before counting an SP toward quorum, watchers MUST successfully retrieve and verify a random audit sample of that SP’s assigned slivers (sample size ≥ 1% or ≥ 1 sliver, whichever is larger). Failures cause the SP’s readiness flag to be cleared and a backoff timer `Δ_ready_backoff` (default 30 min) to apply before re‑signal.
+
 #### 7.4.3 Routing Rules
 - Writes: MUST target the current (newest) epoch.
 - Reads:
@@ -368,7 +397,7 @@ The network is governed by the NilDAO, utilizing stake-weighted ($STOR) voting o
 
 ### 9.1 Scope
 
-The DAO controls economic parameters (α, slashing ratios, bounty percentages), QoS sampling dials (`p`, `ε`, `ε_sys`), multi‑stage reconfiguration thresholds (`Δ_ready_timeout`, quorum), network upgrades, and the treasury.
+The DAO controls economic parameters (α, slashing ratios, bounty percentages), QoS sampling dials (`p`, `ε`, `ε_sys`), multi‑stage reconfiguration thresholds (`Δ_ready_timeout`, quorum, `Δ_ready_backoff`), Durability Dial mapping (target → profile), metadata‑encoding parameters (`n_meta`, `k_meta`, `meta_scheme`), network upgrades, and the treasury.
 
 ### 9.2 Upgrade Process
 
