@@ -40,17 +40,18 @@ All integers, vectors, and matrices are interpreted **little‑endian** unless i
 
 \### 0.2 Dial Parameters
 
-A **dial profile** is an ordered 7‑tuple
-`(m, k, r, λ, H, γ, q)`:
+A **dial profile** is an ordered 8‑tuple
+`(m, k, r, λ, H, γ, q, Nonce)`:
 
 | Symbol | Description                                | Baseline “S‑q1”                 |
 | ------ | ------------------------------------------ | ------------------------------- |
 | `q`    | Prime field modulus                        | **998 244 353 (= 119·2²³ + 1)**; optional CRT: **1 004 535 809 (= 479·2²¹+1)** |
+| `Nonce`| Profile Nonce (high-entropy)               | 0x1A2B3C4D5E6F7890AABBCCDDEEFF0011 (example) |
 | `m`    | Vector length (*nilhash*, PoSS²)           | 1 024                           |
 | `k`    | NTT block size (radix‑k)                   | 64                              |
-| `r`    | Passes of data‑dependent shear permutation | 2                               |
-| `λ`    | Gaussian noise σ (compression)             | 2.8                             |
-| `H`    | Argon2‑drizzle passes                      | 0                               |
+| `r`    | Passes of data‑dependent permutation       | 3                               |
+| `λ`    | Gaussian noise σ (compression)             | 280 (fixed-point ×100)          |
+| `H`    | Argon2‑drizzle passes                      | 1                               |
 | `γ`    | Interleave fragment size (MiB)             | 0 (sequential)                  |
 
 Dial parameters are **frozen** per profile string (e.g. `"S-q1"`).  Changes introduce a new profile ID (see § 6).
@@ -88,10 +89,12 @@ For transparency and auditability, Core defines the following fixed ASCII domain
 | Tag                  | Purpose                                  | Section    |
 | -------------------- | ---------------------------------------- | ---------- |
 | `"NIL_VRF_OUT"`     | VRF output compression                    | § 5.2      |
+| `"NIL_VRF_H2G"`     | VRF hash_to_G2 DST                        | § 5.2      |
 | `"NIL_BEACON"`      | Epoch beacon derivation from VRF output   | § 5.3      |
 | `"NilStore-Sample"` | Retrieval‑sampling seed from epoch beacon | § 5.7 (new) |
 | `"SAMPLE-EXP"`      | PRF expansion for sampling indices        | § 5.7 (new) |
 | `"P2Δ"`             | Delta‑head binding for PoS²               | § 3.7      |
+| `"NIL_SEAL_ZETA"`   | Derivation of permutation offset ζ_p      | § 3.4.2    |
 
 \### 0.5 Change‑Control and Notice
 
@@ -240,20 +243,23 @@ Intuition: every NTT block (row) receives one limb from each stride column, maxi
 
 > **Public parameters** (fixed per dial profile, derived in Annex C)
 >
-> * Circulant matrix **A** generated from first row `α` as before.
-> * Independent circulant matrix **B** has a **spectrally random** non‑zero mask: sample $\widehat b_j \leftarrow H(Version‖DID‖"B-spectrum"‖j) \bmod q$ until non‑zero, set **β = INTT( \widehat b )**.  B is circulant and invertible w.h.p.
-> * Per‑domain **spectral twist** **D^(DID)**: bins $d_j \leftarrow H(Version‖DID‖"twist"‖j) \bmod q$, re‑draw zeros; apply as a diagonal in NTT space on the A·x path.
+> * **Hash Function H (Normative):** All parameter generation MUST use SHAKE128 as an Extendable Output Function (XOF).
+> * **Uniform Sampling (Normative):** All sampling modulo q MUST use uniform rejection sampling (no modulo‑bias), with statistical distance from uniform < 2^-128.
+> * Circulant matrix **A** generated from first row `α` (derived via H("A-seed"‖Version‖DID‖Nonce)).
+> * Independent circulant matrix **B**: sample $\widehat b_j$ uniformly from 𝔽_q using H("B-spectrum"‖Version‖DID‖Nonce‖j) until non‑zero; set **β = INTT( \widehat b )**.
+> * **Invertibility Check (Normative):** Implementations MUST verify that B is invertible (det(B) ≠ 0 mod q). If not, increment j and re‑sample until invertible.
+> * Per‑domain **spectral twist** **D^(DID)**: sample $d_j$ uniformly from 𝔽_q using H("twist"‖Version‖DID‖Nonce‖j), re‑draw zeros. Apply as a diagonal in NTT space on the A·x path.
 
 | Function      | Signature                                                                  | Definition |
 | ------------- | ---------------------------------------------------------------------------- | ---------- |
 | **commit**    | `fn commit(DID, msg, rng) → (h: [u32; m]{×CRT}, r: [i32; m]{×CRT}, π)`       | 1) `x = SVT(pad(msg))` (§ 2.1). 2) For each prime, sample `r ← D_σ` until `||r||_∞ ≤ β` (β = 16383, σ ≈ 3270). 3) Apply domain twist to x in NTT space. 4) Compute `h = (A_twisted·x) + (B·r)`. 5) Produce aggregated proof `π` that `||r||_∞ ≤ β` (Appendix A.3 format). |
-| **open**      | `fn open(msg, r, π) → (msg, r, π)`                                          | Output the original message, blinding vector `r`, and its bound‑proof `π`. |
+| **open**      | `fn open(msg, r, π) → (msg, r, π)`                                          | Output the original message, blinding vector `r`, and its bound‑proof `π`. The sampling of `r` MUST be constant‑time. |
 | **verify**    | `fn verify(h, msg, r, π) → bool`                                             | Recompute `x` and twist; check `h == A_twisted·x + B·r` per prime; verify `π`. |
 | **update**    | *unchanged* (requires re‑commit)                                            | Any change to `msg` or `r` requires a fresh `commit`. |
 | **aggregate** | `Σ_field`                                                                    | Component‑wise addition of commitment vectors. |
 
 *Complexity* – Commit/Verify: unchanged NTT count (per‑prime); proof adds O(log m) time and ~2 kB to the opening object.
-*Security* – **Binding** reduces to SIS on the kernel of `(A‖B)` with a **short** witness (bounded `Δx,Δr`). **Hiding** is statistical/computational (r is bounded); see § 7.3.
+*Security* – **Binding** reduces to Module‑SIS on the kernel of `(A‖B)` with a **short** witness (bounded `Δx,Δr`). **Hiding** is statistical/computational (r is bounded); see § 7.3.
 
 > **Note:** Attribute‑selective openings will appear in v 2.1 using a zero‑knowledge inner‑product argument.  For v 2.0 all openings disclose the entire message.
 
@@ -334,9 +340,9 @@ Adversary capabilities: unbounded offline pre‑computation, full control of pub
 | `row_i`  | `u32`          | `BLAKE2s-32(path‖sector_digest) mod rows` |
 | `salt`   | `[u8;32]`      | `vrf(sk, row_i)`                          |
 | `chunk`  | `[u32;k]`      | Radix‑*k* NTT buffer (*k = 64*)           |
-| `pass`   | `0 … r−1`      | Shear‑permutation round (*r = 2*)         |
+| `pass`   | `0 … r−1`      | Permutation round (*r = 3*)               |
 | `ζ_pass` | `u32`          | Round offset (data‑dependent)             |
-| `λ`      | 2.8            | Gaussian σ (noise compression)            |
+| `λ`      | 280            | Gaussian σ (noise compression, fixed‑point ×100) |
 | `γ`      | 0              | MiB interleave fragment size              |
 
 \### 3.2 Pre‑Processing – Argon2 “Drizzle”
@@ -361,9 +367,9 @@ Each 1 MiB Argon2 block XORs back into its original offset.  This yields a *me
 
 Let `N_chunks = S / (2·k)` little‑endian 16‑bit chunks.
 
-For `pass = 0 … r−1` (baseline `r = 2`):
+For `pass = 0 … r−1` (baseline `r = 3`):
 
-1. **Chunk iteration order** – determined by the **data‑dependent shear permutation** (3.4).
+1. **Chunk iteration order** – determined by the **data‑dependent PRP permutation** (3.4).
 
 2. **NTT pipeline**
 
@@ -381,14 +387,11 @@ For `pass = 0 … r−1` (baseline `r = 2`):
    *Else* compute `stride = γ MiB / (2·k)` and write chunk to
    `offset = (logical_index ⋅ stride) mod N_chunks`.
 
-\### 3.4 Data‑Dependent Shear Permutation (normative)
+\### 3.4 Data‑Dependent Permutation (normative)
 
-\#### 3.4.1 Fixed shear map
+\#### 3.4.1 Permutation map (PRP)
 
-Index chunks by coordinates `(x,y)` with dimensions
-`p = k` (power of two) and `q = N_chunks / p`.
-
-A **shear step** maps `(x,y) → (x + y , y) mod (p,q)`.
+Index chunks by linear index `i ∈ [0, N_chunks)`. A lightweight Pseudo‑Random Permutation (PRP), such as a 4‑round Feistel network, keyed by `ζ_p`, maps index `i` to a permuted index `i' = PRP_{ζ_p}(i)`.
 
 \#### 3.4.2 Round‑offset ζ<sub>pass</sub>
 
@@ -396,15 +399,13 @@ After finishing pass `p−1`, compute a digest of the entire pass's data that is
 
 `ChunkHashes_{p-1} = [Blake2s‑256(chunk_0^{p-1}), Blake2s‑256(chunk_1^{p-1}), ...]`
 `ChunkDigest_{p-1} = MerkleRoot(ChunkHashes_{p-1})`
-`ζ_p = little‑endian 32 bits of BLAKE2s-256( salt ‖ p ‖ ChunkDigest_{p-1} )`
+`ζ_p = little‑endian 32 bits of BLAKE2s-256( "NIL_SEAL_ZETA" ‖ salt ‖ p ‖ ChunkDigest_{p-1} )`
+
+**Normative (Data Integrity):** `ChunkHashes_{p-1}` MUST be computed by reading the replica data back from the persistent storage medium after pass `p-1` is fully committed (fsync'd). Computing hashes from in‑memory buffers before committing to disk is forbidden.
 
 **Rationale:** Using a Merkle root instead of a simple sum ensures that `ChunkDigest` depends on the precise ordering of all chunks written in the previous pass, not just their content.
 
-Round `p` traverses chunks in ascending order of
-
-```
-(x', y') = ( (x + y + ζ_p) mod p ,  y )        // shear + data offset
-```
+Round `p` traverses chunks in the order determined by the PRP defined in § 3.4.1 using the computed `ζ_p`.
 
 *Security intuition* – ζ<sub>p</sub> is **unknowable** until all writes of
 pass `p−1` complete, enforcing sequential work (§ 7.4.1).
@@ -414,26 +415,26 @@ pass `p−1` complete, enforcing sequential work (§ 7.4.1).
 For every 2 KiB window **W** (post‑transform):
 
 ```
-σ_Q = Q / √12                         // std‑dev of uniform limb
-W' = Quantize( W + N(0, λ²·σ_Q²) )    // λ = 2.8  baseline
+σ_Q_100 = ⌊100 · Q / √12⌋             // std‑dev of uniform limb (fixed‑point approximation)
+W' = Quantize( W + N(0, (λ·σ_Q_100 / 10000)²) )
 ```
 
-*Quantize* rounds to the nearest valid limb mod `Q`.  Noise is generated by a 32‑bit Ziggurat sampler (constant‑time).  This step thwarts statistical detection of ciphertext structure.
+*Quantize* rounds to the nearest valid limb mod `Q`. Noise MUST be generated by a deterministic, constant‑time sampler (e.g., Knuth‑Yao or fixed‑point Ziggurat) using only integer arithmetic to ensure cross‑platform consensus.
 
 \### 3.6 Checkpoint Merkle Tree
 
-* Leaf: **Blake2s‑256** of every 2 MiB slice *after* compression.
-* Tree: unbalanced binary; left nodes hashed as `H = B2s(L‖R)`, rightmost branch truncated.
+* Leaf: **Blake2s‑256( 0x00 ‖ slice )** of every 2 MiB slice *after* compression.
+* Tree: unbalanced binary; internal nodes hashed as `H = B2s( 0x01 ‖ L ‖ R )`, rightmost branch truncated.
 * Root of row *i* → `h_row[i]` (DomainID `0x0100`).
 * Crash‑resume: sealing restarts from the last fully committed leaf whose authentication path exists on disk.
 
 \### 3.7 Delta‑Row Accumulator
 
-During compression the encoder also computes per‑1 MiB limb sums `δ_j`.
-For row *i* (two windows):
+/* Replaced homomorphic limb sum with collision‑resistant digest. */
+During compression the encoder computes a digest for each 2 MiB row. For row *i* (two windows):
 
 ```
-Δ_row[i] = (δ_{2i} + δ_{2i+1})   mod Q
+Δ_row[i] = Blake2s-256( W_{2i} ‖ W_{2i+1} )
 delta_head[i] = Blake2s-256("P2Δ" ‖ i ‖ Δ_row[i])    // DomainID 0x0200
 ```
 
@@ -469,7 +470,7 @@ fn seal_sector(path, sector_bytes, miner_sk, params) {
 | ---- | ------------- | ----------------- | ------------------------------------- |
 | `k`  | 64 → 256      | CPU ∝ k log k     | `k ≤ 256` fits L3 cache               |
 | `r`  | 2 → 5         | Time ∝ r          | Seal time ≤ 2× network median         |
-| `λ`  | 2.8 → 5.0     | Disk ↑            | λ > 4 requires compression‑ratio vote |
+| `λ`  | 280 → 500     | Disk ↑            | λ > 400 requires compression‑ratio vote |
 | `m`  | 1 024 → 2 048 | CPU ∝ m²          | Proof size constant                   |
 | `H`  | 0 → 2         | DRAM × H          | H ≤ 2                                 |
 | `γ`  | 0 → 4 MiB     | Seeks ↑           | γ > 0 needs HDD‑impact vote           |
@@ -509,9 +510,9 @@ Detailed proofs for sequential‑work and indistinguishability appear in § 7.
 
 Soundness relies on:
 
-* The sequential‑work bound of `nilseal` (data‑dependent shear permutation, § 7.4.1).
+* The sequential‑work bound of `nilseal` (data‑dependent PRP permutation, § 7.4.1).
 * Collision resistance of Blake2s‑256 and the Merkle tree.
-* The additively homomorphic row delta commitment (`delta_head`, § 3.7).
+* The row digest commitment (`delta_head`, § 3.7).
 
 \### 4.1 Replica Layout (“Row/Column Model”)
 
@@ -527,7 +528,7 @@ rows = 16 384      (indexed 0 … 16 383)
 cols = 32 768      (indexed 0 … 32 767)
 ```
 
-Row `i` has two 1 MiB windows **W₂i** and **W₂i+1**; their Merkle root is `h_row[i]`.  Their limb sums form `Δ_row[i]`, committed as `delta_head[i]` (§ 3.7).
+Row `i` has two 1 MiB windows **W₂i** and **W₂i+1**; their Merkle root is `h_row[i]`.  Their digest `Δ_row[i] = Blake2s‑256(W₂i ‖ W₂i+1)` is committed as `delta_head[i]` (§ 3.7).
 **Merkle arity (normative option):** Implementations MAY use a higher‑arity (e.g., 16‑ary) tree to reduce path length; if so, the sibling count and witness encoding MUST be reflected in § 4.3.1 and Annex B KATs.
 
 **Informative (relationship to NilFS shards).** Reed–Solomon shards (metaspec §3.2) are **data‑layer** units that determine where bytes live on the network. After a shard reaches an SP, the shard’s bytes are sealed into **sectors** and committed per this section. PoS² operates on the sealed sector’s **row/column** layout (2 MiB rows, 64 B leaves) independent of how many NilFS shards contributed bytes to that sector. In other words: NilFS sharding affects placement and repair; PoS² attests to liveness and integrity of whatever bytes are sealed in the sector.
@@ -537,7 +538,7 @@ Row `i` has two 1 MiB windows **W₂i** and **W₂i+1**; their Merkle root is
 For epoch counter `ctr` and chain beacon block‑hash `B_t`:
 
 ```
-ρ = Blake2s‑256( "POSS2-MIX" ‖ B_t ‖ miner_addr ‖ ctr )      // 32 B
+ρ = Blake2s‑256( "POSS2-MIX" ‖ B_t ‖ sector_digest ‖ miner_addr ‖ ctr ) // 32 B
 row = u32_le(ρ[0..4]) % rows
 col = u32_le(ρ[4..8]) % cols
 offset = (row * 2 MiB) + (col * 64 B)                        // byte index
@@ -555,19 +556,19 @@ struct Proof64 {
     u16  idx_row;     // little‑endian
     u16  idx_col;
     u32  reserved = 0;
-    u8   witness[187];   // 15 siblings × 12 B = 180, plus 4 B Δ and 3 B pad
+    u8   witness[512];   // 15 siblings × 32 B = 480, plus 32 B row digest
 }
 ```
 
 \#### 4.3.1 Witness layout (baseline “S‑q1”)
 
-| Purpose               | Bytes                   | Encoding                                                          |
-| --------------------- | ----------------------- | ----------------------------------------------------------------- |
-| Merkle path (15 lev.) | 15 × 12 = 180 bytes     | Each sibling hash truncated to 12 bytes (≈96‑bit) using Blake2s‑XOF, order‑preserving |
-| Homomorphic delta `Δ` | 4 bytes                 | `u32` little‑endian                                               |
-| Reserved              | 3 bytes                 | Padding                                                           |
-| **Total**             | **187 bytes**           |                                                                   |
-**Normative bound:** Per‑sibling truncation **MUST be ≥ 12 bytes (96‑bit)** for main‑net profiles. Lower truncation (e.g., 7 bytes) is permitted **only** on testnets and MUST be flagged in the profile ID; higher‑arity trees MAY be used to control witness size (§ 4.1).
+| Purpose               | Bytes                   | Encoding                               |
+| --------------------- | ----------------------- | -------------------------------------- |
+| Merkle path (15 lev.) | 15 × 32 = 480 bytes     | Full Blake2s‑256 of each sibling       |
+| Row digest `Δ`        | 32 bytes                | Blake2s‑256(W₂i ‖ W₂i+1)               |
+| **Total**             | **512 bytes**           |                                        |
+
+**Normative bound:** Per‑sibling truncation is NOT permitted for main‑net profiles aiming for ≥128‑bit security. Higher‑arity trees MAY be used to manage witness size (§ 4.1).
 
 \### 4.4 Prover Algorithm `pos2_prove`
 
@@ -577,17 +578,16 @@ fn pos2_prove(path, row_i, col_j, ρ) -> Proof64 {
     let leaf_offset = row_i*2MiB + col_j*64B;
     let leaf = read(path, leaf_offset, 64);
 
-    // 2. Build compressed Merkle path (180 B)
-    let witness = truncated_path(row_i, col_j, path);
+    // 2. Build Merkle path with full 32‑byte siblings (480 B)
+    let witness = full_path(row_i, col_j, path);
 
-    // 3. Compute Δ over the eight 1 MiB windows
-    let Δ = 0;
-    for wnd in sample_windows(ρ, path) {
-        Δ += limb_sum(wnd);               // mod Q
-    }
+    // 3. Compute row digest Δ for the specific row being proven (32 B)
+    let W2i   = read(path, row_i*2MiB,        1MiB);
+    let W2i_1 = read(path, row_i*2MiB + 1MiB, 1MiB);
+    let Δ = Blake2s-256(W2i ‖ W2i_1);
 
-    // 4. Assemble proof (witness_path ‖ Δ (4 B) ‖ pad (3 B))
-    let final_witness = witness ‖ Δ.to_le_bytes(4) ‖ [0;3];
+    // 4. Assemble proof (witness_path ‖ Δ (32 B))
+    let final_witness = witness ‖ Δ;
     return Proof64 {
         idx_row = row_i,
         idx_col = col_j,
@@ -609,9 +609,9 @@ function poss2_verify(
     bytes32 root = reconstruct(leaf, p.witness);      // 15 siblings (binary path)
     if (root != hRow) return false;
 
-    // --- Homomorphic delta check ----------------
-    // Extract Δ from the witness field (bytes 180..184)
-    uint32 Δ = bytes_to_u32_le(p.witness[180..184]);
+    // --- Row digest check (replaces homomorphic delta) ---
+    // Extract Δ from the witness field (bytes 480..512)
+    bytes32 Δ = bytes_to_bytes32(p.witness[480..512]);
     bytes32 chk = blake2s_256(abi.encode("P2Δ", p.idx_row, Δ));
     if (chk != deltaHead) return false;
 
@@ -630,7 +630,7 @@ Gas upper bound (NilStore L1): **≈ 9.7k** assuming a **Blake2s precompile** 
 
 \### 4.7 Security Assertions (reference § 7.5)
 
-* **Soundness:** Any prover who forges `(row, col)` without the replica must either (i) invert Blake2s (Merkle path) or (ii) solve SIS by finding a new `Δ` that collides with committed `delta_head`.
+* **Soundness:** Any prover who forges `(row, col)` without the replica must break the collision resistance of Blake2s (Merkle path and row digest Δ).
 * **Sequentiality:** Challenge uses fresh beacon hash `B_t`; proofs prepared in advance fail with overwhelming probability.
 * **Window overlap:** 8 windows (12.5 % amplification) achieves 110‑bit failure probability over 24 h for β = 0.2 fault rate.
 
@@ -671,7 +671,7 @@ We follow the **IETF BLS VRF draft‑08** (to be RFC 9380) with the **Simple 
 | ------ | ----- | ---------- | ----------------------------------- |
 | `pk`   | `G1`  | 48 B comp. | `pk = sk·G₁`                        |
 | `π`    | `G2`  | 96 B comp. | Proof (BLS signature)               |
-| `H`    | `G2`  | 96 B       | `H = hash_to_G2(msg)`               |
+| `H`    | `G2`  | 96 B       | `H = hash_to_G2("NIL_VRF_H2G", msg)` |
 | `e`    | —     | —          | Optimal Ate pairing `e: G1×G2→G_T`  |
 | `Hash` | —     | 32 B       | Blake2s‑256, domain `"NIL_VRF_OUT"` |
 
@@ -695,10 +695,10 @@ fn vrf_keygen(rng) -> (sk: Scalar, pk: G1) {
 \#### 5.2.2 Evaluation (`vrf_eval`)
 
 ```rust
-fn vrf_eval(sk: Scalar, msg: &[u8]) -> (y: [u8;32], π: G2) {
-    H = hash_to_G2(msg);             // RFC 9380 Simple SWU
-    π = sk · H;                      // BLS signature
-    y = Blake2s-256("NIL_VRF_OUT" ‖ compress(e(G1_GENERATOR, π)));
+fn vrf_eval(sk: Scalar, pk: G1, msg: &[u8]) -> (y: [u8;32], π: G2) {
+    H = hash_to_G2("NIL_VRF_H2G", msg); // RFC 9380 Simple SWU with DST
+    π = sk · H;                          // BLS signature
+    y = Blake2s-256("NIL_VRF_OUT" ‖ compress(pk) ‖ compress(H) ‖ compress(e(G1_GENERATOR, π)));
     return (y, π);
 }
 ```
@@ -709,9 +709,9 @@ fn vrf_eval(sk: Scalar, msg: &[u8]) -> (y: [u8;32], π: G2) {
 
 ```rust
 fn vrf_verify(pk: G1, msg: &[u8], y: [u8;32], π: G2) -> bool {
-    H   = hash_to_G2(msg);
+    H   = hash_to_G2("NIL_VRF_H2G", msg);
     ok  = (e(pk, H) == e(G1_GENERATOR, π));      // one pairing + eq
-    y′  = Blake2s-256("NIL_VRF_OUT" ‖ compress(e(G1_GENERATOR, π)));
+    y′  = Blake2s-256("NIL_VRF_OUT" ‖ compress(pk) ‖ compress(H) ‖ compress(e(G1_GENERATOR, π)));
     return ok && (y′ == y);
 }
 ```
@@ -725,7 +725,7 @@ Security follows directly from the EUF‑CMA security of BLS signatures under th
 For epoch counter `ctr`:
 
 ```
-(y, π)   = vrf_eval(sk, int_to_bytes_le(ctr, 8));
+(y, π)   = vrf_eval(sk, pk, int_to_bytes_le(ctr, 8));
 beacon_t = Blake2s‑256("NIL_BEACON" ‖ y);
 ```
 
@@ -740,6 +740,7 @@ The 32‑byte `beacon_t` feeds **§ 4.2** challenge derivation and seeds the r
 * Committee size `N`; threshold `t = ⌈2N/3⌉`.
 * Polynomial secret sharing: master key `s (= sk_master)` split into `sk_i = f(i)` degree `d = N−t`.
 * Public key shares `pk_i = sk_i·G1`.
+* Proof of Possession (PoP): each participant MUST provide a signature `pop_i = Sign(sk_i, pk_i)` during registration to prevent rogue‑key attacks.
 * Constant public coefficients for Lagrange interpolation modulo `r`.
 
 \#### 5.4.2 Per‑epoch share posting
@@ -771,7 +772,7 @@ function verify_beacon(
     bytes48 pkAgg, bytes96 piAgg, bytes8 ctr
 ) returns (bytes32 beacon)
 {
-    G2 H = hash_to_G2(ctr);
+    G2 H = hash_to_G2("NIL_VRF_H2G", ctr);
     require( pairing(pkAgg, H) == pairing(G1_GEN, piAgg) );
     bytes32 y  = blake2s256("NIL_VRF_OUT" ‖ compress(pairing(G1_GEN, piAgg)));
     return blake2s256("NIL_BEACON" ‖ y);
@@ -881,7 +882,7 @@ Priority order (apply only one per quarter):
 |  1   | Shorten `Δ` (preferred)              | `Δ ≥ 30 s`              |
 |  2   | ↑ `k` or ↑ `r` by 1 step             | not both simultaneously |
 |  3   | ↑ `H` by 1 (pass)                    | `H ≤ 2`                 |
-|  4   | ↑ `λ` by 0.2 σ                       | `λ ≤ 5.0`               |
+|  4   | ↑ `λ` by 20 (fixed‑point)             | `λ ≤ 500`               |
 |  5   | Set `γ = 4 MiB` *(requires MC vote)* | HDD impact analysis     |
 
 \### 6.5 Proposal & Activation Timeline
@@ -901,11 +902,11 @@ A failed vote resets the dial to its previous state.
 
 | ID           | Purpose              | m     | k   | r | λ   | H | γ     | Δ    |
 | ------------ | -------------------- | ----- | --- | - | --- | - | ----- | ---- |
-| **S‑q1**     | SSD baseline         | 1 024 | 64  | 2 | 2.8 | 0 | 0     | 60 s |
-| **S‑q1‑CRT** | SSD baseline (CRT)   | 1 024 | 64  | 2 | 2.8 | 0 | 0     | 60 s |
-| **S‑q1‑HDD** | Spinning disk        | 1 024 | 64  | 3 | 3.0 | 0 | 4 MiB | 90 s |
-| **S‑512+**   | Mid‑security uplift  | 1 024 | 128 | 3 | 3.5 | 1 | 0     | 45 s |
-| **S‑1024‑A** | Archival, high hard. | 2 048 | 256 | 4 | 4.0 | 2 | 2 MiB | 30 s |
+| **S‑q1**     | SSD baseline         | 1 024 | 64  | 3 | 280 | 1 | 0     | 60 s |
+| **S‑q1‑CRT** | SSD baseline (CRT)   | 1 024 | 64  | 3 | 280 | 1 | 0     | 60 s |
+| **S‑q1‑HDD** | Spinning disk        | 1 024 | 64  | 3 | 300 | 1 | 4 MiB | 90 s |
+| **S‑512+**   | Mid‑security uplift  | 1 024 | 128 | 3 | 350 | 1 | 0     | 45 s |
+| **S‑1024‑A** | Archival, high hard. | 2 048 | 256 | 4 | 400 | 2 | 2 MiB | 30 s |
 
 Profile strings are **immutable identifiers**; new profiles append rows.
 
@@ -926,32 +927,32 @@ Profile strings are **immutable identifiers**; new profiles append rows.
 | ---- | ---------------------------------------------- | -------------- |
 |  A1  | Blake2s acts as a random oracle in our domains | NIST, RFC 7693 |
 |  A2  | BLS12‑381 pairing hardness (co‑Gap DH)         | CFRG draft     |
-|  A3  | SIS(m,q) with `m=1024, q≈2³⁰` is 2¹³⁸‑hard     | LattE analysis |
+|  A3  | Module‑SIS(m,q) with `m=1024, q≈2³⁰` is ≥ 2¹²⁸‑hard | LattE analysis (structured) |
 |  A4  | Disk bandwidth ≥ 400 MB/s (SSD profile)        | 2025 median    |
 
 \### 7.3 `nilfield` + `nilhash`
 
-* **Binding** – Under the enforced bound `||r||_∞ ≤ β` (verified by π), two openings (x,r) ≠ (x′,r′) yield a **short non‑zero** kernel vector `(Δx,Δr)` of `(A‖B)` with `||Δx||_∞ ≤ 65 535` (16‑bit limbs) and `||Δr||_∞ ≤ 2β`. Finding such a vector solves an instance of **SIS** over 𝔽_q (or 𝔽_{q₁}×𝔽_{q₂} under CRT) at parameters (m,q,β) (Assumption A3).
+* **Binding** – Under the enforced bound `||r||_∞ ≤ β` (verified by π), two openings (x,r) ≠ (x′,r′) yield a **short non‑zero** kernel vector `(Δx,Δr)` of `(A‖B)` with `||Δx||_∞ ≤ 65 535` (16‑bit limbs) and `||Δr||_∞ ≤ 2β`. Since A and B are circulant, finding such a vector solves an instance of **Module‑SIS** over 𝔽_q (or 𝔽_{q₁}×𝔽_{q₂} under CRT) at parameters (m,q,β) (Assumption A3).
 * **Hiding** – Because r is bounded, hiding is **statistical/computational** rather than perfect. The per‑domain spectral twist and spectrally random B prevent structured leakage; the distinguishing advantage is bounded by standard leftover‑hash‑style arguments when β/q ≪ 1, and in practice by the outer hash (digest) domains used by consumers.
 
 \### 7.4 `nilseal`
 
 \#### 7.4.1 Sequential‑Work Proof
 
-* Pass `p` depends on `ζ_p`, a BLAKE2s hash of `SHA256` checksums of pass `p−1` data.
+* Pass `p` depends on `ζ_p`, a Blake2s‑256 hash (with domain tag "NIL_SEAL_ZETA") of the Merkle root over per‑chunk Blake2s‑256 digests of pass `p−1` data.
 * Any strategy to pipeline passes must predict 256‑bit hash pre‑images → breaks Assumption A1.
 
 Hence an adversary must complete pass `p−1` before starting pass `p`, giving a lower‑bound time `≥ r · S / disk_bw`.
 
 \#### 7.4.2 Replica Indistinguishability
 
-Gaussian noise adds entropy ≥ 128 bits per 2 KiB window (`λ ≥ 2.8`).
+Gaussian noise adds entropy ≥ 128 bits per 2 KiB window (`λ ≥ 280`).
 Total statistical distance ≤ 2⁻¹²⁸ from uniform (via Hoeffding).
 
 \### 7.5 `poss²` Proof‑of‑Spacetime
 
 * **Merkle inclusion** – Collision implies Blake2s collision (A1).
-* **Delta homomorphic check** – Adversary must find `Δ′ ≠ Δ` s.t. `B2s("P2Δ" ‖ row ‖ Δ′) = delta_head[row]`; requires hash collision.
+* **Row digest check** – Adversary must find `Δ′ ≠ Δ` s.t. `B2s("P2Δ" ‖ row ‖ Δ′) = delta_head[row]`; requires hash collision (A1).
 * **Overall failure prob.** per epoch ≤ 2⁻¹¹⁰ (detailed derivation in Annex B).
 
 \### 7.6 `nilvrf`
@@ -1010,7 +1011,7 @@ Measurements taken on Ubuntu 24.04, Rust 1.79 `-C target-cpu=native`.
 | `field.toml`   | Add / Sub / Mul / Inv vectors for 10 000 pseudorandom pairs               |
 | `ntt64.toml`   | Forward + inverse round‑trips for unit basis and random inputs            |
 | `nilhash.toml` | h^{(1)} (q₁), h^{(2)} (q₂ if CRT), digests, and π transcripts (β=16383) |
-| `nilseal.toml` | Shear‑permutation traces for pass 0, 1 on a 4 MiB sample sector           |
+| `nilseal.toml` | PRP‑permutation traces for pass 0, 1 on a 4 MiB sample sector             |
 | `poss2.toml`   | Proof64 objects for four beacon samples                                   |
 | `vrf.toml`     | Key, proof, output vectors for solo and BATMAN aggregation                |
 | `vrf_beacon.toml` | Inputs and outputs for `"NIL_BEACON"` → `beacon_t` derivation          |
@@ -1059,9 +1060,9 @@ MUST reproduce **exactly** the table published in § 1.1 and the first rows of
 
 ## Appendix D Change‑Log (informative, excerpt)
 
-* **v 2.0 vs v 1.0** – prime upgrade (q₁), Pedersen commitment, data‑dependent shear permutation, Gaussian noise, BATMAN VRF, security consolidation.
+* **v 2.0 vs v 1.0** – prime upgrade (q₁), Pedersen commitment, data‑dependent PRP permutation, Gaussian noise, BATMAN VRF, security consolidation.
 * **Breaking changes** – commitment vectors no longer open per‑limb; all sealers must regenerate replicas; proofs unaffected.
-* **Deprecations** – legacy “nil‑shuffle” terminology replaced by “shear permutation”.
+* **Deprecations** – legacy “nil‑shuffle”/“shear permutation” terminology replaced by “PRP permutation”.
 
 —
 
