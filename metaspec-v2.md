@@ -55,7 +55,7 @@ Settlement occurs on a ZK-Rollup (using PlonK/Kimchi) bridged to a major EVM eco
 
 The L1 aggregates all epoch PoS² proofs into a single recursive SNARK and posts it to the L2 bridge contract. **Normative circuit boundary**:
 1) **Public inputs**: `{epoch_id, DA_state_root, poss2_root, bw_root, validator_set_hash}`.
-2) **Verification key**: `vk_hash = sha256(vk_bytes)` pinned in the L2 bridge at deployment; upgrades require DAO action and timelock. In addition, an Emergency Circuit MAY perform an expedited VK upgrade with a shorter timelock under §9.2, subject to an automatic sunset unless ratified.
+2) **Verification key**: `vk_hash = sha256(vk_bytes)` pinned in the L2 bridge at deployment; upgrades require DAO action and timelock. In addition, an Emergency Circuit MAY perform an expedited VK upgrade with a shorter timelock under §9.2, **restricted to a whitelisted diff** whose hash is pre‑published on L1. Emergency mode MUST operate in “yellow‑flag” state: the bridge updates `epoch_id` and roots but quarantines fund‑moving paths until DAO ratifies or the sunset elapses. An independent auditor attestation (posted on‑chain) is REQUIRED.
 3) **State mapping**: On accept, the bridge **atomically** updates `{poss2_root, bw_root, epoch_id}`; monotonic `epoch_id` prevents replay.
 4) **Failure domains**: any mismatch in roots or non‑monotonic epoch causes a hard reject. No trusted relayers or multisigs are required because validity is enforced by the proof and pinned `vk_hash`.
 
@@ -168,7 +168,7 @@ For RS‑2D‑Hex, sliver‑commitment metadata MUST be encoded linearly (e.g., 
 
 #### 3.2.z.3.1 Encoded Metadata Object (Normative)
 
-meta_scheme: `RS1D(n_meta, k_meta)` with default `k_meta = f+1` and `n_meta = n`.
+meta_scheme: `RS1D(n_meta, k_meta)` with default `k_meta = f+2` and `n_meta = n`.
 Each Storage Provider stores one `MetaShard`:
 
 `MetaShard := { du_id, shard_index, payload, sig_SP }`
@@ -211,6 +211,8 @@ The network autonomously maintains durability through a bounty system.
 1.  **Detection:** If DU availability drops below the resilience threshold (e.g., k+1), a `RepairNeeded` event is triggered.
 2.  **Execution:** Any node can reconstruct the missing shards **and MUST produce openings against the original DU KZG commitment** (no new commitment is accepted). The repair submission includes a Merkle proof to the DU’s original `C_root` plus KZG openings for the repaired shards.
 3.  **Resilience Bounty:** The first node to submit proof of correct regeneration claims the bounty (default: 5% of the remaining escrowed fee for that DU).
+
+**Normative (Anti‑withholding):** When a repair for shard `j` is accepted, the SP originally assigned `j` incurs an automatic demerit; repeated events within a sliding window escalate to slashing unless the SP supplies signed RTT‑oracle transcripts proving inclusion in a whitelisted incident. An identity is disqualified from claiming bounty on any shard it was previously assigned for `Δ_repair_cooldown` epochs (DAO‑tunable).
     **Normative (Dynamic Bounty):** The bounty MUST be dynamically adjusted based on the urgency of the repair, the cost of reconstruction, and network conditions (DAO‑tunable parameters).
 
 ## 4. Network Layer (Nil-Mesh)
@@ -231,7 +233,7 @@ Verifiable Quality of Service (QoS) is crucial for performance and security.
 *   **Attestation:** Nodes continuously monitor and sign Round-Trip Time (RTT) attestations with peers.
 *   **On‑Chain Oracle:** A **stake‑weighted attester set** posts RTT digests (Poseidon Merkle roots) to the DA chain. **Normative**:
     1) **Challenge‑response**: clients issue random tokens; SPs must echo tokens within `T_max`; vantage nodes verify end‑to‑end.
-    2) **VDF Enforcement (Conditional)**: If network anomaly rate exceeds `ε_sys`, the protocol MAY activate a Verifiable Delay Function (VDF) requirement in the challenge‑response loop to enforce a computational floor on RTT.
+    2) **VDF Enforcement (Conditional):** MAY be activated only if the anomaly rate exceeds `ε_sys` for ≥ 3 consecutive epochs and MUST be deactivated after 2 consecutive clean epochs. VDF cost per probe is capped by the **Verification Load Cap** (§ 6.1). Protocol MUST publish the VDF parameters (delay, modulus) on‑chain per epoch when active.
     3) **Diversity**: attesters span ≥ 5 regions and ≥ 8 ASNs; assignments are epoch‑randomized.
     4) **Slashing**: equivocation or forged attestations are slashable with on‑chain fraud proofs (submit raw transcripts).
     5) **Sybil control**: weight attesters by bonded $STOR and decay weights for co‑located /24s.
@@ -257,7 +259,7 @@ $BW is the utility token rewarding data retrieval. It is elastic and minted base
 
 Inflation per epoch (I_epoch) is calculated using a sublinear function to incentivize usage while controlling inflation:
 
-`I_epoch = clamp( α · sqrt(Total_Bytes_Served_NetworkWide), 0, I_epoch_max )`  // **Normative bound:** set `I_epoch_max ≤ 0.15%` of circulating $BW per epoch (DAO‑tunable within [0.05%, 0.15%]).
+`I_epoch = clamp( α · sqrt(Total_Bytes_Served_NetworkWide), 0, I_epoch_max )`  // **Normative bounds:** (a) Per‑epoch cap: `I_epoch_max ≤ 0.10%` of circulating $BW (DAO‑tunable within [0.02%, 0.10%]); (b) Rolling cap: over any 30‑day window, Σ I_epoch ≤ `I_30d_max` (DAO‑tunable corridor, default 6%); (c) Attack‑traffic filter: bytes counted toward inflation MUST be discounted by an abuse‑score derived from §6.3 sampling failures and RTT‑oracle anomalies.
 where:
 - `α ∈ [α_min, α_max]` (DAO‑tunable);
 - `I_epoch_max` caps epoch inflation (DAO‑tunable);
@@ -291,7 +293,9 @@ To account for bandwidth, clients sign receipts upon successful retrieval.
     `Receipt := { CID_DU, Bytes, ChallengeNonce, ExpiresAt, Tip_BW, Miner_ID, Client_Pubkey, Sig_Ed25519 [, GatewaySig?] }`
     - `ChallengeNonce` is issued per‑session by the SP/gateway and bound to the DU slice; `ExpiresAt` prevents replay.
     - **Verification model:** Ed25519 signatures are verified **off‑chain by watchers and/or on the DA chain**; PoS² only commits to a **Poseidon Merkle root** of receipts and proves byte‑sum consistency. In‑circuit Ed25519 verification is **not required**.  
-      **Normative anchor:** At least **2% of receipts by byte‑volume per epoch** MUST be verified on the DA chain (randomly sampled via § 6.3) and escalate automatically under anomaly (§ 6.3.4).
+      **Commit requirement:** For epoch `t`, SPs MUST have posted `BW_commit := Blake2s‑256(BW_root)` by the last block of epoch `t−1` (see § 6.3.1). Receipts not covered by `BW_commit` are ineligible.  
+      **Penalty:** Failure to post `BW_commit` for epoch `t` sets counted bytes to zero for `t` and forfeits all $BW rewards for `t`.  
+      **Normative anchor:** At least **2% of receipts by byte‑volume per epoch** MUST be verified on the DA chain (randomly sampled via § 6.3) and escalate automatically under anomaly (§ 6.3.4).  
       **Normative (Verification Load Cap):** The total on‑chain verification load MUST be capped (DAO‑tunable) to prevent DoS via forced escalation.
 
 ### 6.2 PoS² Binding (Storage + Bandwidth)
@@ -310,10 +314,11 @@ The PoS² SNARK proves two statements simultaneously:
 Strengthen retrieval QoS without suspending reads by sampling and verifying a governance‑tunable fraction of receipts each epoch. This mechanism is additive to PoS² and does not alter the proof object.
 
 #### 6.3.1 Sampling Set Derivation
+0) **Commit‑then‑sample (Normative):** Each SP MUST post `BW_commit := Blake2s‑256(BW_root)` no later than the last block of epoch `t−1`.
 1) At epoch boundary `t`, derive `seed_t := Blake2s-256("NilStore-Sample" ‖ beacon_t ‖ epoch_id)`, where `beacon_t` is the Nil‑VRF epoch beacon.
-2) For each SP’s `BW_root`, expand `seed_t` into a PRF stream and select a fraction `p` of receipts for verification (`0.5% ≤ p ≤ 10%`, default ≥ 5%).
+2) Expand `seed_t` into a PRF stream and select a fraction `p` of receipts **from the set committed by `BW_commit`** for verification (`0.5% ≤ p ≤ 10%`, default ≥ 5%). Receipts not committed in `t−1` MUST NOT be counted for `t`.
 3) The sample MUST be unpredictable to SPs prior to epoch end and sized so that expected coverage ≥ 1 receipt per active SP. Auditor assignment SHOULD be stake‑weighted and region/ASN‑diverse (per §4.2) to avoid correlated blind‑spots and to bound per‑auditor load.
-4) **Honeypot DUs:** A small fraction of network capacity (e.g., 0.1%) MUST be reserved for autonomously generated Honeypot DUs. Any retrieval receipt for a Honeypot DU is automatically selected for 100% verification.
+4) **Honeypot DUs:** MUST be **profile‑indistinguishable** from ordinary DUs: sizes drawn from the same power‑of‑two distribution; RS profiles sampled from governance‑approved mixes; Nil‑Lattice slots assigned via the standard hash; and metadata randomized within normal bounds. Any retrieval receipt for a Honeypot DU is automatically selected for 100% verification.
 
 #### 6.3.2 Verification Procedure
 Watchers (or DA validators) MUST, for each sampled receipt:
@@ -329,7 +334,9 @@ Aggregate results into `SampleReport_t`.
 - Fail (Major): If failures > ε, deduct failing receipts, forfeit rewards, and apply quadratic slashing to bonded $STOR. Repeat offenders MAY be suspended pending DAO vote.
 
 #### 6.3.4 Governance Dials
-NilDAO MAY tune: sampling fraction `p`, tolerance `ε` (default 0.1%), slashing ratio, and a system‑wide escalation that raises `p` up to 100% if anomaly rate exceeds `ε_sys`. Default system‑wide anomaly tolerance is `ε_sys = 0.25%` (DAO‑tunable). Escalation SHOULD increase `p` stepwise (e.g., 2% → 5% → 10% → 100%) and MUST be announced in‑protocol.
+NilDAO MAY tune: sampling fraction `p`, tolerance `ε` (default 0.1%), slashing ratio, and a system‑wide escalation that raises `p` up to 100% if anomaly rate exceeds `ε_sys`. Default system‑wide anomaly tolerance is `ε_sys = 0.25%` (DAO‑tunable).
+
+**Normative (Escalation Guard):** Escalation MUST increase `p` stepwise by at most ×2 per epoch and is capped by the **Verification Load Cap** from § 6.1 (on‑chain checks MUST reject steps that would exceed the cap). Escalation above 20% requires a signed anomaly report sustained over a moving 6‑epoch window and auto‑reverts after 2 clean epochs. All changes MUST be announced in‑protocol.
 
 #### 6.3.5 Security & Liveness
 Sampling renders expected value of receipt fraud negative under rational slashing. Unlike asynchronous challenges that pause reads, NilStore maintains continuous liveness; PoS² remains valid regardless of sampling outcomes.
@@ -361,9 +368,10 @@ Sampling renders expected value of receipt fraud negative under rational slashin
 *   **Slashing Rule (Normative):** Missed PoS² proofs trigger a quadratic penalty on the bonded $STOR collateral:
     `Penalty = min(0.50, 0.05 × (Consecutive_Missed_Epochs)²) × Correlation_Factor(F)`
     * `F` is the fraction of total network stake that missed the proof in the current epoch.
-    * **Correlation_Factor(F):**
-      * If `F < 15%` (Isolated Failure): `Correlation_Factor = 1.0`.
-      * If `F ≥ 15%` (Correlated Failure): `Correlation_Factor` decreases linearly such that the total network‑wide slash amount is capped (e.g., at 2% of total stake per epoch).
+    * **Correlation_Factor(F) (Revised):**
+      * Apply an SP‑level floor `floor_SP = 0.10` to the multiplicative penalty (each SP bears at least 10% of its computed penalty even under correlated events).
+      * Above a correlation threshold `F*` (default 15%), decrease the network‑aggregate penalty linearly toward a cap (e.g., 2% of total stake per epoch), but do not reduce below `floor_SP` per SP.
+      * Compute F per diversity cluster (ASN/region cell); large cartels concentrated in one cluster use that cluster’s F to prevent gaming via global correlation.
     The penalty resets upon submission of a valid proof.
 
 ### 7.4 Multi‑Stage Epoch Reconfiguration
