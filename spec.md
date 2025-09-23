@@ -469,20 +469,13 @@ After finishing pass `p−1`, compute a digest of the entire pass's data that is
 `ChunkDigest_{p-1} = MerkleRoot(ChunkHashes_{p-1})`
 `ζ_p = little‑endian 32 bits of BLAKE2s-256( "NIL_SEAL_ZETA" ‖ salt ‖ p ‖ ChunkDigest_{p-1} )`
 
-**Normative (Data Integrity & Attestation):** `ChunkHashes_{p-1}` MUST be computed by **uncached** reads from persistent storage after pass `p−1` is fully committed.
+**Normative (Data Integrity):** `ChunkHashes_{p-1}` MUST commit to the exact bytes of pass `p−1` as stored; computing from in‑memory buffers is forbidden (see prohibition below).
 
-**Required I/O semantics**
-1) Issue **FUA/flush** at the block layer and reopen for uncached reads:
-   • Linux: open with `O_DIRECT|O_DSYNC` (or `RWF_DIRECT`), call `fdatasync()`; for block devices call `ioctl(BLKFLSBUF)`; drop page cache with `posix_fadvise(..., DONTNEED)`. For NVMe, verify **Volatile Write Cache** is disabled or send `NVME_FLUSH` before readback.  
-   • macOS: use `F_NOCACHE` plus `F_FULLFSYNC`.  
-   • Windows: open with `FILE_FLAG_NO_BUFFERING|FILE_FLAG_WRITE_THROUGH`, call `FlushFileBuffers()`.
-   Reads/writes must be properly aligned for direct I/O.
+**I/O enforcement (Informative, advisory evidence):** Implementations SHOULD use uncached reads and device flush primitives when available (e.g., `O_DIRECT|O_DSYNC`, NVMe FLUSH) and MAY record an optional kernel/device transcript (`attestation=present`). Where unavailable, set `attestation=absent`. Watchers and on‑chain verifiers MUST NOT gate proof acceptance on OS‑level I/O features; the storage‑liveness guarantee is enforced by § 4 (PoS²).
 
-2) **Kernel‑trace attestation:** Record a signed transcript containing ⟨offset, length, hash, flags⟩ for a randomized ≥ 1 % sample (min 64) using kernel tracepoints (e.g., Linux eBPF `block_rq_issue/block_rq_complete` capturing `REQ_PREFLUSH/REQ_FUA`). Store the transcript with the Row‑Commit file. If kernel‑trace attestation is unavailable or cannot be validated by watchers (e.g., missing eBPF support, known‑bad kernel, or untrusted trace facility), the sealer MUST set `attestation=absent` in the Row‑Commit file and automatically switch to the *S‑512+* fallback profile of § 3.4.2. Such proofs are treated identically to step (1) fallback conditions: watchers on L1 MUST regard missing/invalid attestation as non‑conformant for poss² acceptance (§ 4.5).
+**Baseline profile (Normative):** The network baseline is profile *S‑512+* with **H = 2** (CPU/memory‑hard). Implementations MAY expose an I/O‑anchored variant (e.g., “S‑q1”) as an optimization; if used, mark `attestation=present` in the Row‑Commit file. Both variants are acceptable for poss² (§ 4.5).
 
-3) **Explicit failure modes:** Reject the pass if (a) device/driver reports a cache hit, (b) flush/trace counters are inconsistent, or (c) alignment preconditions for uncached I/O are not met.
-
-**Fallback profile (Normative):** On platforms where step (1) cannot be enforced (e.g., missing `O_DIRECT` semantics), the sealer MUST automatically switch to profile *S‑512+* (or stricter): set `k ≥ 128` and `H ≥ 2`, and emit a **conformance flag** in the Row‑Commit file. Watchers on L1 MUST treat non‑conformant proofs as invalid for poss² acceptance in § 4.5.
+**Explicit failure modes (advisory):** Implementations SHOULD reject a pass locally if device/driver reports a cache hit or alignment preconditions for direct I/O (when attempted) are not met; such local rejections do not affect network‑level proof validity.
 
 **Canonical sector identifier:** Replace filesystem `path` in all salts and indices with a canonical `sector_id = Blake2s-256(miner_addr ‖ sector_number)` to prevent miner‑chosen paths from influencing ζ derivation.
 
@@ -979,7 +972,7 @@ t_recreate_replica(row)  ≥  5 · Δ_work
 * **Bound tightness:** Maintain `β / q ≤ 1 / 2^15` (S‑q1 satisfies this: β = 16 383, q ≈ 2^30).
 * **Permutation passes:** `r ≥ 3` for main‑net profiles.
 * **NTT block size:** `k ≥ 64`; increases require updated Annex A KATs.
-* **I/O semantics:** Clients MUST expose a conformance flag and FAIL proofs on platforms that cannot enable direct I/O for the read‑back step (§ 3.4.2).
+* **I/O semantics (advisory):** Clients MUST expose an attestation flag `attestation ∈ {present, absent}` indicating whether OS/device telemetry was recorded during sealing. Proof acceptance MUST NOT depend on OS‑level I/O features; sequential‑work is enforced via dial policy and PoS² (§ 4).
 * **Challenge sampling:** Modulo‑bias‑free selection required (§ 4.2); profiles that change `rows`/`cols` MUST preserve this.
 
 \### 6.3 Review Cadence & Metrics
@@ -1027,7 +1020,7 @@ A failed vote resets the dial to its previous state.
 | **S‑q1**     | SSD baseline         | 1 024 | 64  | 3 | 280 | 1 | 0     | 60 s |
 | **S‑q1‑CRT** | SSD baseline (CRT)   | 1 024 | 64  | 3 | 280 | 1 | 0     | 60 s |
 | **S‑q1‑HDD** | Spinning disk        | 1 024 | 64  | 3 | 300 | 1 | 4 MiB | 90 s |
-| **S‑512+**   | Mid‑security uplift  | 1 024 | 128 | 3 | 350 | 1 | 0     | 45 s |
+| **S‑512+**   | Baseline (CPU/mem)   | 1 024 | 128 | 3 | 350 | 2 | 0     | 60 s |
 | **S‑1024‑A** | Archival, high hard. | 2 048 | 256 | 4 | 400 | 2 | 2 MiB | 30 s |
 
 Profile strings are **immutable identifiers**; new profiles append rows.
