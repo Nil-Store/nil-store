@@ -115,7 +115,7 @@ For transparency and auditability, Core defines the following fixed ASCII domain
 * **Pinned inputs:** All randomness derives from fixed domain tags (see § 0.4.1) and explicit inputs; scripts MUST use integer‑only operations for consensus‑sensitive calculations.
 * **Make target:** Reference repos MUST provide `make publish` that regenerates `_artifacts/*` and `SHA256SUMS` from a clean checkout.
 * **Estimator evidence (A3):** The Module‑SIS security level MUST be justified by a published estimator transcript before main‑net activation (see § 7.2).
-* **I/O attestation:** ζ‑derivation MUST include a kernel‑level I/O transcript for the randomized ≥ 1 % sample per § 3.4.2.
+
 
 ---
 
@@ -471,11 +471,11 @@ After finishing pass `p−1`, compute a digest of the entire pass's data that is
 
 **Normative (Data Integrity):** `ChunkHashes_{p-1}` MUST commit to the exact bytes of pass `p−1` as stored; computing from in‑memory buffers is forbidden (see prohibition below).
 
-**I/O enforcement (Informative, advisory evidence):** Implementations SHOULD use uncached reads and device flush primitives when available (e.g., `O_DIRECT|O_DSYNC`, NVMe FLUSH) and MAY record an optional kernel/device transcript (`attestation=present`). Where unavailable, set `attestation=absent`. Watchers and on‑chain verifiers MUST NOT gate proof acceptance on OS‑level I/O features; the storage‑liveness guarantee is enforced by § 4 (PoS²).
+ 
 
-**Baseline profile (Normative):** The network baseline is profile *S‑512+* with **H = 2** (CPU/memory‑hard). Implementations MAY expose an I/O‑anchored variant (e.g., “S‑q1”) as an optimization; if used, mark `attestation=present` in the Row‑Commit file. Both variants are acceptable for poss² (§ 4.5).
+**Baseline profile (Normative):** The network baseline is profile *S‑512+* with **H = 2** (CPU/memory‑hard). Alternative dial profiles listed in § 6.6 are acceptable for poss² (§ 4.5).
 
-**Explicit failure modes (advisory):** Implementations SHOULD reject a pass locally if device/driver reports a cache hit or alignment preconditions for direct I/O (when attempted) are not met; such local rejections do not affect network‑level proof validity.
+ 
 
 **Canonical sector identifier:** Replace filesystem `path` in all salts and indices with a canonical `sector_id = Blake2s-256(miner_addr ‖ sector_number)` to prevent miner‑chosen paths from influencing ζ derivation.
 
@@ -972,7 +972,6 @@ t_recreate_replica(row)  ≥  5 · Δ_work
 * **Bound tightness:** Maintain `β / q ≤ 1 / 2^15` (S‑q1 satisfies this: β = 16 383, q ≈ 2^30).
 * **Permutation passes:** `r ≥ 3` for main‑net profiles.
 * **NTT block size:** `k ≥ 64`; increases require updated Annex A KATs.
-* **I/O semantics (advisory):** Clients MUST expose an attestation flag `attestation ∈ {present, absent}` indicating whether OS/device telemetry was recorded during sealing. Proof acceptance MUST NOT depend on OS‑level I/O features; sequential‑work is enforced via dial policy and PoS² (§ 4).
 * **Challenge sampling:** Modulo‑bias‑free selection required (§ 4.2); profiles that change `rows`/`cols` MUST preserve this.
 
 \### 6.3 Review Cadence & Metrics
