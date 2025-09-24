@@ -14,7 +14,8 @@ It specifies, in a fully reproducible manner:
 1. **Field & transform algebra** over the 30‑bit prime $q₁ = 998 244 353$;
 2. **Nilweave commitment** (`nilhash`) with binding security reducing to SIS;
 3. **Sealing codec** (`nilseal`) that enforces sequential replication work;
-4. **Proof‑of‑Spacetime‑Squared** (`poss²`) yielding succinct liveness proofs;
+4. **Proof‑of‑Spacetime‑Squared** (`poss²`) yielding succinct liveness proofs (scaffold mode);
+4′. **Proof‑of‑Useful‑Data** (PoUD) with KZG multi‑open over 1 KiB RS symbols (plaintext mode, primary);
 5. **BLS VRF** and BATMAN aggregation for unbiased beacons;
 6. **Dial policy** and governance process for safe parameter evolution;
 7. Formal security rationale under standard assumptions.
@@ -464,6 +465,7 @@ Constraints:
 - `salt_k` MUST be domain‑separated from full‑replica sealing salts (§ 3.3).
 - No cross‑window state is permitted; `Derive` is local to the window bytes.
 - Implementations MUST provide KATs in Annex B for `Derive`.
+**Domain separation (normative):** For PoUD/PoDE usage, salt derivation MUST include `epoch_id` and `du_id` in addition to `beacon_salt` and `row_id`, to prevent cross‑deal replay of derived windows within the same epoch.
 
 \### 3.4 Data‑Dependent Permutation (normative)
 
@@ -628,7 +630,7 @@ Detailed proofs for sequential‑work and indistinguishability appear in § 7.
 
 ---
 
-*Section § 4 describes the Proof‑of‑Spacetime‑Squared protocol that consumes `h_row` and `delta_head` produced here.*
+*Section § 4 describes the Proof‑of‑Spacetime‑Squared protocol that consumes `h_row` and `delta_head` produced here (scaffold mode). Section § 4′ defines the Proof‑of‑Useful‑Data (plaintext mode).* 
 
 
 ---
@@ -794,6 +796,35 @@ function poss2_verify(
     return true;
 }
 ```
+
+## § 4′ Proof‑of‑Useful‑Data (PoUD) — plaintext mode (normative)
+
+\### 4′.0 Scope
+
+PoUD proves (a) content correctness for DU plaintext via KZG openings against `C_root`, and (b) timed derivations (PoDE) over 8 MiB windows to enforce on‑disk locality. It is the PRIMARY proof in plaintext mode (metaspec § 6.0a).
+
+\### 4′.1 Public Inputs
+
+`{ du_id, C_root, epoch_id, indices[], beacon_t, R, B_min }`
+
+\### 4′.2 Prover Obligations
+
+1) KZG multi‑open for `indices[]` (1 KiB RS symbols) under `C_root`.
+2) For each scheduled 8 MiB window, compute `Derive(clear_window, beacon_salt, row_id)` (§ 3.3.1) and return `(leaf64, Δ_W)`. Derivations MUST complete before `Δ_submit` (metaspec § 7.3).
+3) Sum of verified bytes ≥ `B_min` and number of completed windows ≥ `R`.
+
+\### 4′.3 Verify API (DA chain precompiles)
+
+`verify_poud(C_root, indices[], opens[], bytes[], leaf64[], Δ_W[], R, B_min) → bool`
+
+• Multi‑open check passes for all `indices[]` under `C_root`.
+• For each window: recompute `Derive` and check `(leaf64, Δ_W)`.
+• Enforce `R`, `B_min`.
+
+\### 4′.4 Security Notes
+
+• Correctness reduces to KZG soundness; timing relies on `Δ_submit` and RTT‑oracle transcripts (metaspec § 4.2).
+• PDP‑PLUS coverage SLO is enforced by scheduler and governance (metaspec § 6.0c).
 
 Gas upper bound (NilStore L1): **≈ 9.7k** assuming a **Blake2s precompile** with cost model `C_hash × (#hashes) + C_misc`. This figure is **chain‑specific** and MUST be re‑benchmarked on parameter changes.
 
@@ -1110,6 +1141,13 @@ The following protocol dials control optional content‑binding and derivation w
 - `p_link ∈ [0,1]` — Fraction of PoS² challenges that require DU Origin Binding per § 4.2.1. Default 0.05. On‑chain KZG required where available.
 - `p_derive ∈ [0,1]` — Fraction of PoS² challenges (or epochs) that require PoDE per § 4.2.2. Default 0.01. Requires `micro_seal = row` profile and published KATs.
 - `micro_seal ∈ {off,row}` — Localizes sealing to 2 MiB rows for derivation (§ 3.4.3). Default `off` in baseline S‑512.
+
+Defaults for plaintext mode (normative):
+• `micro_seal = row` (REQUIRED)
+• `p_link ≥ 0.05` (DU origin binding in a subset of challenges)
+• `p_derive ≥ 0.01`; `R ≥ 16`; `B_min ≥ 128 MiB`
+• `p_kzg ≥ 0.05` (receipt‑level content checks, metaspec § 6.3.4)
+• `CoverageTargetDays = 45` (metaspec § 6.0c)
 
 Guard‑rails:
 - `p_link + p_derive` MAY be capped by governance to satisfy the Verification Load Cap.

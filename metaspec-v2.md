@@ -41,8 +41,8 @@ NilStore employs a hybrid architecture that decouples Data Availability (DA) con
 
 The Data Availability Chain is a minimal L1 (built using Cosmos-SDK/Tendermint BFT) optimized for NilStore's cryptographic operations.
 
-*   **Function:** Verifying KZG openings and PoS² SNARKs efficiently via pre‑compiles (avoiding expensive EVM gas costs), managing $STOR staking, and executing slashing logic. It does not run a general‑purpose VM.
-*   **Required pre‑compiles (normative):** (a) BLAKE2s‑256, (b) Poseidon (for Merkle paths), and (c) KZG (G1/G2 ops; multi‑open). Chains lacking these MUST expose equivalent syscalls in the DA module.
+*   **Function:** Verifying KZG openings (including multi‑open) and PoS² SNARKs efficiently via pre‑compiles (avoiding expensive EVM gas costs), managing $STOR staking, and executing slashing logic. It does not run a general‑purpose VM.
+*   **Required pre‑compiles (normative):** (a) BLAKE2s‑256, (b) Poseidon (for Merkle paths), and (c) KZG (G1/G2, multi‑open, blob verification). Chains lacking these MUST expose equivalent syscalls in the DA module. Plaintext mode (§ 6.0a) MUST NOT be activated unless KZG precompiles/syscalls are present.
 *   **Rationale:** The intensive cryptographic operations required for daily proof verification are best handled natively.
 
 ### 2.3 The Settlement Layer (L2)
@@ -292,24 +292,28 @@ While the protocol strictly uses $BW for tips, client software can provide a sea
 
 The economic model is enforced cryptographically through the PoS² consensus mechanism on the L1 DA Chain.
 
-### 6.0a  Proof Mode (governance dial)
+### 6.0a  Proof Mode (governance dial) — DEFAULT: plaintext
 
-The network supports two normative proof modes:
-
-- mode = "scaffold": PoS²‑L (Core § 4) over a sealed scaffold (Core § 3.6–§ 3.7), plus PoDE challenges over DU plaintext (this section).
-- mode = "plaintext": PoUD (this section) is primary; PoS²‑L is disabled.
-
-The DAO MAY switch modes per epoch and MUST announce the mode in‑protocol; switching to "plaintext" requires that the DA L1 exposes KZG precompiles (§ 2.2).
+The network supports two normative proof modes (plaintext is the default and MUST be used on mainnet unless the DAO votes otherwise):
+• mode = "plaintext" (default): PoUD (this section) is primary and REQUIRED; PoS²‑L is DISABLED except for emergency scaffolding.
+• mode = "scaffold": PoS²‑L (Core § 4) over a sealed scaffold (Core § 3.6–§ 3.7), plus PoDE over DU plaintext.
+Chains MUST announce the active mode in‑protocol each epoch. Switching from plaintext to scaffold requires a supermajority vote and an activation delay. Plaintext mode MUST NOT be active unless the DA L1 exposes KZG precompiles (§ 2.2).
 
 ### 6.0b  PoUD (Proof of Useful Data) – Plaintext Mode (normative)
 
 For each epoch and each assigned DU sliver interval:
 
-1) Content correctness: The SP MUST provide one or more KZG openings at verifier‑chosen 1 KiB symbol indices proving membership in the DU commitment `C_root` recorded at deal creation.
+1) Content correctness: The SP MUST provide one or more **KZG multi‑open** proofs at verifier‑chosen 1 KiB symbol indices proving membership in the DU commitment `C_root` recorded at deal creation. When multiple indices are scheduled for the same DU in the epoch, SPs SHOULD batch using multi‑open to minimize calldata.
 
 2) Timed derivation (PoDE): Let `W = 8 MiB` (governance‑tunable). The SP MUST compute `deriv = Derive(clear_bytes[interval], beacon_salt, row_id)` within the proof window; `deriv` is fixed by the micro‑seal profile (Core § 3.3.1) restricted to the bytes of the interval (no cross‑window state). The proof includes `H(deriv)` and the clear bytes needed for recomputation.
 
-3) Concurrency & volume: The prover MUST satisfy at least `R` parallel PoDE sub‑challenges per proof window, each targeting a distinct DU interval (default `R ≥ 16`; DAO‑tunable). The aggregate verified bytes per window MUST be ≥ `B_min` (default `B_min ≥ 128 MiB`).
+3) Concurrency & volume: The prover MUST satisfy at least `R` parallel PoDE sub‑challenges per proof window, each targeting a distinct DU interval (default `R ≥ 16`; DAO‑tunable). The aggregate verified bytes per window MUST be ≥ `B_min` (default `B_min ≥ 128 MiB`, DAO‑tunable). B_min counts only bytes that are both (a) KZG‑opened and (b) successfully derived under PoDE.
+
+### 6.0c  PDP‑PLUS Coverage SLO (normative)
+Define CoverageTargetDays (default 45). The governance scheduler MUST choose per‑epoch index sets so that for every active DU:
+  • the expected fraction of uncovered bytes after CoverageTargetDays is ≤ 2^-18; and
+  • the scheduler is commit‑then‑sample: indices for epoch t are pseudorandomly derived from the epoch beacon and a DU‑local salt and are not known to SPs before the BW_commit deadline of epoch t−1.
+Chains MUST publish (and auditors MUST reproduce) the per‑epoch index‑set transcript. Failure to meet the SLO MUST trigger an automatic increase of B_min (×1.25 per epoch, capped by the Verification Load Cap) until the SLO is restored.
 
 4) Deadline: The derivations MUST complete before `Δ_submit` (§ 7.3). RTT‑Oracle transcripts (§ 4.2) are included when a remote verifier is used.
 
@@ -367,7 +371,7 @@ Aggregate results into `SampleReport_t`.
 NilDAO MAY tune: sampling fraction `p`, tolerance `ε` (default 0.1%), slashing ratio, and a system‑wide escalation that raises `p` up to 100% if anomaly rate exceeds `ε_sys`. Default system‑wide anomaly tolerance is `ε_sys = 0.25%` (DAO‑tunable).
 
 Additional dial (content‑audited receipts):
-- `p_kzg ∈ [0,1]` — Fraction of sampled receipts that MUST include one or more KZG openings at 1 KiB RS symbol boundaries corresponding to claimed bytes. Default 0.05. On‑chain verification uses KZG precompiles when available; otherwise, auditors verify off‑chain with fraud‑proof slashing. Adjust `p_kzg` under the **Verification Load Cap** (§ 6.1).
+- `p_kzg ∈ [0,1]` — Fraction of sampled receipts that MUST include one or more KZG openings at 1 KiB RS symbol boundaries corresponding to claimed bytes. Default 0.05. In plaintext mode, `p_kzg` MUST be ≥ 0.05 unless disabled by DAO vote under the Verification Load Cap. Honeypot DUs MUST use `p_kzg = 1.0`. On‑chain verification uses KZG precompiles when available; otherwise, auditors verify off‑chain with fraud‑proof slashing. Adjust `p_kzg` under the **Verification Load Cap** (§ 6.1).
 
 **Normative (Escalation Guard):** Escalation MUST increase `p` stepwise by at most ×2 per epoch and is capped by the **Verification Load Cap** from § 6.1 (on‑chain checks MUST reject steps that would exceed the cap). Escalation above 20% requires a signed anomaly report sustained over a moving 6‑epoch window and auto‑reverts after 2 clean epochs. All changes MUST be announced in‑protocol.
 
@@ -397,13 +401,13 @@ Sampling renders expected value of receipt fraud negative under rational slashin
 
 ### 7.3 Vesting and Slashing
 
-*   **Vesting:** The escrowed fee is released linearly to the SP each epoch, contingent on a valid PoS² submission.
+*   **Vesting:** The escrowed fee is released linearly to the SP each epoch, contingent on a valid **PoUD** submission meeting § 6.0b (content correctness + PoDE R/B_min) in plaintext mode. In scaffold mode only, a valid **PoS²** submission also satisfies vesting.
 *   **Consensus Parameters (Normative):**
     *   **Epoch Length (`T_epoch`)**: 86,400 s (24 h).
     *   **Proof Window (`Δ_submit`)**: 1,800 s (30 min) after epoch end — this is the *network scheduling window* for accepting PoS² proofs.
     *   **Per‑replica Work Bound (`Δ_work`)**: 60 s (baseline profile), the minimum wall‑clock work per replica referenced by the Core Spec’s § 6.2 security invariant. Implementations **MUST** ensure `t_recreate_replica ≥ 5·Δ_work` (see Nilcoin Core v2.0 § 6.2).
     *   **Block Time** (Tendermint BFT): 6 s.
-*   **Slashing Rule (Normative):** Missed PoS² proofs trigger a quadratic penalty on the bonded $STOR collateral:
+*   **Slashing Rule (Normative):** Missed **PoUD** proofs (plaintext mode) or missed **PoS²** proofs (scaffold mode) trigger a quadratic penalty on the bonded $STOR collateral:
     `Penalty = min(0.50, 0.05 × (Consecutive_Missed_Epochs)²) × Correlation_Factor(F)`
 * `F` is computed **per diversity cluster** (ASN×region cell) and globally.
 * **Correlation_Factor(F) (Revised):**
