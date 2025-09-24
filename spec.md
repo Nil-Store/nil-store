@@ -13,9 +13,8 @@ It specifies, in a fully reproducible manner:
 
 1. **Field & transform algebra** over the 30‑bit prime $q₁ = 998 244 353$;
 2. **Nilweave commitment** (`nilhash`) with binding security reducing to SIS;
-3. **Sealing codec** (`nilseal`) that enforces sequential replication work;
-4. **Proof‑of‑Spacetime‑Squared** (`poss²`) yielding succinct liveness proofs (scaffold mode);
-4′. **Proof‑of‑Useful‑Data** (PoUD) with KZG multi‑open over 1 KiB RS symbols (plaintext mode, primary);
+3. **Sealing codec** (`nilseal`) retained as an **optional scaffold** (Annex A);
+4. **Plaintext possession proofs**: **PoUD** (KZG‑PDP over DU cleartext) and **PoDE** (timed window derivations) as the **normative** liveness path;
 5. **BLS VRF** and BATMAN aggregation for unbiased beacons;
 6. **Dial policy** and governance process for safe parameter evolution;
 7. Formal security rationale under standard assumptions.
@@ -78,7 +77,7 @@ digest  = Blake2s‑256( Version ‖ DomainID ‖ payload )
 | --------- | ---------------------------------- | -------------- |
 |  `0x0000` | Internal primitives                | § 2–5          |
 |  `0x0100` | nilseal row Merkle roots (`h_row`) | § 3            |
-|  `0x0200` | poss² window delta proofs          | § 4            |
+|  `0x0200` | PoDE/Derive digest (window‑local)  | § 4            |
 |  `0x0300` | Nil‑VRF transcripts                | § 5            |
 
 Further IDs are allocated by Nilcoin governance (informative Appendix D).
@@ -94,7 +93,7 @@ For transparency and auditability, Core defines the following fixed ASCII domain
 | `"NIL_BEACON"`      | Epoch beacon derivation from VRF output   | § 5.3      |
 | `"NilStore-Sample"` | Retrieval‑sampling seed from epoch beacon | § 5.7 (new) |
 | `"SAMPLE-EXP"`      | PRF expansion for sampling indices        | § 5.7 (new) |
-| `"P2Δ"`             | Delta‑head binding for PoS²               | § 3.7      |
+| `"P2Δ"`             | (Annex A) Delta‑head binding for PoS²‑L   | Annex A    |
 | `"NIL_SEAL_ZETA"`   | Derivation of permutation offset ζ_p      | § 3.4.2    |
 | `"POSS2-MIX"`       | Challenge derivation mix domain           | § 4.2      |
 | `"NILHASH-RANGE"`   | Range‑proof transcript tag                | Annex A.3  |
@@ -381,7 +380,7 @@ Note (CRT mode): When the optional CRT prime `q₂` is enabled, an additional ve
 
 1. **Binds storage** Reproducing the replica from the clear sector and secret key takes ≥ `t_recreate_replica` seconds (§ 6).
 2. **Hides data** The replica is computationally indistinguishable from uniform given only public parameters and the miner’s address.
-3. **Supports proofs** It yields *row commitments* `h_row` and *delta heads* `delta_head` consumed by the Proof‑of‑Spacetime‑Squared protocol (§ 4).
+3. **Supports proofs** (Annex A) It yields *row commitments* `h_row` and *delta heads* `delta_head` consumed by the sealed **PoS²‑L** scaffold (not active in the normative plaintext mode).
 
 Adversary capabilities: unbounded offline pre‑computation, full control of public parameters, but cannot learn the miner’s VRF secret key `sk`.
 
@@ -442,9 +441,9 @@ For `pass = 0 … r−1` (baseline `r = 3`):
    *Else* compute `stride = γ MiB / (2·k)` and write chunk to
    `offset = (logical_index ⋅ stride) mod N_chunks`.
 
-\#### 3.3.1 Micro‑Seal Derive (window‑scoped, normative, for PoDE/PoUD)
+\#### 3.3.1 Micro‑Seal Derive (window‑scoped, normative for PoDE)
 
-Purpose: Provide a deterministic, beacon‑salted local transform on a `W`‑byte window (default `W = 8 MiB`) that can be recomputed from plaintext during PoDE without access to a full sealed replica.
+Purpose: Provide a deterministic, beacon‑salted local transform on a `W`‑byte window (default `W = 8 MiB`) that can be recomputed directly from **plaintext** during PoDE; it MUST be domain‑separated from full sealing and MUST NOT require a sealed replica.
 
 Definition:
 
@@ -554,7 +553,7 @@ During compression the encoder computes a digest for each 2 MiB row. For row�
 
 ```
 Δ_row[i] = Blake2s-256( W_{2i} ‖ W_{2i+1} )
-delta_head[i] = Blake2s-256("P2Δ" ‖ i ‖ h_row[i] ‖ Δ_row[i])    // DomainID 0x0200
+delta_head[i] = Blake2s-256("P2Δ" ‖ i ‖ h_row[i] ‖ Δ_row[i])    // Annex A only
 ```
 
 Tuple `(h_row[i], delta_head[i])` is written to the **Row‑Commit file** that will be posted on‑chain after sealing.
@@ -630,12 +629,52 @@ Detailed proofs for sequential‑work and indistinguishability appear in § 7.
 
 ---
 
-*Section § 4 describes the Proof‑of‑Spacetime‑Squared protocol that consumes `h_row` and `delta_head` produced here (scaffold mode). Section § 4′ defines the Proof‑of‑Useful‑Data (plaintext mode).* 
+*Annex A describes the sealed PoS²‑L scaffold that consumes `h_row` and `delta_head` (scaffold mode). Section § 4 below defines the **PoUD + PoDE** plaintext path (normative).* 
 
 
 ---
 
-## § 4 Proof‑of‑Spacetime‑Squared (`poss²`)
+## § 4 Proof‑of‑Useful‑Data (PoUD) & Proof‑of‑Delayed‑Encode (PoDE)  — Normative
+
+\### 4.0 Objective & Model
+
+Attest, per epoch, that an SP (a) stores the **cleartext** bytes of their assigned DU intervals and (b) can perform **timed, beacon‑salted derivations** over randomly selected windows quickly enough that fetching from elsewhere is infeasible within the proof window.
+
+**Security anchors:** (i) DU **KZG commitment** `C_root` recorded at deal creation; (ii) BLS‑VRF epoch beacon for unbiased challenges; (iii) on‑chain **KZG multi‑open** pre‑compiles; (iv) watcher‑enforced timing digests.
+
+\### 4.1 DU Representation & Commitment
+
+Let a DU be encoded with systematic RS(n,k) over GF(2⁸) and segmented into **1 KiB symbols**. The client computes a **KZG commitment** `C_root` to the RS‑symbol polynomial(s) at deal creation and posts `C_root` on L2; all subsequent storage proofs **must open against this original commitment**.
+
+\### 4.2 Challenge Derivation
+
+For epoch `t` with beacon `beacon_t`, expand domain‑separated randomness to pick `q` **distinct symbol indices** per DU interval and `R` **PoDE windows** of size `W = 8 MiB`. Selection MUST be modulo‑bias‑free.
+
+\### 4.3 Prover Obligations per DU Interval
+
+1) **PoUD — KZG‑PDP (content correctness):** Provide KZG **multi‑open** at the chosen 1 KiB symbol indices proving membership in `C_root`.
+2) **PoDE — Timed derivation:** For each challenged window, compute `deriv = Derive(clear_window, beacon_salt, row_id)` and submit `H(deriv)` plus the **minimal** clear bytes for verifier recompute, all **within** the per‑epoch `Δ_submit` window. Enforce **Σ verified bytes ≥ B_min = 128 MiB** over all windows and **R ≥ 16** sub‑challenges/window (defaults; DAO‑tunable).
+
+\### 4.4 Verifier (On‑chain / Watchers)
+
+* **On‑chain:** Verify **KZG multi‑open** against `C_root`; check counters for `R` and `B_min`.
+* **Watchers:** Verify PoDE recomputations and timing (RTT‑oracle transcripts). Aggregate pass/fail into an on‑chain digest per SP.
+
+\### 4.5 Coverage & Parameters (Auditor math)
+
+Let DU contain **M** symbols. With **q** fresh symbols per epoch over **T** epochs, the chance any symbol is never checked is `M · (1 − q/M)^T`. Choose `q·T` to push this below δ (e.g., 2⁻¹²⁸) for the DU class. Governance publishes defaults and bounds.
+
+\### 4.6 On‑chain Interfaces (normative)
+
+L1 **MUST** expose: `verify_kzg_multiopen(...)`, `verify_poseidon_merkle(...)`, `blake2s(bytes)`. Proof acceptance window: `T_epoch = 86 400 s`, `Δ_submit = 1 800 s`. Per‑replica work bound used by timing invariants: `Δ_work = 60 s`.
+
+---
+
+## Annex A (Optional): Sealed PoS²‑L Scaffold  — Not active in plaintext mode
+
+> This annex preserves the sealed proof protocol for phased rollout/emergency. It binds sealed rows back to DU `C_root` via optional KZG content openings and MAY require PoDE derivations over selected rows. All parameters and witness formats from the legacy PoS² text are retained here, with the delta‑head domain `"P2Δ"` restricted to this annex.
+
+*(Previous § 4 “Proof‑of‑Spacetime‑Squared (poss²)” content follows unchanged.)*
 
 \### 4.0 Objective & Security Model
 
@@ -1071,8 +1110,15 @@ The **Council** enacts parameter changes after receiving a recommendation from t
 | Argon2 passes    | `H`    | count  | **minor**              |
 | Interleave frag. | `γ`    | MiB    | **minor**              |
 | Proof deadline   | `Δ`    | sec    | **governance runtime** |
+| PoDE windows     | `W`    | bytes  | **governance runtime** |
+| PoDE sub‑challs  | `R`    | count  | **governance runtime** |
+| Verified bytes   | `B_min`| bytes  | **governance runtime** |
 
 \### 6.2 Security Invariant
+
+**Plaintext primacy:** All content checks and repairs **open against `C_root`** (cleartext).
+
+When Annex A is enabled, additionally require:
 
 ```
 t_recreate_replica(row)  ≥  5 · Δ_work
@@ -1193,13 +1239,16 @@ Hence an adversary must complete pass `p−1` before starting pass `p`, givi
 
 Gaussian noise (σ set by `λ`, § 3.5) aims to mask structure; precise entropy depends on σ relative to `Q` and quantization. Implementations MUST publish empirical tests (min‑entropy estimate and χ²) for the active `λ`, and the specification makes **no unconditional ≤2⁻¹²⁸** distance claim without that evidence.
 
-\### 7.5 `poss²` Proof‑of‑Spacetime
+\### 7.5 PoUD + PoDE (plaintext)
 
-* **Merkle inclusion** – Collision implies Blake2s collision (A1).
-* **Row digest check** – Adversary must find `Δ′ ≠ Δ` s.t. `B2s("P2Δ" ‖ row ‖ Δ′) = delta_head[row]`; requires hash collision (A1).
-* **Overall failure prob.** per epoch ≤ 2⁻¹¹⁰ (detailed derivation in Annex B).
+* **Soundness (PoUD):** Forging a membership opening without holding the symbol set breaks KZG binding.
+* **Timing (PoDE):** Window‑local `Derive` is beacon‑salted and re‑computable from plaintext only; providing it within `Δ_submit` implies local possession given `Δ_work` vs network RTT and disk bandwidth assumptions.
+* **Full‑file coverage:** With q·T chosen per § 4.5, the probability of any symbol escaping audit is ≤ δ for the declared DU class.
 
-\### 7.6 `nilvrf`
+\### 7.6 (Annex A) PoS²‑L
+See Annex A for sealed‑replica assertions; not active in the baseline mode.
+
+\### 7.7 `nilvrf`
 
 * **Uniqueness** – BLS signature uniqueness (Assumption A2).
 * **Pseudorandomness** – EUF‑CMA security ⇒ VRF pseudorandomness under random‑oracle model (A1, A2).
@@ -1237,7 +1286,7 @@ Vendors may implement alternative languages provided they embed the exact consta
 | -------------------------------- | -------------------------- | ------------------------- |
 | **Seal 32 GiB**                  | 8 min 14 s                 | I/O‑bound                 |
 | **Re‑seal 32 GiB (resume)**      | 42 s                       | —                         |
-| **Window proof (6 MiB)**         | 37 ms                      | in‑RAM                    |
+| **PoDE window (8 MiB) derive**   | ~ tens of ms               | in‑RAM                    |
 | **On‑chain verify**              | —                          | 9 698 gas                 |
 | **VRF verify (solo)**            | —                          | 97 k gas                  |
 | **BATMAN verify (N=5, t=4)**     | —                          | 99 k gas                  |

@@ -3,7 +3,7 @@
 **(White Paper Draft v0.5)**
 
 **Date:** 2025-09-15
-**Status:** Working Draft
+**Status:** Working Draft (plaintext‑proofs baseline)
 **Authors:** NilStore Core Team
 
 ## Abstract
@@ -20,8 +20,9 @@ NilStore retains strong cryptographic guarantees while reducing the "sealing" pr
 
 ### 1.2 Key Innovations
 
-*   **PoS² (Proof-of-Spacetime-Squared):** A merged SNARK attesting to both continued data storage and bandwidth served within an epoch.
-*   **CPU‑Only Sealing (baseline/target):** **Baseline** ≤ 8 min for **32 GiB** on an 8‑core 2025 CPU (see Nilcoin Core v2.0 § 9); **Target** ≤ 5–8 min for **64 GiB** (subject to disk bandwidth and profile). State targets as *target* until reproduced in Annex benchmarks.
+*   **Plaintext possession as first‑class:** Storage providers keep the **cleartext** bytes of assigned Data Units (DUs) on disk and prove it regularly with near‑certain full‑coverage over time.
+*   **PoUD + PoDE:** **PoUD** (KZG‑based Provable Data Possession over DU cleartext) + **PoDE** (timed window derivations) are the **normative** per‑epoch proofs.
+*   **CPU‑Only sealing (scaffold):** A sealed PoS² path exists **only** as an optional scaffold/fallback (Annex A) for phased rollout and incident response; it is disabled in the default mode. Baseline sealing targets remain available for Annex benchmarking.
 *   **Nil-Mesh Routing:** Heisenberg-lifted K-shortest paths for optimized latency and Sybil resistance.
 *   **Dual-Token Economy:** Decoupling long-term capacity commitment ($STOR) from immediate utility ($BW).
 *   **Hybrid Settlement:** A specialized L1 for efficient proof verification bridged via ZK-Rollup to an EVM L2 for liquidity and composability.
@@ -34,15 +35,15 @@ NilStore employs a hybrid architecture that decouples Data Availability (DA) con
 
 1.  **Data Layer (NilFS):** Handles object ingestion, erasure coding, and placement.
 2.  **Network Layer (Nil-Mesh):** Manages peer discovery, routing, and QoS measurement.
-3.  **Consensus Layer (DA Chain - L1):** Verifies PoS² proofs, manages stake, and mints rewards.
+3.  **Consensus Layer (DA Chain - L1):** Verifies **PoUD (KZG multi‑open) + PoDE timing attestations**, manages stake, and mints rewards.
 4.  **Settlement Layer (L2 Rollup):** Handles economic transactions, liquidity, and governance.
 
 ### 2.2 The DA Chain (L1)
 
 The Data Availability Chain is a minimal L1 (built using Cosmos-SDK/Tendermint BFT) optimized for NilStore's cryptographic operations.
 
-*   **Function:** Verifying KZG openings (including multi‑open) and PoS² SNARKs efficiently via pre‑compiles (avoiding expensive EVM gas costs), managing $STOR staking, and executing slashing logic. It does not run a general‑purpose VM.
-*   **Required pre‑compiles (normative):** (a) BLAKE2s‑256, (b) Poseidon (for Merkle paths), and (c) KZG (G1/G2, multi‑open, blob verification). Chains lacking these MUST expose equivalent syscalls in the DA module. Plaintext mode (§ 6.0a) MUST NOT be activated unless KZG precompiles/syscalls are present.
+*   **Function:** Verifying **KZG openings (multi‑open)** for PoUD and enforcing PoDE timing bounds via watcher digests, managing $STOR staking, and executing slashing logic. It does not run a general‑purpose VM.
+*   **Required pre‑compiles (normative):** (a) **BLAKE2s‑256**, (b) **Poseidon** (for Merkle paths), and (c) **KZG** (G1/G2 ops; multi‑open). Chains lacking these MUST expose equivalent syscalls in the DA module.
 *   **Rationale:** The intensive cryptographic operations required for daily proof verification are best handled natively.
 
 ### 2.3 The Settlement Layer (L2)
@@ -53,15 +54,15 @@ Settlement occurs on a ZK-Rollup (using PlonK/Kimchi) bridged to a major EVM eco
 
 ### 2.4 The ZK-Bridge
 
-The L1 aggregates all epoch PoS² proofs into a single recursive SNARK and posts it to the L2 bridge contract. **Normative circuit boundary**:
-1) **Public inputs**: `{epoch_id, DA_state_root, poss2_root, bw_root, validator_set_hash}`.
+The L1 aggregates epoch verification results into a single proof/digest and posts it to the L2 bridge contract. **Normative circuit boundary**:
+1) **Public inputs**: `{epoch_id, DA_state_root, poud_root, bw_root, validator_set_hash}`.
 2) **Verification key**: `vk_hash = sha256(vk_bytes)` pinned in the L2 bridge at deployment; upgrades require DAO action and timelock. In addition, an Emergency Circuit MAY perform an expedited **VK‑only** upgrade with a shorter timelock under §9.2, restricted to a pre‑published whitelist (hash‑pinned on L1). **No other code paths or parameters may change under Emergency mode.** During “yellow‑flag”, the bridge **MUST**:
-  • continue updating `{epoch_id, poss2_root, bw_root}`;
+  • continue updating `{epoch_id, poud_root, bw_root}`;
   • **disable** all fund‑moving paths: vesting payouts, token transfers/mints/burns, withdrawals/deposits, deal‑escrow releases, and slashing executions;
   • freeze parameter change entrypoints;
   • require an independent auditor attestation **and** a hash of the patched verifier bytecode;  
 and auto‑revert to normal after sunset unless ratified by DAO.
-3) **State mapping**: On accept, the bridge **atomically** updates `{poss2_root, bw_root, epoch_id}`; monotonic `epoch_id` prevents replay.
+3) **State mapping**: On accept, the bridge **atomically** updates `{poud_root, bw_root, epoch_id}`; monotonic `epoch_id` prevents replay.
 4) **Failure domains**: any mismatch in roots or non‑monotonic epoch causes a hard reject. No trusted relayers or multisigs are required because validity is enforced by the proof and pinned `vk_hash`.
 
 ### 2.5 Cryptographic Core Dependency
@@ -75,7 +76,7 @@ NilFS abstracts data management complexity, automating the preparation, distribu
 ### 3.1 Object Ingestion and Data Units (DUs)
 
 1.  **Content-Defined Chunking (CDC):** Ingested objects are automatically split using CDC (e.g., Rabin fingerprinting) to maximize deduplication. Chunks are organized into a Merkle DAG (CIDv1 compatible).
-2.  **Data Unit Packing:** Chunks are serialized and packed into standardized **Data Units (DUs)**. DU sizes are powers-of-two (1 MiB to 8 GiB). SPs interact only with DUs.
+2.  **Data Unit Packing:** Chunks are serialized and packed into standardized **Data Units (DUs)**. DU sizes are powers‑of‑two (1 MiB to 8 GiB). SPs interact only with DUs.
 
 #### 3.1.1 Upload Walkthrough (Informative)
 
@@ -88,9 +89,9 @@ This walkthrough illustrates what happens when a client uploads an object **F** 
 5) **Deterministic placement.** For every shard `j`, compute a Nil‑Lattice **ring‑cell** target via
    `pos := Hash(CID_DU ∥ ClientSalt_32B ∥ j) → (r,θ)` and enforce placement constraints (one shard per SP per cell; cross‑cell distance threshold).
 6) **Deal creation (L2).** The client calls **`CreateDeal`** on L2, posting `C_root`, locking $STOR escrow, and minting a **Deal NFT**.
-7) **Miner uptake (L2+L1).** Selected SPs bond $STOR, fetch their assigned shards, and seal them into sectors on L1 using **`nilseal`**, producing row commitments `h_row` and delta heads `delta_head` needed by **PoS²**.
-8) **Epoch service.** During each epoch, SPs (a) serve retrievals; clients sign **Ed25519 receipts**; SPs aggregate receipts into a Poseidon Merkle (`BW_root`), and (b) post an epoch **PoS²** proof binding storage and bandwidth.
-9) **Settlement & rewards.** L1 recursively aggregates PoS² and posts a validity proof to L2 (**ZK‑Bridge**). L2 updates `{poss2_root, bw_root, epoch_id}` and releases vested fees / $BW rewards per distribution rules.
+7) **Miner uptake (L2+L1).** Selected SPs bond $STOR, fetch their assigned shards, and store the **plaintext DU bytes** locally. The client‑posted **DU KZG commitment (`C_root`)** binds content for all future proofs.
+8) **Epoch service.** During each epoch, SPs (a) serve retrievals; clients sign **Ed25519 receipts**; SPs aggregate receipts into a Poseidon Merkle (`BW_root`), and (b) post **PoUD + PoDE** storage proofs against the original `C_root`.
+9) **Settlement & rewards.** L1 verifies KZG openings and enforces PoDE timing and posts a compressed digest to L2 (**ZK‑Bridge**). L2 updates `{poud_root, bw_root, epoch_id}` and releases vested fees / $BW rewards per distribution rules.
 10) **Repair (as needed).** If shard availability drops below threshold, the network triggers **Autonomous Repair**—repaired shards must open against the original DU commitment (no drift).
 
 **Message flow (illustrative):**
@@ -288,7 +289,7 @@ Users can optionally "tip" for priority retrieval by including a `tip_bw` amount
 
 While the protocol strictly uses $BW for tips, client software can provide a seamless stablecoin (e.g., USDC) experience by executing a DEX swap (USDC -> $BW) client-side before signing the receipt.
 
-## 6. Consensus and Verification (PoS²)
+## 6. Consensus and Verification (Storage + Bandwidth)
 
 The economic model is enforced cryptographically through the PoS² consensus mechanism on the L1 DA Chain.
 
@@ -332,15 +333,15 @@ To account for bandwidth, clients sign receipts upon successful retrieval.
       **Normative anchor:** At least **2% of receipts by byte‑volume per epoch** MUST be verified on the DA chain (randomly sampled via § 6.3) and escalate automatically under anomaly (§ 6.3.4).  
       **Normative (Verification Load Cap):** The total on‑chain verification load MUST be capped (DAO‑tunable) to prevent DoS via forced escalation.
 
-### 6.2 PoS² Binding (Storage + Bandwidth)
+### 6.2 Storage Proof Binding (PoUD + PoDE)
 
-The PoS² SNARK proves two statements simultaneously:
+For each SP and each assigned DU interval per epoch the DA chain enforces:
 
-1.  **Storage Verification:** Knowledge of KZG openings for randomly challenged shards at the beacon-derived evaluation point (x★).
-2.  **Bandwidth Accounting:**
-    *   SPs aggregate epoch receipts into a Poseidon Merkle Tree (`BW_root`), using the domain separator "NilStore-BW-v1".
-    *   The SNARK verifies the consistency of `BW_root`.
-    *   The SNARK asserts that the total bytes served meets a minimum threshold (`Σ bytes ≥ B_min`).
+1. **PoUD (KZG‑PDP on cleartext):** The SP submits one or more **KZG openings** at verifier‑chosen **1 KiB symbol indices** proving membership in the **original** DU commitment `C_root` recorded at deal creation. Multi‑open is RECOMMENDED; indices are derived from the epoch beacon.
+2. **PoDE (timed derivation):** For each challenged **W = 8 MiB** window, compute a salted local transform `Derive(clear_window, beacon_salt, row_id)` **within the proof window** and submit `H(deriv)` with the minimal bytes to recompute. **`R ≥ 16`** sub‑challenges/window and **Σ verified bytes ≥ B_min = 128 MiB** per epoch (defaults; DAO‑tunable).
+3. **Deadlines:** Proofs must arrive within `Δ_submit` after epoch end. Timing may be attested by RTT‑oracle transcripts for remote verification.
+
+**On‑chain checks:** L1 verifies KZG openings via pre‑compiles and enforces `R` and `B_min`; watchers produce timing digests for PoDE. The rollup compresses per‑SP results into `poud_root` for the bridge.
 
 ### 6.3 Probabilistic Retrieval Sampling (QoS Auditing)
 
@@ -401,7 +402,7 @@ Sampling renders expected value of receipt fraud negative under rational slashin
 
 ### 7.3 Vesting and Slashing
 
-*   **Vesting:** The escrowed fee is released linearly to the SP each epoch, contingent on a valid **PoUD** submission meeting § 6.0b (content correctness + PoDE R/B_min) in plaintext mode. In scaffold mode only, a valid **PoS²** submission also satisfies vesting.
+*   **Vesting:** The escrowed fee is released linearly to the SP each epoch, contingent on a valid **PoUD + PoDE** submission.
 *   **Consensus Parameters (Normative):**
     *   **Epoch Length (`T_epoch`)**: 86,400 s (24 h).
     *   **Proof Window (`Δ_submit`)**: 1,800 s (30 min) after epoch end — this is the *network scheduling window* for accepting PoS² proofs.
@@ -508,9 +509,16 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 | **Wash‑retrieval / Self‑dealing** | SP scripts fake clients to farm $BW receipts | Challenge‑nonce + expiry in receipts; watchers or L1 verify Ed25519 off‑chain/on‑chain; PoS² only commits to **Poseidon receipt root** and byte‑sum; per‑DU/epoch service caps; /16 down‑weighting | §6.1 (Receipt schema & verification model), §6.2 (BW_root), §5.2.1 (caps) |
 | **RTT Oracle collusion** | Gateways/attesters collude to post low RTT | Stake‑weighted attesters; challenge‑response tokens; ASN/region diversity; randomized assignments; slashable fraud proofs with raw transcripts | §4.2 (RTT Oracle) |
 | **Commitment drift in repair** | Repaired shards bound to a *new* commitment | Repaired shards MUST open against the **original DU KZG**; reject new commitments | §3.3 (Autonomous Repair) |
-| **Bridge/rollup trust** | VK swap or replay of old epoch | L2 bridge pins `vk_hash`; public inputs `{epoch_id, DA_state_root, poss2_root, bw_root}`; monotone `epoch_id`; timelocked VK upgrades | §2.4 (ZK‑Bridge) |
+| **Bridge/rollup trust** | VK swap or replay of old epoch | L2 bridge pins `vk_hash`; public inputs `{epoch_id, DA_state_root, poud_root, bw_root}`; monotone `epoch_id`; timelocked VK upgrades | §2.4 (ZK‑Bridge) |
 | **Lattice capture (ring‑cell cartel)** | SPs concentrate shards topologically | One‑shard‑per‑SP‑per‑cell; minimum cell distance; DAO can raise separation if concentration increases | §3.2 (Placement constraints), §9 (Governance) |
-| **Shard withholding (availability)** | SP stores but doesn’t serve | Vesting tied to valid PoS²; $BW distribution requires receipts; slashing for missed epochs | §7.3 (Vesting/Slashing), §6 (PoS²) |
+| **Shard withholding (availability)** | SP stores but doesn’t serve | Vesting tied to valid PoUD + PoDE; $BW distribution requires receipts; slashing for missed epochs | §7.3 (Vesting/Slashing), §6 |
+
+---
+## Annex B (Optional): Sealed PoS²‑L Scaffold
+
+> Disabled by default. This annex preserves an optional sealed path for phased rollout or emergency response. When activated by governance, SPs maintain a sealed scaffold (fractional row coverage) and answer PoS²‑L window proofs bound back to the original DU commitment via KZG content openings. PoDE derivations MAY be required on a fraction of sealed rows to ensure the scaffold is still linked to plaintext. Switching out of scaffold mode MUST be monotonic and resets vesting gates to PoUD + PoDE.
+
+Governance dials (bounded): `φ_seal` (sealed‑row fraction), `p_link` (fraction of PoS²‑L challenges with KZG content binding), `p_derive` (fraction requiring row‑local PoDE), all subject to a Verification Load Cap.
 | **Beacon grinding** | Bias challenges | BLS VRF uniqueness; BATMAN threshold; on‑chain pairing check; domain separation | spec §5 (VRF), metaspec §6.2 (Challenge) |
 | **Merkle truncation misuse** | Excessive path truncation weakens PoS² | Prefer higher‑arity Merkle or longer per‑sibling bytes; security bound documented | spec §4.3.1 (witness); §4.1 (arity option) |
 | **Economic instability** | Excess $BW inflation via spam | Epoch cap `I_epoch_max`; α bounds; per‑DU caps; tips burned; RTT oracle weights | §5.2 (BW), §4.2 (RTT Oracle) |
