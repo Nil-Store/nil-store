@@ -292,6 +292,29 @@ While the protocol strictly uses $BW for tips, client software can provide a sea
 
 The economic model is enforced cryptographically through the PoS² consensus mechanism on the L1 DA Chain.
 
+### 6.0a  Proof Mode (governance dial)
+
+The network supports two normative proof modes:
+
+- mode = "scaffold": PoS²‑L (Core § 4) over a sealed scaffold (Core § 3.6–§ 3.7), plus PoDE challenges over DU plaintext (this section).
+- mode = "plaintext": PoUD (this section) is primary; PoS²‑L is disabled.
+
+The DAO MAY switch modes per epoch and MUST announce the mode in‑protocol; switching to "plaintext" requires that the DA L1 exposes KZG precompiles (§ 2.2).
+
+### 6.0b  PoUD (Proof of Useful Data) – Plaintext Mode (normative)
+
+For each epoch and each assigned DU sliver interval:
+
+1) Content correctness: The SP MUST provide one or more KZG openings at verifier‑chosen 1 KiB symbol indices proving membership in the DU commitment `C_root` recorded at deal creation.
+
+2) Timed derivation (PoDE): Let `W = 8 MiB` (governance‑tunable). The SP MUST compute `deriv = Derive(clear_bytes[interval], beacon_salt, row_id)` within the proof window; `deriv` is fixed by the micro‑seal profile (Core § 3.3.1) restricted to the bytes of the interval (no cross‑window state). The proof includes `H(deriv)` and the clear bytes needed for recomputation.
+
+3) Concurrency & volume: The prover MUST satisfy at least `R` parallel PoDE sub‑challenges per proof window, each targeting a distinct DU interval (default `R ≥ 16`; DAO‑tunable). The aggregate verified bytes per window MUST be ≥ `B_min` (default `B_min ≥ 128 MiB`).
+
+4) Deadline: The derivations MUST complete before `Δ_submit` (§ 7.3). RTT‑Oracle transcripts (§ 4.2) are included when a remote verifier is used.
+
+On‑chain: L1 verifies KZG openings (precompile § 2.2) and checks `B_min` & `R` counters. Watchers enforce timing via RTT‑Oracle and publish pass/fail digests; repeated failures escalate slashing per § 6.3.3.
+
 ### 6.1 Retrieval Receipts
 
 To account for bandwidth, clients sign receipts upon successful retrieval.
@@ -436,6 +459,10 @@ The network is governed by the NilDAO, utilizing stake-weighted ($STOR) voting o
 
 The DAO controls economic parameters (α, slashing ratios, bounty percentages), QoS sampling dials (`p`, `ε`, `ε_sys`), multi‑stage reconfiguration thresholds (`Δ_ready_timeout`, quorum, `Δ_ready_backoff`), Durability Dial mapping (target → profile), metadata‑encoding parameters (`n_meta`, `k_meta`, `meta_scheme`), network upgrades, and the treasury.
 It also controls content‑binding dials across Core and Metaspec: PoS² linking fraction `p_link` (Core § 4.2.1), PoDE fraction `p_derive` (Core § 4.2.2), the micro‑seal profile (`micro_seal`, Core § 3.4.3), and receipt‑level content‑check fraction `p_kzg` (this § 6.3.4).
+Additional PoDE/PoUD pressure dials (plaintext/scaffold modes):
+- `R` — Minimum parallel PoDE sub‑challenges per proof window (default `R ≥ 16` for plaintext mode; `R ≥ 8` for scaffold mode).
+- `B_min` — Minimum verified bytes per proof window (default `≥ 128 MiB` for plaintext mode; `≥ 64 MiB` for scaffold mode).
+- Escalation: If sampled fail rate `ε_sys` exceeds the threshold for 2 epochs, increase `R` and/or `B_min` stepwise (×1.5 max per epoch) subject to the Verification Load Cap (§ 6.1).
 
 ### 9.2 Upgrade Process
 

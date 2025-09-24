@@ -441,6 +441,30 @@ For `pass = 0 … r−1` (baseline `r = 3`):
    *Else* compute `stride = γ MiB / (2·k)` and write chunk to
    `offset = (logical_index ⋅ stride) mod N_chunks`.
 
+\#### 3.3.1 Micro‑Seal Derive (window‑scoped, normative, for PoDE/PoUD)
+
+Purpose: Provide a deterministic, beacon‑salted local transform on a `W`‑byte window (default `W = 8 MiB`) that can be recomputed from plaintext during PoDE without access to a full sealed replica.
+
+Definition:
+
+```
+Derive(clear_window, beacon_salt, row_id):
+  1) Partition clear_window into k‑limb chunks (k per dial profile; baseline k = 64).
+  2) For pass = 0..r−1:
+        NTT_k(chunk);
+        salt_k = SHAKE128("NIL_SEAL_SALT_EXP" ‖ beacon_salt ‖ u8(pass) ‖ u32_le(row_id))[0 .. 4k) as k little‑endian u32 limbs mod Q;
+        for j in 0..k−1: chunk[j] = (chunk[j] + salt_k[j]) mod Q;
+        INTT_k(chunk);
+  3) Output:
+        leaf64 := first 64 bytes of the window post‑transform;
+        Δ_W := Blake2s‑256(window post‑transform).
+```
+
+Constraints:
+- `salt_k` MUST be domain‑separated from full‑replica sealing salts (§ 3.3).
+- No cross‑window state is permitted; `Derive` is local to the window bytes.
+- Implementations MUST provide KATs in Annex B for `Derive`.
+
 \### 3.4 Data‑Dependent Permutation (normative)
 
 \#### 3.4.1 Permutation map (PRP) — normative
@@ -640,6 +664,10 @@ cols = 32 768      (indexed 0 … 32 767)
 
 Row `i` has two 1 MiB windows **W₂i** and **W₂i+1**; their Merkle root is `h_row[i]`.  Their digest `Δ_row[i] = Blake2s‑256(W₂i ‖ W₂i+1)` is committed as `delta_head[i]` (§ 3.7).
 **Merkle arity (normative option):** Implementations MAY use a higher‑arity (e.g., 16‑ary) tree to reduce path length; if so, the sibling count and witness encoding MUST be reflected in § 4.3.1 and Annex B KATs.
+
+\#### 4.1.1 Scaffold profile (optional, normative)
+
+Let `φ_seal ∈ (0,1]` be the sealed‑row fraction (default `φ_seal = 1/32`). Only rows `i` with `(i mod 1/φ_seal == 0)` are sealed and committed (`h_row`, `delta_head`). PoS² challenges target the sealed subset. Unsealed rows are excluded from PoS² and MUST be covered by PoDE (metaspec § 6.0b).
 
 **Informative (relationship to NilFS shards).** Reed–Solomon shards (metaspec §3.2) are **data‑layer** units that determine where bytes live on the network. After a shard reaches an SP, the shard’s bytes are sealed into **sectors** and committed per this section. PoS² operates on the sealed sector’s **row/column** layout (2 MiB rows, 64 B leaves) independent of how many NilFS shards contributed bytes to that sector. In other words: NilFS sharding affects placement and repair; PoS² attests to liveness and integrity of whatever bytes are sealed in the sector.
 
