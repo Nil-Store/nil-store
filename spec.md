@@ -24,7 +24,7 @@ Version 2.0 supersedes v 1.0 and v 1.0‑rc series; it MUST be implement
 
 ---
 
-## § 0 Notation, Dial System & Versioning ( Baseline Profile “S‑q1” )
+## § 0 Notation, Dial System & Versioning ( Baseline Profile “S‑512” )
 
 \### 0.1 Symbols, Typography, and Conventions
 
@@ -43,18 +43,18 @@ All integers, vectors, and matrices are interpreted **little‑endian** unless i
 A **dial profile** is an ordered 8‑tuple
 `(m, k, r, λ, H, γ, q, Nonce)`:
 
-| Symbol | Description                                | Baseline “S‑q1”                 |
+| Symbol | Description                                | Baseline "S‑512"                |
 | ------ | ------------------------------------------ | ------------------------------- |
 | `q`    | Prime field modulus                        | **998 244 353 (= 119·2²³ + 1)**; optional CRT: **1 004 535 809 (= 479·2²¹+1)** |
 | `Nonce`| Profile Nonce (high-entropy)               | 0x1A2B3C4D5E6F7890AABBCCDDEEFF0011 (example) |
 | `m`    | Vector length (*nilhash*, PoSS²)           | 1 024                           |
-| `k`    | NTT block size (radix‑k)                   | 64                              |
+| `k`    | NTT block size (radix‑k)                   | 128                             |
 | `r`    | Passes of data‑dependent permutation       | 3                               |
-| `λ`    | Gaussian noise σ (compression)             | 280 (fixed-point ×100)          |
-| `H`    | Argon2‑drizzle passes                      | 1                               |
+| `λ`    | Gaussian noise σ (compression)             | 350 (fixed-point ×100)          |
+| `H`    | Argon2‑drizzle passes                      | 2                               |
 | `γ`    | Interleave fragment size (MiB)             | 0 (sequential)                  |
 
-Dial parameters are **frozen** per profile string (e.g. `"S-q1"`).  Changes introduce a new profile ID (see § 6).
+Dial parameters are **frozen** per profile string (e.g., `"S-512"`).  Changes introduce a new profile ID (see § 6).
 
 \### 0.3 Version Triple
 
@@ -337,7 +337,7 @@ The entire vector `h` (2 KiB baseline) **must** be supplied in calldata when 
 
 ---
 
-\### 2.4 Worked Example (Baseline “S‑q1”)
+\### 2.4 Worked Example (Baseline “S‑512”)
 
 Input: empty string `""`, `DID = 0x0000`.
 
@@ -348,7 +348,7 @@ Input: empty string `""`, `DID = 0x0000`.
 
 *The complete vector and digest appear in Annex A.3 as KAT `nilhash_empty`.*
 
-Note (CRT mode): When the optional CRT prime `q₂` is enabled, an additional vector `h^{(2)}` is computed identically over `q₂`, and `commit_digest` hashes the concatenation `h^{(1)} ‖ h^{(2)}` (see § 2.3). Numeric vectors shown here are for the baseline single‑prime profile “S‑q1”.
+Note (CRT mode): When the optional CRT prime `q₂` is enabled, an additional vector `h^{(2)}` is computed identically over `q₂`, and `commit_digest` hashes the concatenation `h^{(1)} ‖ h^{(2)}` (see § 2.3). Numeric vectors shown here are for the baseline single‑prime profile “S‑512”.
 
 ---
 
@@ -384,7 +384,7 @@ Note (CRT mode): When the optional CRT prime `q₂` is enabled, an additional ve
 
 Adversary capabilities: unbounded offline pre‑computation, full control of public parameters, but cannot learn the miner’s VRF secret key `sk`.
 
-\### 3.1 Symbol Glossary (dial profile “S‑q1”)
+\### 3.1 Symbol Glossary (dial profile “S‑512”)
 
 | Symbol   | Type / default | Definition                                |
 | -------- | -------------- | ----------------------------------------- |
@@ -469,17 +469,17 @@ After finishing pass `p−1`, compute a digest of the entire pass's data that is
 `ChunkDigest_{p-1} = MerkleRoot(ChunkHashes_{p-1})`
 `ζ_p = little‑endian 32 bits of BLAKE2s-256( "NIL_SEAL_ZETA" ‖ salt ‖ p ‖ ChunkDigest_{p-1} )`
 
-**Normative (Data Integrity):** `ChunkHashes_{p-1}` MUST commit to the exact bytes of pass `p−1` as stored; computing from in‑memory buffers is forbidden (see prohibition below).
+**Normative (Data Integrity):** `ChunkHashes_{p−1}` MUST commit to the exact byte sequence of pass `p−1`; the method of obtaining those bytes (disk, cache, or RAM) is implementation‑defined and outside consensus.
 
  
 
-**Baseline profile (Normative):** The network baseline is profile *S‑512+* with **H = 2** (CPU/memory‑hard). Alternative dial profiles listed in § 6.6 are acceptable for poss² (§ 4.5).
+**Baseline profile (Normative):** The network baseline is profile *S‑512* with **H = 2** (CPU/memory‑hard). Alternative dial profiles listed in § 6.6 are acceptable for poss² (§ 4.5).
 
  
 
 **Canonical sector identifier:** Replace filesystem `path` in all salts and indices with a canonical `sector_id = Blake2s-256(miner_addr ‖ sector_number)` to prevent miner‑chosen paths from influencing ζ derivation.
 
-Computing hashes from in‑memory buffers or cached I/O is forbidden.
+
 
 **Rationale:** Using a Merkle root instead of a simple sum ensures that `ChunkDigest` depends on the precise ordering of all chunks written in the previous pass, not just their content.
 
@@ -646,7 +646,7 @@ struct Proof64 {
 }
 ```
 
-\#### 4.3.1 Witness layout (baseline “S‑q1”)
+\#### 4.3.1 Witness layout (baseline “S‑512”)
 
 | Purpose               | Bytes                   | Encoding                               |
 | --------------------- | ----------------------- | -------------------------------------- |
@@ -1016,10 +1016,7 @@ A failed vote resets the dial to its previous state.
 
 | ID           | Purpose              | m     | k   | r | λ   | H | γ     | Δ    |
 | ------------ | -------------------- | ----- | --- | - | --- | - | ----- | ---- |
-| **S‑q1**     | SSD baseline         | 1 024 | 64  | 3 | 280 | 1 | 0     | 60 s |
-| **S‑q1‑CRT** | SSD baseline (CRT)   | 1 024 | 64  | 3 | 280 | 1 | 0     | 60 s |
-| **S‑q1‑HDD** | Spinning disk        | 1 024 | 64  | 3 | 300 | 1 | 4 MiB | 90 s |
-| **S‑512+**   | Baseline (CPU/mem)   | 1 024 | 128 | 3 | 350 | 2 | 0     | 60 s |
+| **S‑512**    | Baseline (CPU/mem)   | 1 024 | 128 | 3 | 350 | 2 | 0     | 60 s |
 | **S‑1024‑A** | Archival, high hard. | 2 048 | 256 | 4 | 400 | 2 | 2 MiB | 30 s |
 
 Profile strings are **immutable identifiers**; new profiles append rows.
@@ -1090,12 +1087,12 @@ Gaussian noise (σ set by `λ`, § 3.5) aims to mask structure; precise entrop
 
 ## § 8 Reference Implementations (normative status matrix)
 
-| Lang / Crate                  | Dial coverage          | CI status | Constant‑time audit                  | Fuzz coverage        |
-| ----------------------------- | ---------------------- | --------- | ------------------------------------ | -------------------- |
-| **Rust** `nilcipher` (no‑std) | S‑q1, S‑512+, S‑q1‑HDD | ✔ main    | ctgrind 0 findings, dudect Δt ≤ 4 ns | AFL++ ≥ 1 M exec/day |
-| **Go** `nilgo`                | S‑q1                   | ✔ main    | dudect Δt ≤ 5 ns                     | go‑fuzz 100 k/min    |
-| **WASM** `nilwasm`            | S‑q1 (verify‑only)     | beta      | N/A (no secret)                      | unit tests           |
-| **Python** `nilpy` (edu)      | S‑q1                   | pass      | not CT                               | —                    |
+| Lang / Crate                  | Dial coverage | CI status | Constant‑time audit                  | Fuzz coverage        |
+| ----------------------------- | ------------- | --------- | ------------------------------------ | -------------------- |
+| **Rust** `nilcipher` (no‑std) | S‑512         | ✔ main    | ctgrind 0 findings, dudect Δt ≤ 4 ns | AFL++ ≥ 1 M exec/day |
+| **Go** `nilgo`                | S‑512         | ✔ main    | dudect Δt ≤ 5 ns                     | go‑fuzz 100 k/min    |
+| **WASM** `nilwasm`            | S‑512         | beta      | N/A (no secret)                      | unit tests           |
+| **Python** `nilpy` (edu)      | S‑512         | pass      | not CT                               | —                    |
 
 *All reference crates MUST pass Annex A/B KATs on CI.* In addition, CI MUST run the reproducibility targets from § 0.6 (`make prp-kat`, `reject-sample`, `noise-kat`, `poss2-derive`, `vrf-dst`, `publish`) and attach `_artifacts/` + `SHA256SUMS` to the build artifacts.
 Vendors may implement alternative languages provided they embed the exact constants from Annex C and pass the same KAT suite.
@@ -1104,7 +1101,7 @@ Vendors may implement alternative languages provided they embed the exact consta
 
 ## § 9 Performance Benchmarks (informative)
 
-| Task @ baseline profile **S‑q1** | 8‑core 2025 CPU (3 .8 GHz) | 4× NVMe SSD (7 GB/s agg.) |
+| Task @ baseline profile **S‑512** | 8‑core 2025 CPU (3 .8 GHz) | 4× NVMe SSD (7 GB/s agg.) |
 | -------------------------------- | -------------------------- | ------------------------- |
 | **Seal 32 GiB**                  | 8 min 14 s                 | I/O‑bound                 |
 | **Re‑seal 32 GiB (resume)**      | 42 s                       | —                         |
