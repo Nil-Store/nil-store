@@ -969,7 +969,7 @@ t_recreate_replica(row)  ≥  5 · Δ_work
 
 **Additional invariants (normative):**
 
-* **Bound tightness:** Maintain `β / q ≤ 1 / 2^15` (S‑q1 satisfies this: β = 16 383, q ≈ 2^30).
+* **Bound tightness:** Maintain `β / q ≤ 1 / 2^15` (S‑512 satisfies this: β = 16 383, q ≈ 2^30).
 * **Permutation passes:** `r ≥ 3` for main‑net profiles.
 * **NTT block size:** `k ≥ 64`; increases require updated Annex A KATs.
 * **Challenge sampling:** Modulo‑bias‑free selection required (§ 4.2); profiles that change `rows`/`cols` MUST preserve this.
@@ -1187,7 +1187,7 @@ MUST reproduce **exactly** the table published in § 1.1 and the first rows of
 - Domain‑separated spectral twist `D^(DID)` applied on the `A·x` path; algebra is pinned per DomainID (§ 2.2).
 - Circulant `B` spectrally randomized and domain‑separated via `H(Version‖DID‖"B-spectrum"‖j)`; invertible w.h.p. (§ 2.2).
 - Optional CRT profile: added NTT‑friendly prime `q₂ = 1 004 535 809`; digest input concatenates `h^{(1)} ‖ [h^{(2)}]` without changing digest size (§ 0.2, § 1.1.1, § 2.3).
-- Profiles: added `S‑q1‑CRT` baseline row (§ 6.6).
+- Profiles: consolidated to `S‑512` baseline; removed `S‑q1` family (§ 6.6).
 - KATs: `nilhash.toml` updated to include `h^{(1)}`, `h^{(2)}` (if CRT), digests, and π transcripts; `constants_q2` added (Annex A).
 - Security text: § 7.3 updated — removed “perfect hiding”; clarified statistical/computational hiding and SIS‑tight binding.
 
