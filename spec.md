@@ -521,6 +521,22 @@ delta_head[i] = Blake2s-256("P2Δ" ‖ i ‖ h_row[i] ‖ Δ_row[i])    // Domai
 
 Tuple `(h_row[i], delta_head[i])` is written to the **Row‑Commit file** that will be posted on‑chain after sealing.
 
+\### 3.7.1 Origin Map (row→DU binding, normative)
+
+For each row `i` the encoder MUST record an `OriginEntry`:
+
+```
+OriginEntry := { row_id = i, du_id, sliver_index, symbol_range, C_root }
+```
+
+where `C_root` is the DU KZG commitment recorded at deal creation and
+`symbol_range` encodes the contiguous 1 KiB RS symbols from the sliver that occupy row `i`.
+All `OriginEntry` objects MUST be Poseidon‑Merkleized into `origin_root`.
+
+Normative: The sealer MUST output the tuple `(h_row_root, delta_head_root, origin_root)`
+for on‑chain posting. Any PoS² proof MAY be required to include a Merkle proof
+from `origin_root` for the challenged row (see § 4.2.1).
+
 \### 3.8 Reference Encoder (pseudocode)
 
 ```rust
@@ -629,6 +645,23 @@ offset = (row * 2 MiB) + (col * 64 B)                        // byte index
 
 The prover **must** read eight 1 MiB windows covering
 `offset - 3 MiB … offset + 4 MiB` (wrap modulo `S`).  This is **≤ 8 MiB** I/O even when crossing a sector boundary.
+
+\#### 4.2.1 DU Origin Binding (linking mode, normative dial)
+
+Let `p_link ∈ [0,1]` be a governance dial. For a `p_link`‑fraction of challenges in each epoch,
+the prover MUST, in addition to § 4.3, supply:
+
+(a) Origin Map inclusion for row: a Poseidon‑Merkle proof from `origin_root` (see § 3.7.1)
+    yielding `{du_id, sliver_index, symbol_range, C_root}` for the challenged row;
+
+(b) Content opening: a KZG opening at a verifier‑selected symbol index `j ∈ symbol_range`
+    proving the 1 KiB RS symbol(s) underlying the challenged `leaf64` belong to `C_root`;
+
+(c) Seal derivation binding: a hash binding that the provided `leaf64` equals
+    `SealTransform(clear_slice(j), beacon_salt, row)` under the active micro‑seal profile.
+
+Chains implementing on‑chain KZG precompiles MUST verify (b) on‑chain; otherwise (b) MUST be
+audited by watchers with fraud‑proof slashing.
 
 `ctr` increments monotonically; replaying an old proof with the same counter is rejected on‑chain.
 

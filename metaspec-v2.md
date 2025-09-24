@@ -55,7 +55,12 @@ Settlement occurs on a ZK-Rollup (using PlonK/Kimchi) bridged to a major EVM eco
 
 The L1 aggregates all epoch PoS² proofs into a single recursive SNARK and posts it to the L2 bridge contract. **Normative circuit boundary**:
 1) **Public inputs**: `{epoch_id, DA_state_root, poss2_root, bw_root, validator_set_hash}`.
-2) **Verification key**: `vk_hash = sha256(vk_bytes)` pinned in the L2 bridge at deployment; upgrades require DAO action and timelock. In addition, an Emergency Circuit MAY perform an expedited VK upgrade with a shorter timelock under §9.2, **restricted to a whitelisted diff** whose hash is pre‑published on L1. Emergency mode MUST operate in “yellow‑flag” state: the bridge updates `epoch_id` and roots but quarantines fund‑moving paths until DAO ratifies or the sunset elapses. An independent auditor attestation (posted on‑chain) is REQUIRED.
+2) **Verification key**: `vk_hash = sha256(vk_bytes)` pinned in the L2 bridge at deployment; upgrades require DAO action and timelock. In addition, an Emergency Circuit MAY perform an expedited **VK‑only** upgrade with a shorter timelock under §9.2, restricted to a pre‑published whitelist (hash‑pinned on L1). **No other code paths or parameters may change under Emergency mode.** During “yellow‑flag”, the bridge **MUST**:
+  • continue updating `{epoch_id, poss2_root, bw_root}`;
+  • **disable** all fund‑moving paths: vesting payouts, token transfers/mints/burns, withdrawals/deposits, deal‑escrow releases, and slashing executions;
+  • freeze parameter change entrypoints;
+  • require an independent auditor attestation **and** a hash of the patched verifier bytecode;  
+and auto‑revert to normal after sunset unless ratified by DAO.
 3) **State mapping**: On accept, the bridge **atomically** updates `{poss2_root, bw_root, epoch_id}`; monotonic `epoch_id` prevents replay.
 4) **Failure domains**: any mismatch in roots or non‑monotonic epoch causes a hard reject. No trusted relayers or multisigs are required because validity is enforced by the proof and pinned `vk_hash`.
 
@@ -196,7 +201,7 @@ If an SP detects inconsistency between a received sliver and `C_root`, it MUST p
 - `meta_inclusion[]` are Merkle proofs to `meta_root` for the relevant sliver commitments.
 - `witness_meta_root` and `witness_C_root` bind to on‑chain Deal metadata and DU commit.
 
-On‑chain action: Any party MAY call `MarkInconsistent(C_root, evidence_root)` on L1 (DA chain), where `evidence_root` is a Poseidon‑Merkle root of ≥ f+1 `InconsistencyProof`s from distinct SPs. If valid, the DU is marked invalid, excluded from PoS²/BW accounting, and the writer’s escrowed $STOR is slashed per §7.3.
+On‑chain action (DoS‑safe): Any party MAY call `MarkInconsistent(C_root, evidence_root)` on L1 with a refundable **bond** ≥ `B_min` (DAO‑tunable). The contract verifies at most `K_max` symbols/openings per call (cost‑capped). If ≥ f+1 proofs from distinct SPs verify, the DU is marked invalid, excluded from PoS²/BW accounting, the writer’s escrowed $STOR is slashed per §7.3, and the bond is refunded; otherwise the bond is burned. Repeat submissions for the same `C_root` within a cool‑off window are rejected.
 
 #### 3.2.z.5 Lattice Coupling
 Resolved profiles MUST respect §3.2.y placement rules for 2D cases, and the standard ring‑cell separation for RS.
@@ -212,7 +217,7 @@ The network autonomously maintains durability through a bounty system.
 2.  **Execution:** Any node can reconstruct the missing shards **and MUST produce openings against the original DU KZG commitment** (no new commitment is accepted). The repair submission includes a Merkle proof to the DU’s original `C_root` plus KZG openings for the repaired shards.
 3.  **Resilience Bounty:** The first node to submit proof of correct regeneration claims the bounty (default: 5% of the remaining escrowed fee for that DU).
 
-**Normative (Anti‑withholding):** When a repair for shard `j` is accepted, the SP originally assigned `j` incurs an automatic demerit; repeated events within a sliding window escalate to slashing unless the SP supplies signed RTT‑oracle transcripts proving inclusion in a whitelisted incident. An identity is disqualified from claiming bounty on any shard it was previously assigned for `Δ_repair_cooldown` epochs (DAO‑tunable).
+**Normative (Anti‑withholding):** When a repair for shard `j` is accepted, the SP originally assigned `j` incurs an automatic demerit; repeated events within a sliding window escalate to slashing unless the SP supplies signed RTT‑oracle transcripts proving inclusion in a whitelisted incident. An identity is disqualified from claiming bounty on any shard it was previously assigned for `Δ_repair_cooldown` epochs (DAO‑tunable), **and** any identity within the same /24 IPv4 (or /48 IPv6) and ASN **for the same window** is likewise disqualified (“collocation filter”). Cooldown MUST be ≥ 2× mean repair time to preclude fail‑and‑self‑repair profit loops.
     **Normative (Dynamic Bounty):** The bounty MUST be dynamically adjusted based on the urgency of the repair, the cost of reconstruction, and network conditions (DAO‑tunable parameters).
 
 ## 4. Network Layer (Nil-Mesh)
@@ -224,7 +229,7 @@ Nil-Mesh is the network overlay optimized for low-latency, topologically aware r
 Nil-Mesh utilizes the geometric properties of the Nil-Lattice for efficient pathfinding.
 
 *   **Mechanism:** Peer IDs are mapped ("lifted") to elements in a 2-step nilpotent Lie group (Heisenberg-like structure) corresponding to their lattice coordinates.
-*   **Pathfinding:** K-shortest paths (K=3) are computed in this covering space and projected back to the physical network. This offers superior latency performance compared to standard DHTs and increases Sybil resistance by requiring attackers to control entire topological regions ("Ring Cells").
+*   **Pathfinding:** K-shortest paths (K=3) are computed in this covering space and projected back to the physical network. This offers superior latency performance compared to standard DHTs and increases Sybil resistance by requiring attackers to control entire topological regions ("Ring Cells"). **Normative (Capture cost):** DAO MUST publish and periodically update an estimate of stake required to control a ring‑cell (collocation filters, minimum bonded $STOR per cell, and placement constraints from § 3.2), and raise per‑cell minimums if empirical concentration increases.
 
 ### 4.2 RTT Attestation and QoS Oracle
 
@@ -234,7 +239,7 @@ Verifiable Quality of Service (QoS) is crucial for performance and security.
 *   **On‑Chain Oracle:** A **stake‑weighted attester set** posts RTT digests (Poseidon Merkle roots) to the DA chain. **Normative**:
     1) **Challenge‑response**: clients issue random tokens; SPs must echo tokens within `T_max`; vantage nodes verify end‑to‑end.
     2) **VDF Enforcement (Conditional):** MAY be activated only if the anomaly rate exceeds `ε_sys` for ≥ 3 consecutive epochs and MUST be deactivated after 2 consecutive clean epochs. VDF cost per probe is capped by the **Verification Load Cap** (§ 6.1). Protocol MUST publish the VDF parameters (delay, modulus) on‑chain per epoch when active.
-    3) **Diversity**: attesters span ≥ 5 regions and ≥ 8 ASNs; assignments are epoch‑randomized.
+    3) **Diversity & rotation**: attesters span ≥ 5 regions and ≥ 8 ASNs; assignments are epoch‑randomized and **committed on‑chain** (rotation proof) before measurements begin.
     4) **Slashing**: equivocation or forged attestations are slashable with on‑chain fraud proofs (submit raw transcripts).
     5) **Sybil control**: weight attesters by bonded $STOR and decay weights for co‑located /24s.
 *   **Usage:**
@@ -259,7 +264,9 @@ $BW is the utility token rewarding data retrieval. It is elastic and minted base
 
 Inflation per epoch (I_epoch) is calculated using a sublinear function to incentivize usage while controlling inflation:
 
-`I_epoch = clamp( α · sqrt(Total_Bytes_Served_NetworkWide), 0, I_epoch_max )`  // **Normative bounds:** (a) Per‑epoch cap: `I_epoch_max ≤ 0.10%` of circulating $BW (DAO‑tunable within [0.02%, 0.10%]); (b) Rolling cap: over any 30‑day window, Σ I_epoch ≤ `I_30d_max` (DAO‑tunable corridor, default 6%); (c) Attack‑traffic filter: bytes counted toward inflation MUST be discounted by an abuse‑score derived from §6.3 sampling failures and RTT‑oracle anomalies.
+`I_epoch = clamp( α · sqrt(Total_Bytes_Served_NetworkWide), 0, I_epoch_max )`  // **Normative bounds:** (a) Per‑epoch cap: `I_epoch_max ≤ 0.10%` of circulating $BW (DAO‑tunable within [0.02%, 0.10%]); (b) Rolling cap: over any 30‑day window, Σ I_epoch ≤ `I_30d_max` (DAO‑tunable corridor, default 6%); (c) Attack‑traffic filter: bytes counted toward inflation MUST be discounted by an abuse‑score derived from §6.3 sampling failures and RTT‑oracle anomalies;  
+ (d) **Per‑counterparty caps:** apply caps per (Client,SP) pair and per DU to bound bilateral wash‑retrieval;  
+ (e) **Honeypot zeroing:** any receipt associated with a Honeypot DU (§ 6.3.1, 6.3.4) that fails auditor checks contributes **zero** to inflation and triggers stake‑weighted escalation for the SP.
 where:
 - `α ∈ [α_min, α_max]` (DAO‑tunable);
 - `I_epoch_max` caps epoch inflation (DAO‑tunable);
@@ -356,6 +363,11 @@ Sampling renders expected value of receipt fraud negative under rational slashin
     *   It locks the total storage fee in $STOR escrow.
     *   A **Deal NFT** (ERC-721) is minted to the client, representing the contract.
 2.  **`MinerUptake`:** The selected SP bonds the required $STOR collateral and commences service.
+3.  **`SealAttest`:** Before any PoS² proofs for this deal are counted toward vesting,
+    the SP MUST post on L1/L2 an attestation tuple
+    `{sector_id, h_row_root, delta_head_root, origin_root, deal_id}`
+    where `origin_root` commits to per‑row `{du_id, sliver_index, symbol_range, C_root}` (see Core § 3.7.1).
+    Vesting and $BW distribution for this sector are **disabled** unless a matching `SealAttest` exists.
 
 ### 7.3 Vesting and Slashing
 
@@ -367,11 +379,12 @@ Sampling renders expected value of receipt fraud negative under rational slashin
     *   **Block Time** (Tendermint BFT): 6 s.
 *   **Slashing Rule (Normative):** Missed PoS² proofs trigger a quadratic penalty on the bonded $STOR collateral:
     `Penalty = min(0.50, 0.05 × (Consecutive_Missed_Epochs)²) × Correlation_Factor(F)`
-    * `F` is the fraction of total network stake that missed the proof in the current epoch.
-    * **Correlation_Factor(F) (Revised):**
-      * Apply an SP‑level floor `floor_SP = 0.10` to the multiplicative penalty (each SP bears at least 10% of its computed penalty even under correlated events).
-      * Above a correlation threshold `F*` (default 15%), decrease the network‑aggregate penalty linearly toward a cap (e.g., 2% of total stake per epoch), but do not reduce below `floor_SP` per SP.
-      * Compute F per diversity cluster (ASN/region cell); large cartels concentrated in one cluster use that cluster’s F to prevent gaming via global correlation.
+* `F` is computed **per diversity cluster** (ASN×region cell) and globally.
+* **Correlation_Factor(F) (Revised):**
+      * Apply an SP‑level floor `floor_SP = 0.10`.
+      * Allocate the global correlation discount to SPs via a **Shapley‑like share** of their clusters’ contribution to the global miss set, so that dispersion across clusters does not trivially reduce aggregate penalties.
+      * For `F_global > F*` (default 15%), cap network‑aggregate burn at 2%/epoch while preserving `floor_SP`.
+      * Collocated identities (same /24 or ASN) are merged for F‑computation to prevent sybil dilution.
     The penalty resets upon submission of a valid proof.
 
 ### 7.4 Multi‑Stage Epoch Reconfiguration
@@ -423,7 +436,7 @@ The DAO controls economic parameters (α, slashing ratios, bounty percentages), 
 ### 9.2 Upgrade Process
 
 *   **Standard Upgrades:** Require a proposal, a voting period, and a mandatory 72-hour execution timelock.
-*   **Emergency Circuit (Hot-Patch):** A predefined **3‑of‑5** multisig (e.g., Protocol Architect, Security Lead, DAO Steward, External Auditor, Community Rep) can enact narrowly scoped emergency patches.
+*   **Emergency Circuit (Hot-Patch):** A predefined **4‑of‑7** threshold **with role diversity** (at least one key from each of: {Core Team}, {Independent Security Auditor}, {Community/Validator Rep}) can enact **VK‑only** emergency patches (see § 2.4). Keys MUST be HSM/air‑gapped; quorum may not be satisfied by keys within the same ASN/organization.
     *   **Sunset Clause (Normative):** Emergency patches automatically expire 14 days after activation unless ratified by a full DAO vote.
 
 ### 9.3 Freeze Points
