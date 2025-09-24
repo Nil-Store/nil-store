@@ -488,6 +488,18 @@ Round `p` traverses chunks in the order determined by the PRP defined in § 3
 *Security intuition* – ζ<sub>p</sub> is **unknowable** until all writes of
 pass `p−1` complete, enforcing sequential work (§ 7.4.1).
 
+\#### 3.4.3 Micro‑seal profile (derivation mode, normative dial)
+
+Dial `micro_seal` controls localized sealing for derivation challenges. When `micro_seal = off` (baseline S‑512), the permutation and ζ‑derivation operate over the entire sector as specified in § 3.4.1–§ 3.4.2.
+
+When `micro_seal = row` (optional profile for PoDE enablement), the sealing transform is localized per 2 MiB row tile:
+
+- Domain separation: All Blake2s invocations used to derive PRP keys and ζ include the row index `i` as an explicit little‑endian field.
+- PRP scope: The Feistel permutation in § 3.4.1 is applied over the set of chunk indices belonging to row `i` only; no cycle‑walk is introduced.
+- ζ derivation: Replace `ζ_p` with `ζ_{p,i} := BLAKE2s-256("NIL_SEAL_ZETA" ‖ salt ‖ u8(p) ‖ u32_le(i) ‖ ChunkDigest_{p-1,i})[0..4)` using the Merkle root restricted to row `i`.
+
+This dial is intended solely to enable fast, row‑local derivations required by § 4.2.2 without altering baseline S‑512 behavior. Profiles enabling `micro_seal = row` MUST publish Annex A/B KATs showing identical digest roots to baseline for `micro_seal = off` when § 4 is not in linking/derivation mode.
+
 \### 3.5 Gaussian Noise Compression
 
 For every 2 KiB window **W** (post‑transform):
@@ -662,6 +674,15 @@ the prover MUST, in addition to § 4.3, supply:
 
 Chains implementing on‑chain KZG precompiles MUST verify (b) on‑chain; otherwise (b) MUST be
 audited by watchers with fraud‑proof slashing.
+
+\#### 4.2.2 PoDE challenges (Proof‑of Delayed Encode, normative dial)
+
+Let `p_derive ∈ [0,1]` be a governance dial. For a `p_derive`‑fraction of epochs (or equivalently, of an SP’s per‑epoch challenges), the prover MUST satisfy a derivation challenge tied to the clear DU bytes:
+
+1. Provide a KZG opening against `C_root` proving that the verifier‑selected 1 KiB symbol(s) underlying the challenged row (per § 4.2) are correct cleartext.
+2. Using the active `micro_seal` profile (§ 3.4.3), derive the challenged `leaf64` deterministically from the opened clear symbols and the epoch beacon salt, and present the resulting `leaf64` and Merkle paths that match the posted roots.
+
+Timing of derivation MUST respect the per‑replica work bounds in § 6.2. Chains with KZG precompiles MUST verify (1) on‑chain; otherwise, auditors MUST verify (1) off‑chain with fraud‑proofs.
 
 `ctr` increments monotonically; replaying an old proof with the same counter is rejected on‑chain.
 
@@ -1053,6 +1074,18 @@ A failed vote resets the dial to its previous state.
 | **S‑1024‑A** | Archival, high hard. | 2 048 | 256 | 4 | 400 | 2 | 2 MiB | 30 s |
 
 Profile strings are **immutable identifiers**; new profiles append rows.
+
+\### 6.7 Governance Dials (linking/derivation)
+
+The following protocol dials control optional content‑binding and derivation workload. All changes MUST respect the chain’s Verification Load Cap (metaspec § 6.1) and follow § 6.5.
+
+- `p_link ∈ [0,1]` — Fraction of PoS² challenges that require DU Origin Binding per § 4.2.1. Default 0.05. On‑chain KZG required where available.
+- `p_derive ∈ [0,1]` — Fraction of PoS² challenges (or epochs) that require PoDE per § 4.2.2. Default 0.01. Requires `micro_seal = row` profile and published KATs.
+- `micro_seal ∈ {off,row}` — Localizes sealing to 2 MiB rows for derivation (§ 3.4.3). Default `off` in baseline S‑512.
+
+Guard‑rails:
+- `p_link + p_derive` MAY be capped by governance to satisfy the Verification Load Cap.
+- Enabling `micro_seal = row` MUST NOT change digest roots outside § 4 linking/derivation mode; equivalence MUST be demonstrated via Annex A/B KATs.
 
 ---
 

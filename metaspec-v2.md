@@ -343,6 +343,9 @@ Aggregate results into `SampleReport_t`.
 #### 6.3.4 Governance Dials
 NilDAO MAY tune: sampling fraction `p`, tolerance `ε` (default 0.1%), slashing ratio, and a system‑wide escalation that raises `p` up to 100% if anomaly rate exceeds `ε_sys`. Default system‑wide anomaly tolerance is `ε_sys = 0.25%` (DAO‑tunable).
 
+Additional dial (content‑audited receipts):
+- `p_kzg ∈ [0,1]` — Fraction of sampled receipts that MUST include one or more KZG openings at 1 KiB RS symbol boundaries corresponding to claimed bytes. Default 0.05. On‑chain verification uses KZG precompiles when available; otherwise, auditors verify off‑chain with fraud‑proof slashing. Adjust `p_kzg` under the **Verification Load Cap** (§ 6.1).
+
 **Normative (Escalation Guard):** Escalation MUST increase `p` stepwise by at most ×2 per epoch and is capped by the **Verification Load Cap** from § 6.1 (on‑chain checks MUST reject steps that would exceed the cap). Escalation above 20% requires a signed anomaly report sustained over a moving 6‑epoch window and auto‑reverts after 2 clean epochs. All changes MUST be announced in‑protocol.
 
 #### 6.3.5 Security & Liveness
@@ -432,6 +435,7 @@ The network is governed by the NilDAO, utilizing stake-weighted ($STOR) voting o
 ### 9.1 Scope
 
 The DAO controls economic parameters (α, slashing ratios, bounty percentages), QoS sampling dials (`p`, `ε`, `ε_sys`), multi‑stage reconfiguration thresholds (`Δ_ready_timeout`, quorum, `Δ_ready_backoff`), Durability Dial mapping (target → profile), metadata‑encoding parameters (`n_meta`, `k_meta`, `meta_scheme`), network upgrades, and the treasury.
+It also controls content‑binding dials across Core and Metaspec: PoS² linking fraction `p_link` (Core § 4.2.1), PoDE fraction `p_derive` (Core § 4.2.2), the micro‑seal profile (`micro_seal`, Core § 3.4.3), and receipt‑level content‑check fraction `p_kzg` (this § 6.3.4).
 
 ### 9.2 Upgrade Process
 
