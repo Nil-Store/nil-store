@@ -13,7 +13,7 @@ It specifies, in a fully reproducible manner:
 
 1. **Field & transform algebra** over the 30‑bit prime $q₁ = 998 244 353$;
 2. **Nilweave commitment** (`nilhash`) with binding security reducing to SIS;
-3. **Sealing codec** (`nilseal`) retained as an **optional scaffold** (Annex A);
+3. **Sealing codec** (`nilseal`) archived as a **research‑only scaffold** in **`rfcs/PoS2L_scaffold_v1.md`** *(non‑normative; disabled in all profiles)*;
 4. **Plaintext possession proofs**: **PoUD** (KZG‑PDP over DU cleartext) and **PoDE** (timed window derivations) as the **normative** liveness path;
 5. **BLS VRF** and BATMAN aggregation for unbiased beacons;
 6. **Dial policy** and governance process for safe parameter evolution;
@@ -244,6 +244,7 @@ All `nilfield` functions operating on secret data **must** execute in time indep
 \### 2.1 Message → Vector Injection (“SVT order”)
 
 \#### 2.1.1 Padding
+/* SEC-CO (CRITICAL): Changed limb parsing from 16-bit to 12-bit to ensure SIS hardness (||Δx||_∞ ≤ 4095). Padding adjusted for 12-bit limbs (3 bytes = 2 limbs). */
 
 ```
 msg' = |len_u64|_LE  ‖  msg  ‖  0x80  ‖  0x00 …           // pad to multiple of 3 bytes
@@ -697,7 +698,9 @@ L1 **MUST** expose: `verify_kzg_multiopen(...)`, `verify_poseidon_merkle(...)`, 
 
 ---
 
-## Annex A (Optional): Sealed PoS²‑L Scaffold  — Not active in plaintext mode
+## Annex A — PoS²‑L Scaffold *(**Research Supplement**, archived; **non‑normative**, **disabled** in all profiles)*
+
+> **STATUS (Research‑only):** This annex is archived as **`rfcs/PoS2L_scaffold_v1.md`** and is **not part of the canonical Core**. It remains here temporarily for research continuity and will be removed before publication. Mainnet and testnet profiles MUST operate in **plaintext mode** (PoUD + PoDE). Any scaffold activation requires the governance process defined in the Research Supplement.
 
 > This annex preserves the sealed proof protocol for phased rollout/emergency. It binds sealed rows back to DU `C_root` via optional KZG content openings and MAY require PoDE derivations over selected rows. All parameters and witness formats from the legacy PoS² text are retained here, with the delta‑head domain `"P2Δ"` restricted to this annex.
 
