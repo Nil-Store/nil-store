@@ -22,7 +22,7 @@ NilStore retains strong cryptographic guarantees while reducing the "sealing" pr
 
 *   **Plaintext possession as first‑class:** Storage providers keep the **cleartext** bytes of assigned Data Units (DUs) on disk and prove it regularly with near‑certain full‑coverage over time.
 *   **PoUD + PoDE:** **PoUD** (KZG‑based Provable Data Possession over DU cleartext) + **PoDE** (timed window derivations) are the **normative** per‑epoch proofs.
-*   **CPU‑Only sealing (scaffold):** A sealed PoS² path exists **only** as an optional scaffold/fallback (Annex A) for phased rollout and incident response; it is disabled in the default mode. Baseline sealing targets remain available for Annex benchmarking.
+*   **CPU‑only sealing (research scaffold):** A sealed PoS² path exists **only** as a **research‑only supplement** (**`rfcs/PoS2L_scaffold_v1.md`**), intended for phased rollout experiments and incident‑response modeling. It is **non‑normative** and **disabled** in all profiles; plaintext is the only supported mode in Core.
 *   **Nil-Mesh Routing:** Heisenberg-lifted K-shortest paths for optimized latency and Sybil resistance.
 *   **Dual-Token Economy:** Decoupling long-term capacity commitment ($STOR) from immediate utility ($BW).
 *   **Hybrid Settlement:** A specialized L1 for efficient proof verification bridged via ZK-Rollup to an EVM L2 for liquidity and composability.
@@ -301,12 +301,10 @@ While the protocol strictly uses $BW for tips, client software can provide a sea
 
 The economic model is enforced cryptographically through the PoS² consensus mechanism on the L1 DA Chain.
 
-### 6.0a  Proof Mode (governance dial) — DEFAULT: plaintext
+### 6.0a  Proof Mode — **Plaintext only (research phase)**
 
-The network supports two normative proof modes (plaintext is the default and MUST be used on mainnet unless the DAO votes otherwise):
-• mode = "plaintext" (default): PoUD (this section) is primary and REQUIRED; PoS²‑L is DISABLED except for emergency scaffolding.
-• mode = "scaffold": PoS²‑L (Core § 4) over a sealed scaffold (Core § 3.6–§ 3.7), plus PoDE over DU plaintext.
-Chains MUST announce the active mode in‑protocol each epoch. Switching from plaintext to scaffold requires a supermajority vote and an activation delay. Plaintext mode MUST NOT be active unless the DA L1 exposes KZG precompiles (§ 2.2).
+Core supports **one** normative proof mode: **plaintext** — **PoUD** (KZG multi‑open on DU cleartext) + **PoDE** (timed derivations).  
+The sealed **PoS²‑L** path is **not part of Core**; it is archived as a **research‑only supplement** in **`rfcs/PoS2L_scaffold_v1.md`** and is **disabled** in all profiles. Any experimental activation MUST follow the governance and sunset requirements defined in that supplement, and does **not** alter the Core’s plaintext primacy.
 
 ### 6.0b  PoUD (Proof of Useful Data) – Plaintext Mode (normative)
 
@@ -386,7 +384,6 @@ NilDAO MAY tune: sampling fraction `p`, tolerance `ε` (default 0.1%), slashing 
 Additional dial (content‑audited receipts):
 - `p_kzg ∈ [0,1]` — Fraction of sampled receipts that MUST include one or more KZG openings at 1 KiB RS symbol boundaries corresponding to claimed bytes. Default 0.05. In plaintext mode, `p_kzg` MUST be ≥ 0.05 unless disabled by DAO vote under the Verification Load Cap. Honeypot DUs MUST use `p_kzg = 1.0`. On‑chain verification uses KZG precompiles when available; otherwise, auditors verify off‑chain with fraud‑proof slashing. Adjust `p_kzg` under the **Verification Load Cap** (§ 6.1).
 
-**Normative (Escalation Guard):** Escalation MUST increase `p` stepwise by at most ×2 per epoch and is capped by the **Verification Load Cap** from § 6.1 (on‑chain checks MUST reject steps that would exceed the cap). Escalation above 20% requires a signed anomaly report sustained over a moving 6‑epoch window and auto‑reverts after 2 clean epochs. All changes MUST be announced in‑protocol.
 
 #### 6.3.5 Security & Liveness
 Sampling renders expected value of receipt fraud negative under rational slashing. Unlike asynchronous challenges that pause reads, NilStore maintains continuous liveness; PoS² remains valid regardless of sampling outcomes.
