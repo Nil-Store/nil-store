@@ -210,9 +210,62 @@ Merkleize all `OriginEntry` objects (Poseidon) into `origin_root`. Any PoS² pro
 * `p_link`, `p_derive`, `micro_seal`, `p_kzg` as in Core metaspec § 6.7 defaults (increase during research as needed).
 * **Invariant:** Plaintext primacy — content checks and repairs MUST open against the **original DU KZG** `C_root`.
 
+## 10A. Nil‑Lattice Hash / “Nilweave” (`nilhash`) — Research Archive (moved from Core §2)
+**Status:** RESEARCH‑ONLY • NOT FOR MAINNET • DISABLED IN ALL PROFILES
+
+> This section is transplanted from Core `spec.md` §2 to keep nil‑lattice commitments available for experiments. Mainnet/testnet use **KZG** commitments (PoUD). Implementers MUST NOT rely on `nilhash` in production.
+
+### 10A.0 Scope
+`nilhash` is Nilcoin’s vector‑commitment primitive mapping bytes → `𝔽_q^m`; binding reduces to Module‑SIS. (Moved unchanged from Core.)
+
+### 10A.1 Message→Vector Injection (Padding, 12‑bit limbs, SVT order)
+[Verbatim from Core § 2.1, including padding rule, 12‑bit limb parsing, and SVT stride‑vector‑transpose.]
+
+### 10A.2 Algorithms (commit/open/verify), parameter generation, twist, A/B spectral checks
+[Verbatim from Core § 2.2 including seed mixing, circulant A/B, spectral twist, Module‑SIS binding notes.]
+
+### 10A.3 On‑chain digest format (CRT option) and Worked Example
+[Verbatim from Core § 2.3–§ 2.4.]
+
+### 10A.4 Parameterisation & Notes
+[Verbatim from Core § 2.5–§ 2.6.]
+
+## 10B. Sealing Codec (`nilseal`) — Research Archive (moved from Core §3)
+**Status:** RESEARCH‑ONLY • NOT FOR MAINNET
+
+> Full sealed‑replica mechanics required only by PoS²‑L studies: Argon2 “drizzle”, NTT pipeline, PRP permutation, ζ derivation, Gaussian noise, row Merkle, delta‑head, origin map, and encoder pseudocode.
+
+- **Scope & Threat Model:** [Core § 3.0]
+- **Pre‑processing (Argon2 drizzle):** [§ 3.2]
+- **Transform loop (NTT_k + salt):** [§ 3.3]
+- **Data‑dependent permutation (PRP) & ζ derivation:** [§ 3.4.1–§ 3.4.2]
+- **Gaussian noise compression:** [§ 3.5]
+- **Row Merkle tree & delta‑row accumulator:** [§ 3.6–§ 3.7]
+- **Origin Map & reference encoder:** [§ 3.7.1–§ 3.8]
+- **Dial guardrails & performance:** [§ 3.9–§ 3.10]
+- **Security references:** [§ 3.11]
+
 ---
 
 ## 11. Known‑Answer Tests (KATs)
+
+### 11.0 Research‑only Domain Identifiers
+| ID (hex)  | Domain                                  |
+|-----------|-----------------------------------------|
+| `0x0100`  | nilseal row Merkle roots (`h_row`)      |
+
+### 11.1 Research‑only Domain Strings (Blake2s)
+| Tag                  | Purpose                                        |
+|----------------------|------------------------------------------------|
+| "P2Δ"                | Delta‑head binding for PoS²‑L                 |
+| "POSS2-MIX"         | PoS² challenge mixing                          |
+| "NILHASH-RANGE"     | nilhash range‑proof transcript tag             |
+| "NIL_SEAL_PRP"      | PRP round‑function key                         |
+| "NIL_SEAL_ZETA"     | ζ offset derivation                            |
+| "NIL_SEAL_ITER_INIT"| IteratedHash init for ζ                        |
+| "NIL_SEAL_ITER_STEP"| IteratedHash step for ζ                        |
+| "NIL_SEAL_NOISE"    | Noise RNG domain                               |
+| "NIL_SEAL_SALT_EXP" | Salt expansion XOF for k‑limbs (also used by PoDE Derive)
 
 For research runs, reuse the machine‑readable KATs defined in Core Annexes with the following files:
 
@@ -224,7 +277,19 @@ For research runs, reuse the machine‑readable KATs defined in Core Annexes wit
 
 **Reproducibility:** CI MUST regenerate `_artifacts/` and `SHA256SUMS` via `make publish` and assert byte‑for‑byte identity.
 
+**Additional research KAT files (moved from Core):**
+- `nilhash.toml` — full vectors & π transcripts
+- `nilseal_prp.toml` — PRP traces (keyed BLAKE2s)
+- `poss2_mix_roots.toml` — PoS² beacon mixing vectors
+- `nilseal.toml` — legacy codec vectors
+- `poss2.toml` — sample PoS² `Proof64` objects
+
 ---
+
+## 11A. Security Notes for Archived Features
+- **nilhash binding (Module‑SIS):** moved from Core § 7.3.
+- **Sealed replica sequential‑work & indistinguishability:** moved from Core § 7.4.
+- **PoS²‑L rationale:** moved from Core § 7.6.
 
 ## 12. Security Notes (Research)
 
@@ -252,4 +317,3 @@ A removal PR SHOULD:
 ---
 
 *End of Research Supplement.*
-

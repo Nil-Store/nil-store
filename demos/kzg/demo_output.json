@@ -1,0 +1,47 @@
+{
+  "filename": "trusted_setup.txt",
+  "file_size": 807177,
+  "symbols_1KiB": 789,
+  "shard_count": 1,
+  "shard_size_nominal": 1024,
+  "du_C_root_hex": "0x0b761f9ad324894779780c957f4108d0e5e4773a75cec97091e2794d691406bc",
+  "commitments_hex": [
+    "0xb233bbeaf40e76acdbc9e3b2644aab0c9b49eaccb3de0ba1cf33e4211e2e061e009e8ce3ce41488209dd498e05bcabd5"
+  ],
+  "proofs": [
+    {
+      "seed": 5,
+      "index": 636,
+      "shard_idx": 0,
+      "local_idx": 636,
+      "z_hex": "0x67960e35de20ad44682cdf34ee534a4500d9258808c135f944230ab427e8a389",
+      "y_hex": "0x36db64a5d3bb6b5789b9b059bd574be293fd14bd81f75d6ec34289e82b34e7eb",
+      "commitment": "0xb233bbeaf40e76acdbc9e3b2644aab0c9b49eaccb3de0ba1cf33e4211e2e061e009e8ce3ce41488209dd498e05bcabd5",
+      "symbol_preview": "61353761633864643734616462356235\u2026",
+      "verified": false
+    },
+    {
+      "seed": 17,
+      "index": 610,
+      "shard_idx": 0,
+      "local_idx": 610,
+      "z_hex": "0x3682e44162bc96bb6b794af9b89af2116e1bd949c3f8bd43fdba90b53a672dc1",
+      "y_hex": "0x31c3f02c61cbdc3f687b838b36cf29262242ed71e9c3f01aede2d34991a7d4d1",
+      "commitment": "0xb233bbeaf40e76acdbc9e3b2644aab0c9b49eaccb3de0ba1cf33e4211e2e061e009e8ce3ce41488209dd498e05bcabd5",
+      "symbol_preview": "64653539353238386632623831383338\u2026",
+      "verified": false
+    },
+    {
+      "seed": 42,
+      "index": 781,
+      "shard_idx": 0,
+      "local_idx": 781,
+      "z_hex": "0x1491ff30d3255ab0fd159eb52d82ec408a277d779c1094b4391aee276826ef75",
+      "y_hex": "0x3aced0b156693cf6a8b893c297e1124dd581764618347e2f997f9068d4d7a8b8",
+      "commitment": "0xb233bbeaf40e76acdbc9e3b2644aab0c9b49eaccb3de0ba1cf33e4211e2e061e009e8ce3ce41488209dd498e05bcabd5",
+      "symbol_preview": "64306662643037333365363430656361\u2026",
+      "verified": false
+    }
+  ],
+  "note": "Demo PoUD (KZG-PDP) over 1KiB symbols. Values bound via SHA-256->Fr. Aggregation root is Blake2s(tag||concat)."
+}
