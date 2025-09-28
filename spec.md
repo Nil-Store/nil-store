@@ -33,8 +33,8 @@ All integers, vectors, and matrices are interpreted **little‑endian** unless i
 
 ### 0.2 Dial Parameters
 
-A **dial profile** is an ordered 8‑tuple
-`(m, k, r, λ, H, γ, q, Nonce)`:
+A **dial profile** is a parameter set:
+`(m, k, r, λ, H_t, H_m, H_p, γ, q, Nonce)`:
 
 | Symbol | Description                                | Baseline "S‑512"                |
 | ------ | ------------------------------------------ | ------------------------------- |
@@ -43,7 +43,9 @@ A **dial profile** is an ordered 8‑tuple
 | `k`    | NTT block size (radix‑k)                   | 128                             |
 | `r`    | Passes of data‑dependent permutation       | 3                               |
 | `λ`    | Gaussian noise σ (compression)             | 350 (fixed-point ×100)          |
-| `H`    | Argon2‑drizzle passes                      | 2                               |
+| `H_t`  | PoDE Argon2id time cost (iterations)       | 3 (Calibrated for Δ_work=1s)    |
+| `H_m`  | PoDE Argon2id memory cost (KiB)            | 524288 (512 MiB)                |
+| `H_p`  | PoDE Argon2id parallelism                  | 1 (Mandatory Sequential)        |
 | `γ`    | Interleave fragment size (MiB)             | 0 (sequential)                  |
 
 Dial parameters are **frozen** per profile string (e.g., `"S-512"`).  Changes introduce a new profile ID (see § 6).
@@ -57,7 +59,7 @@ Version = {major : u8 = 0x02, minor : u8 = 0x00, patch : u8 = 0x00}
 digest  = Blake2s‑256( Version ‖ DomainID ‖ payload )
 ```
 
-* **minor** increments when tuning `k, r, λ, H, γ`.
+* **minor** increments when tuning `k, r, λ, H_t, H_m, γ`.
 * **patch** increments for non‑semantic errata (typos, clarifications).
 
 ### 0.4 Domain Identifiers
@@ -117,18 +119,22 @@ Derive(clear_window: bytes, beacon_salt: bytes,
        row_id: u32, epoch_id: u64, du_id: u128) -> (leaf64: bytes[64], Δ_W: bytes[32])
 ```
 
-**Algorithm (stateless Blake2s variant, normative):**
+**Algorithm (Argon2id Sequential, normative):**
 
 ```
-tag = "PODE_DERIVE_V1"
-x   = Blake2s-256(tag ‖ beacon_salt ‖ u32_le(row_id) ‖ u64_le(epoch_id) ‖ u128_le(du_id))
-acc = Blake2s-256(tag ‖ x ‖ clear_window)
-leaf64 := acc[0..64)
+tag  = "PODE_DERIVE_ARGON_V1"
+salt = Blake2s-256(tag ‖ beacon_salt ‖ u32_le(row_id) ‖ u64_le(epoch_id) ‖ u128_le(du_id))
+// Parameters (H_t, H_m, H_p) are defined by the Dial Profile (§0.2).
+// H_p MUST be 1 to enforce sequentiality. Parameters MUST be calibrated to meet Δ_work.
+acc = Argon2id(password=clear_window, salt=salt, t_cost=H_t, m_cost=H_m, parallelism=H_p, output_len=64)
+leaf64 := acc
 Δ_W    := Blake2s-256(clear_window)
 return (leaf64, Δ_W)
 ```
 
-**Notes:** (i) Domain separation via `tag` and inclusion of `(row_id, epoch_id, du_id)` in `x` prevents cross‑context collisions; (ii) `Δ_W` is the unkeyed digest of the raw window to support watcher‑side caching; (iii) Known‑Answer Tests for `Derive` appear in Annex A.### 4.0 Objective & Model
+**Notes:** (i) Domain separation prevents cross‑context collisions; (ii) Argon2id enforces timed locality via memory hardness and sequentiality; (iii) `Δ_W` supports watcher‑side caching; (iv) Known‑Answer Tests for `Derive` appear in Annex A.
+
+### 4.0 Objective & Model
 
 Attest, per epoch, that an SP (a) stores the **cleartext** bytes of their assigned DU intervals and (b) can perform **timed, beacon‑salted derivations** over randomly selected windows quickly enough that fetching from elsewhere is infeasible within the proof window.
 
@@ -139,6 +145,13 @@ A **Data Unit (DU)** is the canonical chunking unit used for commitment and samp
 
 Let a DU be encoded with systematic RS(n,k) over GF(2⁸) and segmented into **1 KiB symbols**. The client computes a **KZG commitment** `C_root` to the RS‑symbol polynomial(s) at deal creation and posts `C_root` on L2; all subsequent storage proofs **must open against this original commitment**.
 
+### 4.1.1 KZG Structured Reference String (SRS) (Normative)
+
+All KZG operations MUST utilize a common, pinned Structured Reference String (SRS).
+* **Provenance:** The SRS MUST be generated via a verifiable Multi-Party Computation (MPC) ceremony (e.g., Perpetual Powers of Tau). Public transcripts of the ceremony MUST be available for audit.
+* **Parameters:** The SRS parameters (curve, degree) MUST align with BLS12-381 and support the maximum degree required for the largest DU commitment.
+* **Verification:** Implementations MUST verify the integrity of the loaded SRS against the hash-pinned canonical SRS defined in the protocol constants.
+
 ### 4.2 Challenge Derivation
 
 For epoch `t` with beacon `beacon_t`, expand domain‑separated randomness to pick `q` **distinct symbol indices** per DU interval and `R` **PoDE windows** of size `W = 8 MiB`. Selection MUST be modulo‑bias‑free.
@@ -147,6 +160,7 @@ For epoch `t` with beacon `beacon_t`, expand domain‑separated randomness to pi
 
 1) **PoUD — KZG‑PDP (content correctness):** Provide KZG **multi‑open** at the chosen 1 KiB symbol indices proving membership in `C_root`.
 2) **PoDE — Timed derivation:** For each challenged window, compute `deriv = Derive(clear_window, beacon_salt, row_id, epoch_id, du_id)` and submit `H(deriv)` plus the **minimal** clear bytes for verifier recompute, all **within** the per‑epoch `Δ_submit` window. Enforce **Σ verified bytes ≥ B_min = 128 MiB** over all windows and **R ≥ 16** sub‑challenges/window (defaults; DAO‑tunable).
+   **Normative (Security Bounds):** Governance MUST NOT set R < 8 or B_min < 64 MiB. Changes below these thresholds require a Major version increment and associated security analysis.
    **Normative (PoDE Linkage):** The prover MUST provide a KZG opening proof `π_kzg` demonstrating that the `clear_window` input bytes correspond exactly to the data committed in `C_root`.
 
 ### 4.4 Verifier (On‑chain / Watchers)
@@ -283,16 +297,13 @@ Collect any `t` valid shares; compute Lagrange coefficients `λ_i` in ℤ\_r:
 (No pairing, no `G_T` exponentiation.)
 
 **Deterministic Share‑Selection (Normative, strengthened):** Participants MUST post `(pk_i, π_i)` **on L1** before `τ_close`. The aggregator MUST:
-  (a) derive the candidate set **exclusively** from the on‑chain arrivals;
-  (b) select the lexicographically smallest `t` shares under the ordering key
+  (a) Collect all valid shares posted on L1 before `τ_close` (the candidate set).
+  (b) Calculate the ID for each share:
 ```
 share_id_i := Blake2s‑256("BATMAN-SHARE" ‖ compress(pk_i) ‖ u64_le(epoch_ctr))
 ```
-/* Grinding Mitigation (Normative):
-1. Collect all valid shares posted on L1 before `τ_close`.
-2. Let `Seed_select` be the VRF beacon of the block immediately following `τ_close`.
-3. If > t shares are available, select the `t` shares that minimize `HMAC-SHA256(Seed_select, share_id_i)`.
-*/
+  (c) **Grinding Mitigation (Normative):** Let `Seed_select` be the VRF beacon of the first block strictly after `τ_close`. (This seed is unpredictable before `τ_close`).
+  (d) If the candidate set size > t, select the `t` shares that minimize `HMAC-SHA256(Key=Seed_select, Message=share_id_i)`.
 
 Publish `(π_agg, pk_agg)` where `pk_agg = Σ λ_i · pk_i`.
 
@@ -364,7 +375,7 @@ Notes:
 
 ### 0.6  File Manifests & Encryption (normative pointers)
 
-Nilcoin uses a content‑addressed **file manifest** (Root CID) that enumerates per‑file **Data Units (DUs)** and a **crypto policy**: a File Master Key (FMK) is HPKE‑wrapped to authorized retrieval keys; per‑DU Content Encryption Keys (CEKs) derive as `HKDF‑SHA256(FMK, info=du_id)`, and each DU is encrypted with **AES‑256‑GCM** using a random 96‑bit nonce. DU ciphertexts are addressed by `DU‑CID` = `Blake2s‑256("DU-CID-V1" || C)`. Appendix A specifies the canonical manifest, key wrapping, rekey/delete, and KATs. Appendix B defines the Edge Retrieval API (streaming, Range, provider selection hooks).
+Nilcoin uses a content‑addressed **file manifest** (Root CID) that enumerates per‑file **Data Units (DUs)** and a **crypto policy**: a File Master Key (FMK) is HPKE‑wrapped to authorized retrieval keys; per‑DU Content Encryption Keys (CEKs) and Nonces are derived deterministically (Appendix A), and each DU is encrypted with **AES‑256‑GCM**. DU ciphertexts are addressed by `DU‑CID` = `Blake2s‑256("DU-CID-V1" || C)`. Appendix A specifies the canonical manifest, key wrapping, rekey/delete, and KATs. Appendix B defines the Edge Retrieval API (streaming, Range, provider selection hooks).
 
 ## Appendix A  File Manifest & Crypto Policy (Normative)
 
@@ -373,7 +384,9 @@ Nilcoin uses a content‑addressed **file manifest** (Root CID) that enumerates 
 - Root CID = Blake2s-256("FILE-MANIFEST-V1" || CanonicalCBOR(manifest)).
 - DU CID = Blake2s-256("DU-CID-V1" || ciphertext||tag).
 - FMK (32B) HPKE-wrapped to retrieval keys ("FMK-WRAP-HPKE-V1").
-- CEK per DU: HKDF-SHA256(FMK, info=du_id); AEAD: AES-256-GCM with random 96-bit nonce.
+- **Normative (Deterministic Key/Nonce Derivation):**
+- (CEK_32B, Nonce_12B) = HKDF-SHA256(IKM=FMK, info="DU-KEYS-V1" || du_id, L=44).
+- AEAD: AES-256-GCM using the derived CEK and the deterministic 96-bit (12-byte) Nonce.
 - Rekey by adding/removing FMK wraps; delete by crypto-erasure (remove wraps).
 
 ## Appendix B  Edge Retrieval Client & API (Normative)

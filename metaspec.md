@@ -61,7 +61,7 @@ The L1 aggregates epoch verification results into a single proof/digest and post
 2) **Verification key**: `vk_hash = sha256(vk_bytes)` pinned in the L2 bridge at deployment; upgrades require DAO action and timelock. In addition, an Emergency Circuit MAY perform an expedited **VK‑only** upgrade with a shorter timelock under §9.2, restricted to a pre‑published whitelist (hash‑pinned on L1). **No other code paths or parameters may change under Emergency mode.** During “yellow‑flag”, the bridge **MUST**:
   • continue updating `{epoch_id, poud_root, bw_root}`;
   • **disable** all fund‑moving paths: vesting payouts, token transfers/mints/burns, withdrawals/deposits, deal‑escrow releases, slashing executions, new deal creation (`CreateDeal`), and deal uptake (`MinerUptake`);
-  • freeze parameter change entrypoints and all governance actions (proposal submission and voting);
+  • freeze parameter change entrypoints and all governance actions (proposal submission and voting), **EXCEPT** for the DAO vote required to ratify the emergency patch (§9.2);
   • halt the economic processing (reward minting and slashing execution) derived from `poud_root` and `bw_root` updates;
   • require an independent auditor attestation **and** a hash of the patched verifier bytecode;  
 and auto‑revert to normal after sunset unless ratified by DAO.
@@ -234,8 +234,13 @@ Nil-Mesh is the network overlay optimized for low-latency, topologically aware r
 
 Nil-Mesh utilizes the geometric properties of the Nil-Lattice for efficient pathfinding.
 
+*   **Secure Identity Binding (Normative):** Peer IDs (NodeIDs) are securely bound to lattice coordinates (r, θ) through a costly registration process. To register or move a coordinate, an SP MUST:
+    (1) Bond a minimum amount of $STOR (Stake_Min_Cell), specific to the target Ring Cell.
+    (2) Compute a Verifiable Delay Function (VDF) proof anchored to their NodeID and the target coordinate: `Proof_Bind = VDF(NodeID, r, θ, difficulty)`.
+    This prevents rapid movement across the lattice and ensures that capturing a Ring Cell requires significant capital ($STOR) and time (VDF computation).
 *   **Mechanism:** Peer IDs are mapped ("lifted") to elements in a 2-step nilpotent Lie group (Heisenberg-like structure) corresponding to their lattice coordinates.
-*   **Pathfinding:** K-shortest paths (K=3) are computed in this covering space and projected back to the physical network. This offers superior latency performance compared to standard DHTs and increases Sybil resistance by requiring attackers to control entire topological regions ("Ring Cells"). **Normative (Capture cost):** DAO MUST publish and periodically update an estimate of stake required to control a ring‑cell (collocation filters, minimum bonded $STOR per cell, and placement constraints from § 3.2), and raise per‑cell minimums if empirical concentration increases.
+*   **Pathfinding:** K-shortest paths (K=3) are computed in this covering space and projected back to the physical network. This offers superior latency performance compared to standard DHTs and increases Sybil resistance by requiring attackers to control entire topological regions ("Ring Cells").
+**Normative (Capture cost):** DAO MUST publish and periodically update the `Stake_Min_Cell` and VDF `difficulty` parameters. These parameters MUST be raised automatically if empirical concentration increases.
 
 ### 4.2 RTT Attestation and QoS Oracle
 
@@ -273,8 +278,8 @@ Inflation per epoch (I_epoch) is calculated using a sublinear function to incent
 `I_epoch = clamp( α · sqrt(Total_Bytes_Served_NetworkWide), 0, I_epoch_max )`  // **Normative bounds:** (a) Per‑epoch cap: `I_epoch_max ≤ 0.10%` of circulating $BW (DAO‑tunable within [0.02%, 0.10%]); (b) Rolling cap: over any 30‑day window, Σ I_epoch ≤ `I_30d_max` (DAO‑tunable corridor, default 6%); (c) Attack‑traffic filter: bytes counted toward inflation MUST be discounted by an abuse‑score derived from §6.3 sampling failures and RTT‑oracle anomalies;  
 
  (c.1) **Normative (Abuse Score Formula):** The abuse score $S_{abuse} \in [0, 1]$ for an SP is calculated as:
- $S_{abuse} = clamp( w_1 \cdot (F_{sample} - \epsilon) + w_2 \cdot A_{rtt}, 0, 1 )$
- Where $F_{sample}$ is the fraction of failed receipt samples (§6.3), $A_{rtt}$ is the fraction of anomalous RTT attestations (§4.2), $\epsilon$ is the tolerance threshold, and $w_1, w_2$ are governance-tunable weights (default w1=5, w2=1). Discounted bytes = $Bytes_\!Served \cdot (1 - S_{abuse})$.
+ $S_{abuse} = clamp( w_1 \cdot (F_{sample} - \epsilon) + w_2 \cdot A_{rtt} + w_3 \cdot C_{topology}, 0, 1 )$
+ Where $F_{sample}$ is the fraction of failed receipt samples (§6.3), $A_{rtt}$ is the fraction of anomalous RTT attestations (§4.2), $C_{topology}$ is the topological concentration score of the clients served (measuring centralization in the Nil-Mesh graph), $\epsilon$ is the tolerance threshold, and $w_1, w_2, w_3$ are governance-tunable weights (default w1=5, w2=1, w3=2). Discounted bytes = $Bytes_\!Served \cdot (1 - S_{abuse})$.
 
  (d) **Per‑counterparty caps (Normative):** apply caps per (Client,SP) pair and per DU to bound bilateral wash‑retrieval. Default caps (DAO-tunable): $Cap_{Pair\_Epoch} \leq 1\,TiB$; $Cap_{DU\_Epoch} \leq 10\,GiB$.
  (e) **Honeypot zeroing:** any receipt associated with a Honeypot DU (§ 6.3.1, 6.3.4) that fails auditor checks contributes **zero** to inflation and triggers stake‑weighted escalation for the SP.
@@ -290,6 +295,8 @@ where:
 Minted $BW is distributed pro-rata to SPs based on the volume of verified retrieval receipts submitted in their PoS² proofs.
 
 #### 5.2.3 Burn Mechanism (Tipping)
+
+**Normative (Mandatory Base Burn):** A fixed fraction $\beta$ (DAO-tunable, default 5%) of the $BW$ reward generated by every verified receipt MUST be burned upon settlement. This introduces a baseline cost for all retrievals, increasing the absolute cost of wash-retrieval.
 
 Users can optionally "tip" for priority retrieval by including a `tip_bw` amount in the receipt, which is burned upon settlement.
 
@@ -338,9 +345,13 @@ To account for bandwidth, clients sign receipts upon successful retrieval.
     - **Verification model:** Ed25519 signatures are verified **off‑chain by watchers and/or on the DA chain**; PoS² only commits to a **Poseidon Merkle root** of receipts and proves byte‑sum consistency. In‑circuit Ed25519 verification is **not required**.  
       **Commit requirement:** For epoch `t`, SPs MUST have posted `BW_commit := Blake2s‑256(BW_root)` by the last block of epoch `t−1` (see § 6.3.1). Receipts not covered by `BW_commit` are ineligible.  
       **Penalty:** Failure to post `BW_commit` for epoch `t` sets counted bytes to zero for `t` and forfeits all $BW rewards for `t`.  
-      **Normative anchor:** At least **2% of receipts by byte‑volume per epoch** MUST be verified on the DA chain (randomly sampled via § 6.3) and escalate automatically under anomaly (§ 6.3.4).  
+      **Normative anchor:** At least **2% of receipts by byte‑volume per epoch** MUST be verified on the DA chain (randomly sampled via § 6.3) and escalate automatically under anomaly (§ 6.3.4).  
       **Normative (Verification Load Cap):** The total on‑chain verification load MUST be capped (DAO‑tunable) to prevent DoS via forced escalation.
-      **Normative (VLC Prioritization):** If the Verification Load Cap (VLC) is reached, preventing the escalation of security parameters during an anomaly, the system MUST prioritize security-critical parameters. It MUST automatically reduce less critical parameters in the following order: (1) reduce $p_{kzg}$, (2) reduce $R$, (3) reduce $B_{min}$, until the required increase in the critical parameter (e.g., $p$) can be accommodated under the VLC.
+      **Normative (VLC Prioritization and Security Floors):** Governance MUST define Security Floors for critical parameters ($p_{kzg\_floor}$, $R_{floor}$, $B_{min\_floor}$). The system MUST NOT automatically reduce these parameters below their floors.
+      **Normative (Economic Circuit Breaker):** If the Verification Load Cap (VLC) is reached during a security escalation (e.g., increase in $p$), and parameters are already at their floors, the system MUST activate an Economic Circuit Breaker instead of suppressing the escalation:
+      1. **Throttle $BW$ Minting:** Apply a global discount factor to the counted bytes for $BW$ inflation for the epoch, proportional to the excess load.
+      2. **Prioritize High-Risk Receipts:** The sampling mechanism MUST prioritize receipts associated with SPs exhibiting high abuse scores (§5.2.1.c.1).
+      This ensures that security auditing proceeds unimpeded during an attack, while imposing an economic cost on the network instead of compromising storage integrity.
 
 ### 6.2 Storage Proof Binding (PoUD + PoDE)
 
@@ -495,11 +506,14 @@ To manage systemic risk and enable sophisticated financial instruments, NilStore
 
 *   **Mechanism:** σ is calculated daily from the Laplacian eigen-drift of the storage demand graph (tracking object-to-region flows).
     `σ_t := ||Δλ₁..k(Graph_t)||₂` (tracking the k lowest eigenvalues).
+    **Normative (Oracle Input Hardening):** The input `Graph_t` MUST be filtered to exclude manipulative patterns, such as rapid creation/deletion of deals by the same entity (Sybil filtering) and traffic associated with high abuse scores (§5.2.1.c.1).
 *   **Application (Dynamic Collateral):** The required collateral for a deal is dynamically adjusted based on volatility:
     `Required_Collateral := Base_Collateral · f(σ, σ_price)`
     where $\sigma_{price}$ is the realized volatility of the $STOR token price.
     Higher volatility (σ) necessitates higher slashable stake. This also informs pricing for storage ETFs and insurance pools.
-    **Normative (Oracle Dampening and Management):** The function $f(\sigma, \sigma_{price})$ MUST incorporate a dampening mechanism (e.g., a 30-day Exponential Moving Average) to prevent sudden spikes in collateral requirements. A mechanism for collateral top-ups for existing deals MUST be defined, including a grace period (default 72 hours) before liquidation/slashing.
+    **Normative (Oracle Dampening and Management):** The function $f(\sigma, \sigma_{price})$ MUST incorporate a dampening mechanism (e.g., a 30-day Exponential Moving Average).
+    **Normative (Circuit Breakers and Rate Limits):** The rate of change in Required_Collateral MUST be capped per epoch (e.g., max 10% increase) to prevent sudden shocks.
+    **Normative (Dynamic Grace Period):** A mechanism for collateral top-ups MUST be defined. The grace period before liquidation/slashing (default 72 hours) MUST be dynamically extended (up to 7 days) if $\sigma_{price}$ exceeds a high volatility threshold (DAO-tunable).
 
 ## 9. Governance (NilDAO)
 
@@ -523,10 +537,10 @@ Additional PoDE/PoUD pressure dials (plaintext/scaffold modes):
 ### 9.2 Upgrade Process
 
 *   **Standard Upgrades:** Require a proposal, a voting period, and a mandatory 72-hour execution timelock.
-*   **Emergency Circuit (Hot-Patch):** A predefined **4‑of‑7** threshold **with role diversity** (at least one key from each of: {Core Team}, {Independent Security Auditor}, {Community/Validator Rep}) can enact **VK‑only** emergency patches (see § 2.4). Keys MUST be HSM/air‑gapped; quorum may not be satisfied by keys within the same ASN/organization.
-    *   **Key Allocation and Independence (Normative):** The 7 keys MUST be strictly allocated as: Core Team (2), Independent Security Auditor (2), Community/Validator Rep (3). The Auditor role MUST be filled by an entity with no financial or control relationship with the Core Team, ratified by DAO vote annually. The 4-of-7 threshold MUST include at least one valid signature from each of these three groups.
+*   **Emergency Circuit (Hot-Patch):** A predefined **5‑of‑9** threshold **with role diversity** can enact **VK‑only** emergency patches (see § 2.4). Keys MUST be HSM/air‑gapped.
+    *   **Key Allocation and Independence (Normative):** The 9 keys MUST be strictly allocated as: Core Team (3), Independent Security Auditor (3), Community/Validator Rep (3). The Auditor role MUST be filled by entities with no financial or control relationship with the Core Team, ratified by DAO vote annually. The 5-of-9 threshold MUST include at least one valid signature from each of these three groups.
     *   **Sunset Clause (Normative):** Emergency patches automatically expire 14 days after activation unless ratified by a full DAO vote.
-    *   **Sunset Integrity (Normative):** The emergency patch mechanism MUST NOT be capable of modifying the Sunset Clause duration or the ratification requirement. Ratification during the 14-day window does NOT disable the automatic expiration. A ratified patch MUST still expire; ratification only serves to schedule the patch for the standard upgrade cycle.
+    *   **Sunset Integrity (Normative):** The emergency patch mechanism MUST NOT be capable of modifying the Sunset Clause duration or the ratification requirement. If an emergency patch is ratified by a full DAO vote during the 14-day window, the automatic expiration MUST be disabled. The ratified patch remains active until it is superseded by the standard upgrade cycle.
 
 ### 9.3 Freeze Points
 
