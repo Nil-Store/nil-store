@@ -24,64 +24,8 @@ Version 2.0 supersedes v 1.0 and v 1.0‑rc series; it MUST be implement
 
 ---
 
-## § 0 Notation, Dial System & Versioning ( Baseline Profile “S‑512” )
 
-\### 0.1 Symbols, Typography, and Conventions
-
-| Markup                    | Meaning                                               | Example         |
-| ------------------------- | ----------------------------------------------------- | --------------- |
-| `u8`, `u16`, `u32`, `u64` | Little‑endian unsigned integers of the stated width   | `0x0100 → 256`  |
-| `≡`                       | Congruence *mod q* unless another modulus is explicit | `a ≡ b (mod q)` |
-| `‖`                       | Concatenation of byte strings                         | `x‖y`           |
-| `Σ`, `Π`                  | Field‑sum / product in 𝔽\_q (wrap at *q*)            | `Σ_i x_i mod q` |
-| `NTT_k`                   | Length‑*k* forward Number‑Theoretic Transform         | `ntt64()`       |
-
-All integers, vectors, and matrices are interpreted **little‑endian** unless indicated otherwise.
-
-\### 0.2 Dial Parameters
-
-A **dial profile** is an ordered 8‑tuple
-`(m, k, r, λ, H, γ, q, Nonce)`:
-
-| Symbol | Description                                | Baseline "S‑512"                |
-| ------ | ------------------------------------------ | ------------------------------- |
-| `q`    | Prime field modulus                        | **CRT (Mandatory):** $q_1$=**998 244 353** and $q_2$=**1 004 535 809**. Effective modulus $Q = q_1 \times q_2 \approx 2^{60}$. |
-| `Nonce`| Profile Nonce (high-entropy)               | 0x1A2B3C4D5E6F7890AABBCCDDEEFF0011 (example) |
-| `m`    | Vector length (*nilhash*, PoSS²)           | 1 024                           |
-| `k`    | NTT block size (radix‑k)                   | 128                             |
-| `r`    | Passes of data‑dependent permutation       | 3                               |
-| `λ`    | Gaussian noise σ (compression)             | 350 (fixed-point ×100)          |
-| `H`    | Argon2‑drizzle passes                      | 2                               |
-| `γ`    | Interleave fragment size (MiB)             | 0 (sequential)                  |
-
-Dial parameters are **frozen** per profile string (e.g., `"S-512"`).  Changes introduce a new profile ID (see § 6).
-
-\### 0.3 Version Triple
-
-Every on‑chain 32‑byte digest begins with a **version triple**
-
-```
-Version = {major : u8 = 0x02, minor : u8 = 0x00, patch : u8 = 0x00}
-digest  = Blake2s‑256( Version ‖ DomainID ‖ payload )
-```
-
-* **major** increments on any change to `q` or `m` (affects SIS hardness).
-* **minor** increments when tuning `k, r, λ, H, γ`.
-* **patch** increments for non‑semantic errata (typos, clarifications).
-
-\### 0.4 Domain Identifiers
-
-`DomainID : u16` partitions digests by purpose.  Reserved values:
-
-| ID (hex)  | Domain                             | Source section |
-| --------- | ---------------------------------- | -------------- |
-|  `0x0000` | Internal primitives                | § 2–5          |
-|  `0x0200` | PoDE/Derive digest (window‑local)  | § 4            |
-|  `0x0300` | Nil‑VRF transcripts                | § 5            |
-
-Further IDs are allocated by Nilcoin governance (informative Appendix D).
-
-\#### 0.4.1 String Domain Tags (Blake2s separators)
+#### 0.4.1 String Domain Tags (Blake2s separators)
 
 For transparency and auditability, Core defines the following fixed ASCII domain strings used with Blake2s‑256 across modules:
 
@@ -96,564 +40,15 @@ For transparency and auditability, Core defines the following fixed ASCII domain
 | `"BATMAN-SHARE"`    | Deterministic share‑selection label       | § 5.4.3    |
 | `"PARAMGEN-V1"`     | XOF seed for A/B/twist parameter mixing   | § 2.2      |
 
-\### 0.5 Change‑Control and Notice
-
-* Parameter changes follow § 6 governance rules.
-* **Seed/Nonce binding (Normative):** Any change affecting parameter generation (e.g., `A` row, `B` spectrum, spectral twist) MUST include a new high‑entropy Nonce (≥ 128 bits, recommended 256 bits) committed on‑chain with the proposal, and all seeds MUST be derived via SHAKE128 with fixed domain tags (see § 2.2, tag `"PARAMGEN-V1"`). Re‑using a Nonce across major/minor versions is forbidden.
-* Implementations **must** reject digests whose version triple or DomainID is unknown at compile‑time.
-
-\### 0.6 Reproducibility & Deterministic Build Charter (normative)
-
-* **Public transcripts:** Any claim in §§ 2–5, 7 that depends on concrete parameters MUST have a reproducible transcript (JSON/CSV) in the release package (`_artifacts/`), accompanied by `SHA256SUMS`.
-* **Pinned inputs:** All randomness derives from fixed domain tags (see § 0.4.1) and explicit inputs; scripts MUST use integer‑only operations for consensus‑sensitive calculations.
-* **Make target:** Reference repos MUST provide `make publish` that regenerates `_artifacts/*` and `SHA256SUMS` from a clean checkout.
-* **Estimator evidence (A3):** The Module‑SIS security level MUST be justified by a published estimator transcript before main‑net activation (see § 7.2).
-
-
----
-
-## § 1 Field & NTT Module (`nilfield`)
-
-\### 1.1 Constants – Prime *q₁* = 998 244 353
-
-| Name     |            Value (decimal) | Hex                | Comment                  |
-| -------- | -------------------------: | ------------------ | ------------------------ |
-| `Q`      |                998 244 353 | 0x3B800001         | NTT-friendly prime (≈2³⁰)|
-| `R`      |                932 051 910 | 0x378DFBC6         | 2⁶⁴ mod Q                |
-| `R²`     |                299 560 064 | 0x11DAEC80         | *R²* mod Q               |
-| `Q_INV`  | 17 450 252 288 407 896 063 | 0xF22BC0003B7FFFFF | −Q⁻¹ mod 2⁶⁴             |
-| `g`      |                          3 | —                  | Generator of 𝔽\*\_Q     |
-| `ψ_64`   |                922 799 308 | 0x3700CCCC         | Primitive 64‑th root     |
-| `ψ_128`  |                781 712 469 | 0x2E97FC55         | Primitive 128‑th root    |
-| `ψ_256`  |                476 477 967 | 0x1C667A0F         | Primitive 256‑th root    |
-| `ψ_1024` |                258 648 936 | 0x0F6AAB68         | Primitive 1 024‑th root  |
-| `ψ_2048` |                584 193 783 | 0x22D216F7         | Primitive 2 048‑th root  |
-| `64⁻¹`   |                982 646 785 | 0x3A920001         | For INTT scaling         |
-| `128⁻¹`  |                990 445 569 | 0x3B090001         | —                        |
-| `256⁻¹`  |                994 344 961 | 0x3B448001         | —                        |
-| `1024⁻¹` |                997 269 505 | 0x3B712001         | —                        |
-| `2048⁻¹` |                997 756 929 | 0x3B789001         | —                        |
-
-*Origin:* generated verbatim by the normative script in **Annex C**.
-All reference implementations embed these literals exactly.
-
-\### 1.1.1 Mandatory CRT prime q₂ = 1 004 535 809  (NTT‑friendly)
-
-Constants (ψₖ, k⁻¹, Montgomery params) for q₂ are generated by Annex C with:
-
-```
-python3 appendix_c_constants.py 1004535809 3 > constants_q2.txt
-```
-
-Implementations MUST embed the q₂ constants exactly as emitted and run the KATs in Annex A for both primes.
-
-\### 1.2 API Definition (Rust signature, normative)
-
-```rust
-pub mod nilfield {
-    /* ---------- modulus & Montgomery ---------- */
-    pub const Q:      u32 = 998_244_353;
-    pub const R:      u32 = 932_051_910;
-    pub const R2:     u32 = 299_560_064;
-    pub const Q_INV:  u64 = 0xF22BC0003B7FFFFF;
-
-    /* ---------- field ops (constant‑time) ----- */
-    pub fn add(a: u32, b: u32) -> u32;   // (a + b) mod Q
-    pub fn sub(a: u32, b: u32) -> u32;   // (a − b) mod Q
-    pub fn mul(a: u32, b: u32) -> u32;   // Montgomery product
-    pub fn inv(a: u32) -> u32;           // a⁻¹ mod Q (Fermat)
-
-    /* ---------- radix‑k NTT ------------------- */
-    pub fn ntt64(f: &mut [u32; 64]);     // forward DIF, in‑place
-    pub fn intt64(f: &mut [u32; 64]);    // inverse DIT, scaled 1/64
-}
-```
-
-Implementations **shall** provide equivalent APIs in other languages.
-
-\### 1.3 Constant‑Time Requirement (normative, micro‑arch aware)
-
-All `nilfield` functions operating on secret data **must** execute in time independent of their inputs and **must not** perform secret‑dependent memory accesses or control‑flow.
-
-**Rules (normative):**
-1) **No secret‑dependent branches** (including early returns), **no secret‑dependent table lookups**, **no secret‑dependent memory addresses**.
-2) **Fixed operation counts**: loops and iteration counts must be independent of secret values.
-3) **Instruction selection**: avoid variable‑latency divisions; inversion `inv(a)` **must** use a fixed‑window addition chain or sliding‑window exponentiation with constant‑time selection (no data‑dependent table indices).
-   **Normative (Inversion):** Inversion of secret values MUST use Fermat's Little Theorem (a^(q-2) mod q) with a fixed, optimized addition chain.
-4) **Montgomery core**: `mul`/`REDC` must use only integer ops; final conditional subtraction must be implemented with constant‑time bit‑masking (no branches).
-   **Instruction Latency (Normative):** Implementations MUST use instructions guaranteed to be constant-time (e.g., widening multiplies with fixed cycles, `mulx` on x86-64) and verify this via assembly inspection.
-5) **Tooling gates (required)**:
-   • **ctgrind**: zero findings;  
-   • **dudect**: Welch’s *t*‑test |t| ≤ 4.5 on ≥ 2²⁰ traces at 3 GHz equivalent;  
-   • **llvm‑mca (or objdump review)**: verify no data‑dependent instructions (DIV/MOD) in secret‑handling code paths;  
-   • **cache‑flow audit**: static check that all memory indices in secret code are public.
-   • **Formal Verification (Required):** Use formal methods tools (e.g., EasyCrypt, Jasmin) to provide a machine-checked proof that the reference implementation of `inv(a)` and `mul` is constant-time.
-6) **Build flags**: enable constant‑time codegen (e.g., `-fno-builtin-memcmp` or constant‑time intrinsics) and pin target CPU features in CI.
-
-**Formal Auditing Process (Normative):** Reference implementations MUST undergo a formal audit including manual review of generated assembly on target architectures and explicit threat modeling for cache-timing attacks (e.g., Flush+Reload, Prime+Probe).
-
-**CRT (Normative):** With the mandatory CRT profile:
-1) **Reconstruction:** The reconstruction algorithm (e.g., Garner's method) MUST be implemented in constant time.
-2) **Fault Protection:** Implementations MUST verify the consistency of results across both moduli (recomputing the result mod q₁ and q₂ and verifying against the inputs) during critical operations to detect fault injection attacks (e.g., Bellcore attack).
-
-**NTT (Normative):** Memory access patterns during the NTT MUST be data-independent. Twiddle factor tables MUST be accessed using only public indices.
-
-**Documentation**: Reference implementations MUST include a short write‑up explaining how each rule is met in `nilfield`, especially for `inv(a)`.
-
-\### 1.4 Radix‑*k* NTT Specification
-
-* The forward transform `ntt_k` is a breadth‑first DIF algorithm using `ψ_k` twiddles; input and output are in natural order.
-* The inverse transform `intt_k` is DIT with twiddles `ψ_k⁻¹`.
-* Post‑inverse scaling multiplies every coefficient by `k⁻¹ mod Q`.
-* For `k ∈ {64,128,256,1024,2048}` the corresponding `ψ_k` **must** be used; extending to higher powers of two requires governance approval (§ 6).
-
-**Memory layout:** vectors are contiguous arrays of `u32` little‑endian limbs.  No bit‑reversal copy is permitted outside the NTT kernels.
-
-**Known‑Answer Tests:** Annex A.1 & A.2 contain round‑trip vectors
-`[1,0,…] → NTT → INTT → [1,0,…]` for every supported *k*.
-
-\### 1.5 Implementation Guidance (with constant‑time WASM/MCU profile)
-
-* Preferred: 32×32→64 **Montgomery** multiply + `REDC` using only integer ops. On 32‑bit targets, use two‑limb decomposition to synthesize 64‑bit products in constant time.
-* **WASM (wasm32):** require native `i64` support; **asm.js** fallbacks or FP must not be used. Constant‑time **Barrett** is permitted with μ = ⌊2⁶⁴/q⌋ and all reductions implemented without division and without secret‑dependent branches. Implementations MUST ship KATs demonstrating equality with Montgomery on the same inputs.
-* **Environment probes (normative):** at startup, assert (a) two’s‑complement integers, (b) 32‑ and 64‑bit widths as specified, (c) native 64‑bit integer ops available. Otherwise, **disable sealing** and expose a conformance error.
-* Inline `k⁻¹` scaling into the last butterfly stage to save one loop **only** if the fused code path preserves constant‑time guarantees above.
-
----
-
----
-
- 
-## § 2 Nil‑Lattice Hash / “Nilweave” (`nilhash`)
-
-\### 2.0 Scope
-
-`nilhash` is Nilcoin’s *vector‑commitment* primitive. It maps an arbitrary‑length byte string to an **m‑limb vector** `h ∈ 𝔽_q^m` (baseline *m = 1 024*) and—optionally—into a fixed‑size on‑chain digest. Security reduces to the hardness of the *Short‑Integer‑Solution* (SIS) problem over 𝔽\_q; the reduction appears in § 7.3.
-
----
-
-\### 2.1 Message → Vector Injection (“SVT order”)
-
-\#### 2.1.1 Padding
-
-```
-msg' = |len_u64|_LE  ‖  msg  ‖  0x80  ‖  0x00 …           // pad to multiple of 3 bytes
-```
-
-* `|len_u64|` is the original message length in **bytes**.
-* Append `0x80`, then zero‑bytes until `len(msg')` is a multiple of 3 (≥ 8 + |msg| + 1).
-  *(ISO/IEC 9797‑1 scheme 1 adapted to 12‑bit limbs.)*
-
-\#### 2.1.2 Limb parsing
-
-`x_raw` = `msg'` parsed as packed little‑endian 12‑bit limbs.
-For 3 bytes (b₀, b₁, b₂), unpack two limbs: 
-  xᵢ = b₀ | (b₁ & 0x0F) << 8; 
-  xᵢ₊₁ = (b₁ >> 4) | b₂ << 4.
-`x_raw = [x₀, x₁, …, x_{L−1}]` with `L = (len(msg')/3) * 2`.
-
-If `L > m` → **reject** (“message too long for profile”).
-If `L < m` pad the tail with zeros.
-
-\#### 2.1.3 SVT order (stride‑vector‑transpose)
-
-Let `B = m / k` blocks (baseline `k = 64`, `B = 16`).
-Conceptually arrange the limb array as a **k × B** row‑major matrix
-
-```
-Row r (0 … k-1) :  x_raw[r·B + c] ,  c = 0 … B-1
-```
-
-**SVT order** is the **column‑major read‑out** of this matrix:
-
-```
-SVT(x_raw)[ i ] = x_raw[ (i mod k) · B  +  ⌊i / k⌋ ] ,  0 ≤ i < m.
-```
-
-Intuition: every NTT block (row) receives one limb from each stride column, maximising inter‑block diffusion.
-
----
-\### 2.2 Algorithms (revised)
-
-> **Public parameters** (fixed per dial profile, derived in Annex C)
->
-> * **Hash Function H (Normative):** All parameter generation MUST use SHAKE128 as an Extendable Output Function (XOF).
-> * **Uniform Sampling (Normative):** All sampling modulo q MUST use uniform rejection sampling (no modulo‑bias), with statistical distance from uniform < 2^-128.
-> * **Nonce requirements (Normative):** `Nonce` MUST be ≥ 256 bits of min‑entropy and derived from a **multi‑party commit‑reveal**: (i) at least 3 independent contributors post 256‑bit commits on‑chain, (ii) after `H_commit+K` blocks, each reveals; (iii) the chain adds a fixed‑height block hash `B*`. The profile `Nonce = SHAKE128("PARAMGEN-V1" ‖ commits ‖ reveals ‖ B*)`.
-> * **Seed mixing (Normative, strengthened):** All per‑object seeds for parameter generation MUST be drawn from a master XOF stream
-
->   `seed = SHAKE128("PARAMGEN-V1" ‖ Version ‖ DID ‖ Nonce ‖ GovProposalHash ‖ CRS_commit ‖ CRS_reveal)`
-
->   with the following requirements:
->   1) `GovProposalHash` = Blake2s‑256 of the governance proposal object that introduces the dial/profile change (hash‑pinned on‑chain at proposal open);
->   2) `CRS_commit` / `CRS_reveal`: a *threshold* (≥ t‑of‑n) commit‑reveal from independent parties posted on L1.
->   3) **Stalling Prevention (Normative):** `vrf_beacon_paramgen` MUST be derived from a VRF transcript at a block height determined **after** the commit phase closes. Any missing reveals (for Nonce or CRS) MUST be replaced by `vrf_beacon_paramgen`.
->   3) All sub‑seeds MUST include **explicit domain strings** unique per artifact:
->
->      `H("A-seed"‖Version‖DID‖Nonce‖GovProposalHash‖CRS_commit‖CRS_reveal)`,  
->      `H("B-spectrum"‖Version‖DID‖Nonce‖GovProposalHash‖CRS_commit‖CRS_reveal‖j)`,  
->      `H("twist"‖Version‖DID‖Nonce‖GovProposalHash‖CRS_commit‖CRS_reveal‖j)`.
->
->   Re‑using `Nonce` or `GovProposalHash` across major/minor versions is forbidden. Implementations MUST serialize and store the full paramgen transcript for audit.
->   **Grinding prohibition:** the ceremony and transcript MUST ensure no single party can bias `A`, `B`, or the per‑domain twist values.
-> * Circulant matrix **A** generated from first row `α` (derived via H("A-seed"‖Version‖DID‖Nonce)).
-> * Independent circulant matrix **B**: sample $\widehat b_j$ uniformly from 𝔽_q using H("B-spectrum"‖Version‖DID‖Nonce‖j) until non‑zero; set **b_vec = INTT( \widehat b )**.   // renamed to avoid collision with the r‑bound β
-> * **Spectral Checks (Normative):**
->   1) **B invertibility:** every NTT coefficient of $\widehat b$ MUST be non‑zero (det(B) ≠ 0) **and** the minimal polynomial of $\widehat b$ over 𝔽_q MUST have no factors of order ≤ 2¹⁶. Re‑sample on failure.
->   2) **A robustness:** the NTT of the first row of A, $\widehat α$, MUST pass the same minimal‑polynomial filter (no small‑order factors); additionally, every coefficient of $\widehat α$ MUST be non‑zero.
->   3) **Co‑primeness:** for all indices j, **gcd**$(\widehat α_j, \widehat b_j, q)=1$ (i.e., $(A,B)$ have no shared low‑order spectral factors). Re‑sample on failure.
-> * Per‑domain **spectral twist** **D^(DID)**: sample $d_j$ uniformly from 𝔽_q using H("twist"‖Version‖DID‖Nonce‖j), re‑draw zeros. Apply as a diagonal in NTT space on the A·x path.
-
-| Function      | Signature                                                                  | Definition |
-| ------------- | ---------------------------------------------------------------------------- | ---------- |
-| **commit**    | `fn commit(DID, msg, rng) → h: [u32; m]{×CRT}`                                | Prover samples `r ← D_σ` with `||r||_∞ ≤ β` (constant‑time), computes `h = (A_twisted·x) + (B·r)`, and retains `(r, π)` privately. |
-| **open**      | `fn open(msg, r, π) → (msg, r, π)`                                          | Output the original message, blinding vector `r`, and its bound‑proof `π`. The sampling of `r` MUST be constant‑time. |
-| **verify**    | `fn verify(h, msg, r, π) → bool`                                             | Recompute `x` and twist; check `h == A_twisted·x + B·r` per prime; verify `π`. |
-| **update**    | *unchanged* (requires re‑commit)                                            | Any change to `msg` or `r` requires a fresh `commit`. |
-| **aggregate** | `Σ_field`                                                                    | Component‑wise addition of commitment vectors. |
-
-*Complexity* – Commit/Verify: unchanged NTT count (per‑prime); proof adds O(log m) time and ~2 kB to the opening object.
-*Security* – **Binding** reduces to Module‑SIS on the kernel of `(A‖B)` with a **short** witness (bounded `Δx,Δr`).
-**Hiding (Informative):** The commitment scheme is statistically revealing. Implementations MUST NOT rely on `nilhash` for data confidentiality.
-
-**Sampling (Normative):** The sampling of `r` MUST use a specified constant-time algorithm (e.g., constant-time discrete Gaussian or centered binomial) with published bounds on the statistical distance from the target distribution.
-
-> **Note:** Attribute‑selective openings will appear in v 2.1 using a zero‑knowledge inner‑product argument.  For v 2.0 all openings disclose the entire message.
-
-\#### 2.2.1  KAT impact
-
-Note: Known‑Answer Tests updated in Annex A.3.
-
-
----
-
-\### 2.3 On‑Chain Digest Format
-
-```
-commit_digest =
-    Blake2s‑256( Version ‖ DomainID ‖ h^{(1)} ‖ h^{(2)} )   // 32 bytes
-    // CRT is mandatory. **Both** vectors MUST be included in the digest input and in every `verify` computation; openings MUST satisfy the relation in **each** prime separately. The primes q₁ and q₂ MUST be co‑prime. No per‑prime truncation or mixing is permitted.
-
-where  Version  = {0x02,0x00,0x00}
-       DomainID = 0x0000  (internal primitive namespace)
-```
-
-The entire vector `h` (2 KiB baseline) **must** be supplied in calldata when `Version.major` increases; otherwise the 32‑byte digest is sufficient.
-
----
-
-\### 2.4 Worked Example (Baseline “S‑512”)
-
-Input: empty string `""`, `DID = 0x0000`.
-
-| Step              | Result (hex, little‑endian)       |
-| ----------------- | --------------------------------- |
-| `h` (1 024 limbs) | `f170 75ce 9788 65d7 … c386 7881` |
-| `commit_digest`   | `af01 c186 … e3d9 990d` (32 B)    |
-
-*The complete vector and digest appear in Annex A.3 as KAT `nilhash_empty`.*
-
-Note (CRT mode): The mandatory CRT prime `q₂` requires an additional vector `h^{(2)}` computed identically over `q₂`, and `commit_digest` hashes the concatenation `h^{(1)} ‖ h^{(2)}` (see § 2.3).
-
----
-
-\### 2.5 Parameterisation & Extensibility
-
-* Increasing `m` or changing `q` → **major** version bump (§ 0.3).
-* Tuning `k` or replacing `α` with a higher‑order root (e.g., `ψ_128`)
-  → **minor** bump; implementers must regenerate the *A* row using Annex C.
-
----
-
-\### 2.6 Implementation Notes (informative)
-
-* **Vectorised FFT:** two 64‑point NTTs fit in AVX‑2 registers; unroll eight butterflies per stage for maximum ILP.
-* **Memory‑hard variants:** set `k = 256` and keep `B = m/k` fixed to quadruple cache footprint.
-* **Open/verify kernels:** the circulant property lets one reuse a single 64‑point NTT per dot‑product.
-
----
-
-
----
-
- 
-## § 3 Sealing Codec (`nilseal`)
-
  
 
-\### 3.0 Scope & Threat Model
-
-`nilseal` transforms a miner‑supplied **sector**—an opaque byte array of size
-`S = 2^n` bytes, *n ≥ 26* (≥ 64 MiB)—into a **replica** that:
-
-1. **Binds storage** Reproducing the replica from the clear sector and secret key takes ≥ `t_recreate_replica` seconds (§ 6).
-2. **Hides data** The replica is computationally indistinguishable from uniform given only public parameters and the miner’s address.
-3. **Supports proofs** (Annex A) It yields *row commitments* `h_row` and *delta heads* `delta_head` consumed by the sealed **PoS²‑L** scaffold (not active in the normative plaintext mode).
-
-Adversary capabilities: unbounded offline pre‑computation, full control of public parameters, but cannot learn the miner’s VRF secret key `sk`.
-
-\### 3.1 Symbol Glossary (dial profile “S‑512”)
-
-| Symbol   | Type / default | Definition                                |
-| -------- | -------------- | ----------------------------------------- |
-| `S`      | 32 GiB         | Sector size (benchmark)                   |
-| `row_i`  | `u32`          | `BLAKE2s-32(sector_id‖sector_digest) mod rows`, where `sector_id = BLAKE2s-256(miner_addr‖sector_number)` |
-| `salt`   | `[u8;32]`      | `vrf(sk, row_i)`                          |
-| `chunk`  | `[u32;k]`      | Radix‑*k* NTT buffer (*k = 64*)           |
-| `pass`   | `0 … r−1`      | Permutation round (*r = 3*)               |
-| `ζ_pass` | `u32`          | Round offset (data‑dependent)             |
-| `λ`      | 280            | Gaussian σ (noise compression, fixed‑point ×100) |
-| `γ`      | 0              | MiB interleave fragment size              |
-
-\### 3.2 Pre‑Processing – Argon2 “Drizzle”
-
-If `H = 0` → skip.
-Else perform `H` in‑place passes of **Argon2id** on the sector:
-
-```
-argon2id(
-    pwd   = sector_bytes,          // streaming mode
-    salt  = salt,                  // 32 B
-    mem   = ⌈S / 1 MiB⌉  Kib,
-    iters = 1,
-    lanes = 4,
-    paral = 2
-)
-```
-
-Each 1 MiB Argon2 block XORs back into its original offset.  This yields a *memory‑hard* whitening keyed by the miner.
-
-\### 3.3 Radix‑k Transform Loop
-
-Let `N_chunks = S / (2·k)` little‑endian 16‑bit chunks.
-
-For `pass = 0 … r−1` (baseline `r = 3`):
-
-1. **Chunk iteration order** – determined by the **data‑dependent PRP permutation** (3.4).
-
-2. **NTT pipeline**
-
-   ```
-   NTT_k(chunk)                    // forward DIF
-   // Derive per‑pass salt limbs (deterministic, domain‑separated)
-   salt_k = SHAKE128("NIL_SEAL_SALT_EXP" ‖ salt ‖ u8(pass))[0 .. 4k) as k little‑endian u32 limbs mod Q
-   for j in 0..k-1:
-       chunk[j] = chunk[j] + salt_k[j]   mod Q
-   INTT_k(chunk)                   // inverse DIT, scaled k⁻¹
-   ```
-**Rationale:** Salt is added in the frequency domain (after the NTT) to ensure its influence is uniformly diffused across all output limbs following the inverse transform, rather than being localized.
-
-3. **Interleaved write**
-
-   *If* `γ = 0` → write back to original offset.
-   *Else* compute `stride = γ MiB / (2·k)` and write chunk to
-   `offset = (logical_index ⋅ stride) mod N_chunks`.
-
-\#### 3.3.1 Micro‑Seal Derive (window‑scoped, normative for PoDE)
-
-Purpose: Provide a deterministic, beacon‑salted local transform on a `W`‑byte window (default `W = 8 MiB`) that can be recomputed directly from **plaintext** during PoDE; it MUST be domain‑separated from full sealing and MUST NOT require a sealed replica.
-
-Definition:
-
-```
-Derive(clear_window, beacon_salt, row_id):
-  1) Partition clear_window into k‑limb chunks (k per dial profile; baseline k = 64).
-  2) For pass = 0..r−1:
-        NTT_k(chunk);
-        salt_k = SHAKE128("NIL_SEAL_SALT_EXP" ‖ beacon_salt ‖ u8(pass) ‖ u32_le(row_id))[0 .. 4k) as k little‑endian u32 limbs mod Q;
-        for j in 0..k−1: chunk[j] = (chunk[j] + salt_k[j]) mod Q;
-        INTT_k(chunk);
-  3) Output:
-        leaf64 := first 64 bytes of the window post‑transform;
-        Δ_W := Blake2s‑256(window post‑transform).
-```
-
-Constraints:
-- `salt_k` MUST be domain‑separated from full‑replica sealing salts (§ 3.3).
-- No cross‑window state is permitted; `Derive` is local to the window bytes.
-- Implementations MUST provide KATs in Annex B for `Derive`.
-**Domain separation (normative):** For PoUD/PoDE usage, salt derivation MUST include `epoch_id` and `du_id` in addition to `beacon_salt` and `row_id`, to prevent cross‑deal replay of derived windows within the same epoch.
-
-\### 3.4 Data‑Dependent Permutation (normative)
-
-\#### 3.4.1 Permutation map (PRP) — normative
-
-Index chunks by linear index `i ∈ [0, N_chunks)`. The PRP MUST be a **20‑round Feistel network** keyed by `ζ_p` over the domain `M = N_chunks`. Because `S = 2^n` and chunk size is fixed, `N_chunks` is a power of two; thus `M` is exact and **no cycle‑walk is performed**. Round function:
-
-```
-Derive the round key `K_round` (using the full 256-bit ζ_p, see § 3.4.2):
-`K_round = BLAKE2s-256("NIL_SEAL_PRP" ‖ u32_le(M) ‖ u8(round) ‖ ζ_p)`
-
-F(round, halfword, ζ_p) :=
-    BLAKE2s-256(
-        msg = u32_le(halfword),
-        key = K_round
-    )[0..4) as little‑endian u32, then masked to half‑width
-```
-
-Operate on `w = ceil_log2(M)` bits split into equal halves; mask outputs to the half‑width each round. Let `Feistel_M(x)` be the 20‑round Feistel permutation on `[0, M)`.
-
-Implementations MUST reject `N_chunks = 0`. Round‑trip vectors (updated for 20 rounds and keyed BLAKE2s) appear in Annex A (`nilseal_prp.toml`).
-
-\#### 3.4.2 Round‑offset ζ<sub>pass</sub>
-
-For `p = 0`, define:
-`ζ_0 = BLAKE2s-256("NIL_SEAL_ZETA" ‖ salt ‖ u8(0) ‖ sector_digest)`.
-
-After finishing pass `p−1`, compute a digest of the entire pass's data that is sensitive to chunk order.
-
-`ChunkHashes_{p-1} = [Blake2s‑256(chunk_0^{p-1}), Blake2s‑256(chunk_1^{p-1}), ...]`
-`ChunkDigest_{p-1} = IteratedHash(ChunkHashes_{p-1})`
-`IteratedHash(L)` is defined as: `H_0 = Blake2s-256("NIL_SEAL_ITER_INIT"); for i in 0..|L|-1: H_{i+1} = Blake2s-256("NIL_SEAL_ITER_STEP" || H_i || L[i]); return H_{|L|}`.
-
-`ζ_p = BLAKE2s-256( "NIL_SEAL_ZETA" ‖ salt ‖ p ‖ ChunkDigest_{p-1} )`
-
-**Normative (Data Integrity):** `ChunkHashes_{p−1}` MUST commit to the exact byte sequence of pass `p−1`; the method of obtaining those bytes (disk, cache, or RAM) is implementation‑defined and outside consensus.
-
+---
+  
  
+## § 4 Proof‑of‑Useful‑Data (PoUD) & Proof‑of‑Delayed‑Encode (PoDE)  
 
-**Baseline profile (Normative):** The network baseline is profile *S‑512* with **H = 2** (CPU/memory‑hard). Alternative dial profiles listed in § 6.6 are acceptable for poss² (§ 4.5).
-
- 
-
-**Canonical sector identifier:** Replace filesystem `path` in all salts and indices with a canonical `sector_id = Blake2s-256(miner_addr ‖ sector_number)` to prevent miner‑chosen paths from influencing ζ derivation.
-
-
-
-**Rationale:** Using an IteratedHash ensures that `ChunkDigest` depends on the precise ordering of all chunks and enforces strict sequential computation.
-
-Round `p` traverses chunks in the order determined by the PRP defined in § 3.4.1 using the computed `ζ_p`.
-
-*Security intuition* – ζ<sub>p</sub> is **unknowable** until all writes of
-pass `p−1` complete, enforcing sequential work (§ 7.4.1).
-
-\#### 3.4.3 Micro‑seal profile (derivation mode, normative dial)
-
-Dial `micro_seal` controls localized sealing for derivation challenges. When `micro_seal = off` (baseline S‑512), the permutation and ζ‑derivation operate over the entire sector as specified in § 3.4.1–§ 3.4.2.
-
-When `micro_seal = row` (optional profile for PoDE enablement), the sealing transform is localized per 2 MiB row tile:
-
-- Domain separation: All Blake2s invocations used to derive PRP keys and ζ include the row index `i` as an explicit little‑endian field.
-- PRP scope: The Feistel permutation in § 3.4.1 is applied over the set of chunk indices belonging to row `i` only; no cycle‑walk is introduced.
-- ζ derivation: Replace `ζ_p` with `ζ_{p,i} := BLAKE2s-256("NIL_SEAL_ZETA" ‖ salt ‖ u8(p) ‖ u32_le(i) ‖ ChunkDigest_{p-1,i})[0..4)` using the Merkle root restricted to row `i`.
-
-This dial is intended solely to enable fast, row‑local derivations required by § 4.2.2 without altering baseline S‑512 behavior. Profiles enabling `micro_seal = row` MUST publish Annex A/B KATs showing identical digest roots to baseline for `micro_seal = off` when § 4 is not in linking/derivation mode.
-
-\### 3.5 Gaussian Noise Compression
-
-For every 2 KiB window **W** (post‑transform):
-
-```
-σ_Q_100 = ⌊100 · Q / √12⌋             // std‑dev of uniform limb (fixed‑point approximation)
-W' = Quantize( W + N(0, (λ·σ_Q_100 / 10000)²) )
-```
-
-*Quantize* rounds to the nearest valid limb mod `Q`. Noise MUST be generated by a deterministic, constant‑time sampler (e.g., Knuth‑Yao or fixed‑point Ziggurat) using only integer arithmetic to ensure cross‑platform consensus.
-**Normative (RNG & determinism):** The sampler’s pseudorandom stream MUST be derived from SHAKE128 with tag `"NIL_SEAL_NOISE"` and inputs `(salt, sector_digest, row_index, pass, window_index)` using **u64 counter‑mode expansion** starting at counter=0.
-**Normative (RNG Secrecy):** The sampler inputs MUST include the miner-secret `salt` to prevent reversibility by adversaries with knowledge of the original data.
-**Integer‑only & UB‑free:** Implementations MUST use two’s‑complement integers with fixed widths, no floating point, no signed overflow (use widening 64‑bit intermediates), and no implementation‑defined shifts.
-**Constant‑time:** Samplers MUST NOT branch on secret values and MUST consume the full stream (masking) even if rejection occurs.
-**Normative (Quantize tie‑break):** When rounding halfway cases, implementations MUST use ties‑to‑even on the integer preimage before reduction mod `Q` to avoid platform drift. Provide a reference integer pseudocode and KATs to ensure cross‑platform agreement.
-**Sampler conformance (Normative):** Implementations MUST use a table‑driven constant‑time method (alias‑table, Knuth–Yao, or fixed‑point Ziggurat) with precomputed CDF tables baked into KATs. Include KATs for: (i) first 4 CTR blocks of the XOF stream per `(row,window,pass)`; (ii) histogram χ² bounds over 2²⁰ samples; (iii) end‑to‑end determinism across big‑endian/little‑endian targets.
-
-\### 3.6 Row Merkle Tree (PoS²) & Checkpointing
-
-* **Row tree (PoS²):** Leaves are the 64‑byte slices within a 2 MiB row. Each leaf is `Blake2s‑256( 0x00 ‖ leaf64 )`; internal nodes are `B2s( 0x01 ‖ L ‖ R )`. The root of row *i* is `h_row[i]` (DomainID `0x0100`). This tree yields 15 siblings per path (binary).
-* **Checkpoint tree (informative):** Implementations MAY additionally maintain a coarser tree over 2 MiB slices for crash‑resume. This checkpoint tree is not used for `h_row` or `poss²` verification.
-
-\### 3.7 Delta‑Row Accumulator
-
-/* Replaced homomorphic limb sum with collision‑resistant digest. */
-During compression the encoder computes a digest for each 2 MiB row. For row *i* (two windows):
-
-```
-Δ_row[i] = Blake2s-256( W_{2i} ‖ W_{2i+1} )
-delta_head[i] = Blake2s-256("P2Δ" ‖ i ‖ h_row[i] ‖ Δ_row[i])    // Annex A only
-```
-
-Tuple `(h_row[i], delta_head[i])` is written to the **Row‑Commit file** that will be posted on‑chain after sealing.
-
-\### 3.7.1 Origin Map (row→DU binding, normative)
-
-For each row `i` the encoder MUST record an `OriginEntry`:
-
-```
-OriginEntry := { row_id = i, du_id, sliver_index, symbol_range, C_root }
-```
-
-where `C_root` is the DU KZG commitment recorded at deal creation and
-`symbol_range` encodes the contiguous 1 KiB RS symbols from the sliver that occupy row `i`.
-All `OriginEntry` objects MUST be Poseidon‑Merkleized into `origin_root`.
-
-Normative: The sealer MUST output the tuple `(h_row_root, delta_head_root, origin_root)`
-for on‑chain posting. Any PoS² proof MAY be required to include a Merkle proof
-from `origin_root` for the challenged row (see § 4.2.1).
-
-\### 3.8 Reference Encoder (pseudocode)
-
-```rust
-fn seal_sector(path, sector_bytes, miner_sk, params) {
-    let sector_digest = blake2s256(sector_bytes);
-    let sector_id = blake2s256(miner_addr || sector_number);
-    let row_i = blake2s32(sector_id || sector_digest) % rows;
-    let salt  = vrf(miner_sk, row_i);                 // 32 B
-
-    argon2_drizzle_if(params.H, sector_bytes, salt);
-
-    for pass in 0..params.r {
-        let ζ = compute_offset(pass, salt, sector_bytes);
-        for (idx, chunk) in iter_chunks(params.k, ζ, sector_bytes) {
-            ntt_k(chunk);
-            add_salt(chunk, &salt, params.Q);
-            intt_k(chunk);
-            interleave_write(chunk, idx, params.γ, sector_bytes);
-        }
-    }
-    gaussian_compress(sector_bytes, params.λ, params.Q);
-    build_merkle_and_rowcommit(sector_bytes, salt, path);
-}
-```
-
-\### 3.9 Dial Guardrails (normative limits)
-
-| Dial | Range         | Complexity effect | Guard‑rail                            |
-| ---- | ------------- | ----------------- | ------------------------------------- |
-| `k`  | 64 → 256      | CPU ∝ k log k     | `k ≤ 256` fits L3 cache               |
-| `r`  | 2 → 5         | Time ∝ r          | Seal time ≤ 2× network median         |
-| `λ`  | 280 → 500     | Disk ↑            | λ > 400 requires compression‑ratio vote |
-| `m`  | 1 024 → 2 048 | CPU ∝ m²          | Proof size constant                   |
-| `H`  | 0 → 2         | DRAM × H          | H ≤ 2                                 |
-| `γ`  | 0 → 4 MiB     | Seeks ↑           | γ > 0 needs HDD‑impact vote           |
-
-Profiles violating a guard‑rail are **invalid** until approved by governance (§ 6).
-
----
-
-\### 3.10 Performance Targets (baseline hardware, informative)
-
-| Task                   | 4× SATA SSD | 8‑core 2025 CPU |
-| ---------------------- | ----------- | --------------- |
-| Seal 32 GiB            | ≤ 8 min     | ≤ 20 min        |
-| Re‑seal from last leaf | ≤ 1 min     | ≤ 3 min         |
-
----
-
-\### 3.11 Security References
-
-Detailed proofs for sequential‑work and indistinguishability appear in § 7.4.
-
----
-
-*Annex A describes the sealed PoS²‑L scaffold that consumes `h_row` and `delta_head` (scaffold mode). Section § 4 below defines the **PoUD + PoDE** plaintext path (normative).* 
-
-
----
-
- 
-## § 4 Proof‑of‑Useful‑Data (PoUD) & Proof‑of‑Delayed‑Encode (PoDE)  — Normative
-
-\### 4.0a Derive (window‑scoped, normative for PoDE) — moved from § 3.3.1
-Purpose: deterministic, beacon‑salted local transform on a `W`‑byte window (default `W = 8 MiB`) recomputable directly from **plaintext** during PoDE; domain‑separated from full sealing; MUST NOT require a sealed replica.
+### 4.0a Derive (window‑scoped, normative for PoDE)  
+Purpose: deterministic, beacon‑salted local transform on a `W`‑byte window (default `W = 8 MiB`) recomputable directly from **plaintext** during PoDE
 
 ```
 Derive(clear_window, beacon_salt, row_id):
@@ -672,65 +67,43 @@ Derive(clear_window, beacon_salt, row_id):
 
 **Domain separation (normative):** For PoUD/PoDE usage, salt derivation MUST include `epoch_id` and `du_id` in addition to `beacon_salt` and `row_id`, to prevent cross‑deal replay within the same epoch.
 
-\### 4.0 Objective & Model
+### 4.0 Objective & Model
 
 Attest, per epoch, that an SP (a) stores the **cleartext** bytes of their assigned DU intervals and (b) can perform **timed, beacon‑salted derivations** over randomly selected windows quickly enough that fetching from elsewhere is infeasible within the proof window.
 
 **Security anchors:** (i) DU **KZG commitment** `C_root` recorded at deal creation; (ii) BLS‑VRF epoch beacon for unbiased challenges; (iii) on‑chain **KZG multi‑open** pre‑compiles; (iv) watcher‑enforced timing digests.
 
-\### 4.1 DU Representation & Commitment
+### 4.1 DU Representation & Commitment
 
 Let a DU be encoded with systematic RS(n,k) over GF(2⁸) and segmented into **1 KiB symbols**. The client computes a **KZG commitment** `C_root` to the RS‑symbol polynomial(s) at deal creation and posts `C_root` on L2; all subsequent storage proofs **must open against this original commitment**.
 
-\### 4.2 Challenge Derivation
+### 4.2 Challenge Derivation
 
 For epoch `t` with beacon `beacon_t`, expand domain‑separated randomness to pick `q` **distinct symbol indices** per DU interval and `R` **PoDE windows** of size `W = 8 MiB`. Selection MUST be modulo‑bias‑free.
 
-\### 4.3 Prover Obligations per DU Interval
+### 4.3 Prover Obligations per DU Interval
 
 1) **PoUD — KZG‑PDP (content correctness):** Provide KZG **multi‑open** at the chosen 1 KiB symbol indices proving membership in `C_root`.
 2) **PoDE — Timed derivation:** For each challenged window, compute `deriv = Derive(clear_window, beacon_salt, row_id)` and submit `H(deriv)` plus the **minimal** clear bytes for verifier recompute, all **within** the per‑epoch `Δ_submit` window. Enforce **Σ verified bytes ≥ B_min = 128 MiB** over all windows and **R ≥ 16** sub‑challenges/window (defaults; DAO‑tunable).
    **Normative (PoDE Linkage):** The prover MUST provide a KZG opening proof `π_kzg` demonstrating that the `clear_window` input bytes correspond exactly to the data committed in `C_root`.
 
-\### 4.4 Verifier (On‑chain / Watchers)
+### 4.4 Verifier (On‑chain / Watchers)
 
 * **On‑chain:** Verify **KZG multi‑open** against `C_root`; check counters for `R` and `B_min`.
 * **On‑chain (PoDE):** Verify `π_kzg` against `C_root` for the `clear_window`.
 * **Watchers:** Verify PoDE recomputations and timing (RTT‑oracle transcripts). Aggregate pass/fail into an on‑chain digest per SP.
 
-\### 4.5 Coverage & Parameters (Auditor math)
+### 4.5 Coverage & Parameters (Auditor math)
 
 Let DU contain **M** symbols. With **q** fresh symbols per epoch over **T** epochs, the chance any symbol is never checked is `M · (1 − q/M)^T`. Choose `q·T` to push this below δ (e.g., 2⁻¹²⁸) for the DU class. Governance publishes defaults and bounds.
 
-\### 4.6 On‑chain Interfaces (normative)
+### 4.6 On‑chain Interfaces (normative)
 
 L1 **MUST** expose: `verify_kzg_multiopen(...)`, `verify_poseidon_merkle(...)`, `blake2s(bytes)`. Proof acceptance window: `T_epoch = 86 400 s`, `Δ_submit = 30 s`. Per‑replica work bound used by timing invariants: `Δ_work = 1 s`.
 
 ---
 
- 
-## Annex A — PoS²‑L Scaffold *(**Research Supplement**, archived; **non‑normative**, **disabled** in all profiles)*
-
-> **STATUS (Research‑only):** This annex is archived as **`rfcs/PoS2L_scaffold_v1.md`** and is **not part of the canonical Core**. It remains here temporarily for research continuity and will be removed before publication. Mainnet and testnet profiles MUST operate in **plaintext mode** (PoUD + PoDE). Any scaffold activation requires the governance process defined in the Research Supplement.
-
-> This annex preserves the sealed proof protocol for phased rollout/emergency. It binds sealed rows back to DU `C_root` via optional KZG content openings and MAY require PoDE derivations over selected rows. All parameters and witness formats from the legacy PoS² text are retained here, with the delta‑head domain `"P2Δ"` restricted to this annex.
-
-*(Previous § 4 “Proof‑of‑Spacetime‑Squared (poss²)” content follows unchanged.)*
-
-\### 4.0 Objective & Security Model
-
-`poss²` is Nilcoin’s on‑chain **storage‑liveness** protocol. For each epoch `t` it forces a miner to:
-
-1. prove that an *authenticated replica* (sealed in § 3) **still exists on local disk**, and
-2. spend ≥ `Δ/5` wall‑clock time (governance parameter) per replica to recompute it, thus preventing “lazy” proofs.
-
-Soundness relies on:
-
-* The sequential‑work bound of `nilseal` (data‑dependent PRP permutation, § 7.4.1).
-* Collision resistance of Blake2s‑256 and the Merkle tree.
-* The row digest commitment (`delta_head`, § 3.7).
-
-\### 4.1 Replica Layout (“Row/Column Model”)
+### 4.1 Replica Layout (“Row/Column Model”)
 
 * `S`    Sector size (bytes)
 * `rows`  `= S / 2 MiB`             (Row height fixed to 2 MiB)
@@ -747,13 +120,13 @@ cols = 32 768      (indexed 0 … 32 767)
 Row `i` has two 1 MiB windows **W₂i** and **W₂i+1**; their Merkle root is `h_row[i]`.  Their digest `Δ_row[i] = Blake2s‑256(W₂i ‖ W₂i+1)` is committed as `delta_head[i]` (§ 3.7).
 **Merkle arity (normative option):** Implementations MAY use a higher‑arity (e.g., 16‑ary) tree to reduce path length; if so, the sibling count and witness encoding MUST be reflected in § 4.3.1 and Annex B KATs.
 
-\#### 4.1.1 Scaffold profile (optional, normative)
+#### 4.1.1 Scaffold profile (optional, normative)
 
 Let `φ_seal ∈ (0,1]` be the sealed‑row fraction (default `φ_seal = 1/32`). Only rows `i` with `(i mod 1/φ_seal == 0)` are sealed and committed (`h_row`, `delta_head`). PoS² challenges target the sealed subset. Unsealed rows are excluded from PoS² and MUST be covered by PoDE (metaspec § 6.0b).
 
 **Informative (relationship to NilFS shards).** Reed–Solomon shards (metaspec §3.2) are **data‑layer** units that determine where bytes live on the network. After a shard reaches an SP, the shard’s bytes are sealed into **sectors** and committed per this section. PoS² operates on the sealed sector’s **row/column** layout (2 MiB rows, 64 B leaves) independent of how many NilFS shards contributed bytes to that sector. In other words: NilFS sharding affects placement and repair; PoS² attests to liveness and integrity of whatever bytes are sealed in the sector.
 
-\### 4.2 Challenge Derivation (Beacon Mix)
+### 4.2 Challenge Derivation (Beacon Mix)
 
 For epoch counter `ctr` and chain beacon block‑hash `B_t`:
 
@@ -768,7 +141,7 @@ offset = (row * 2 MiB) + (col * 64 B)                        // byte index
 The prover **must** read eight 1 MiB windows covering
 `offset - 3 MiB … offset + 4 MiB` (wrap modulo `S`).  This is **≤ 8 MiB** I/O even when crossing a sector boundary.
 
-\#### 4.2.1 DU Origin Binding (linking mode, normative dial)
+#### 4.2.1 DU Origin Binding (linking mode, normative dial)
 
 Let `p_link ∈ [0,1]` be a governance dial. For a `p_link`‑fraction of challenges in each epoch,
 the prover MUST, in addition to § 4.3, supply:
@@ -785,7 +158,7 @@ the prover MUST, in addition to § 4.3, supply:
 Chains implementing on‑chain KZG precompiles MUST verify (b) on‑chain; otherwise (b) MUST be
 audited by watchers with fraud‑proof slashing.
 
-\#### 4.2.2 PoDE challenges (Proof‑of Delayed Encode, normative dial)
+#### 4.2.2 PoDE challenges (Proof‑of Delayed Encode, normative dial)
 
 Let `p_derive ∈ [0,1]` be a governance dial. For a `p_derive`‑fraction of epochs (or equivalently, of an SP’s per‑epoch challenges), the prover MUST satisfy a derivation challenge tied to the clear DU bytes:
 
@@ -795,106 +168,26 @@ Let `p_derive ∈ [0,1]` be a governance dial. For a `p_derive`‑fraction of ep
 Timing of derivation MUST respect the per‑replica work bounds in § 6.2. Chains with KZG precompiles MUST verify (1) on‑chain; otherwise, auditors MUST verify (1) off‑chain with fraud‑proofs.
 
 `ctr` increments monotonically; replaying an old proof with the same counter is rejected on‑chain.
-
-\### 4.3 Proof Object `Proof64`
-
-```
-struct Proof64 {
-    u16  idx_row;        // little‑endian
-    u16  idx_col;
-    u32  reserved = 0;   // MAY encode {arity: u8, depth: u8} in high/low bytes
-    u8   leaf64[64];          // 64‑byte leaf payload at (row,col)
-    u8   rowPath[480];        // 15 siblings × 32 B = 480 (binary path)
-    u8   rowDelta[32];        // Blake2s‑256(W₂i ‖ W₂i+1)
-    u8   deltaHeadPath[480];  // 15 siblings × 32 B (delta_head[i] inclusion)
-}
-```
-
-\#### 4.3.1 Witness layout (baseline “S‑512”)
-
-| Purpose               | Bytes                   | Encoding                               |
-| --------------------- | ----------------------- | -------------------------------------- |
-| Row Merkle path (15 lev.)  | 15 × 32 = 480 bytes     | Full Blake2s‑256 siblings              |
-| Row digest `Δ`             | 32 bytes                | Blake2s‑256(W₂i ‖ W₂i+1) (separate field, not embedded in `rowPath`) |
-| `delta_head[i]` Merkle path| 15 × 32 = 480 bytes     | Full Blake2s‑256 siblings under `deltaHeadRoot` |
-| **Total**                  | **992 bytes**           |                                        |
-| Header (optional)          | 4 bytes                 | `reserved` MAY carry `{arity, depth}` for non‑binary trees |
-
-**Normative bound:** Per‑sibling truncation is NOT permitted for main‑net profiles aiming for ≥128‑bit security. Higher‑arity trees MAY be used to manage witness size (§ 4.1).
-
-\### 4.4 Prover Algorithm `pos2_prove`
-
-```
-fn pos2_prove(path, row_i, col_j, ρ) -> Proof64 {
-    // 1. Locate 64‑byte leaf at (row_i, col_j)
-    let leaf_offset = row_i*2MiB + col_j*64B;
-    let leaf = read(path, leaf_offset, 64);
-
-    // 2. Build Row Merkle path with full 32‑byte siblings (480 B)
-    let rowPath = full_row_path(row_i, col_j, path);
-
-    // 3. Compute row digest Δ for the specific row being proven (32 B)
-    let W2i   = read(path, row_i*2MiB,        1MiB);
-    let W2i_1 = read(path, row_i*2MiB + 1MiB, 1MiB);
-    let Δ = Blake2s-256(W2i ‖ W2i_1);
-
-    // 4. delta_head[i] under posted root
-    let deltaHead_i = Blake2s-256("P2Δ" ‖ row_i ‖ Δ);
-    let deltaHeadPath = full_delta_head_path(row_i, path);
-
-    // 5. Assemble proof
-    return Proof64 {
-        idx_row = row_i,
-        idx_col = col_j,
-        rowPath = rowPath,
-        rowDelta = Δ,
-        deltaHeadPath = deltaHeadPath,
-    }
-}
-```
-
-\### 4.5 Verifier Logic
-
-On‑chain function `poss2_verify(h_row_root, delta_head_root, proof) → bool`.
-
-```solidity
-function poss2_verify(
-    bytes32 hRowRoot, bytes32 deltaHeadRoot, Proof64 calldata p
-) external pure returns (bool ok) {
-    // --- Row Merkle inclusion check (now with leaf payload) ---
-    bytes32 leaf = blake2s_256(bytes.concat(hex"00", p.leaf64));
-    bytes32 rootRow = reconstruct(leaf, p.rowPath[0:480]);  // 15 siblings (binary path)
-    if (rootRow != hRowRoot) return false;
-
-    // --- Row digest check and delta_head inclusion (bound to h_row[i]) ---
-    // Read Δ from its dedicated field
-    bytes32 Δ = p.rowDelta;
-    bytes32 deltaHead_i = blake2s_256(abi.encode("P2Δ", p.idx_row, rootRow, Δ));
-    bytes32 rootDelta = reconstruct(deltaHead_i, p.deltaHeadPath); // 15 siblings
-    if (rootDelta != deltaHeadRoot) return false;
-
-    return true;
-}
-```
+ 
 
 ## § 4′ Proof‑of‑Useful‑Data (PoUD) — plaintext mode (normative)
 
-\### 4′.0 Scope
+### 4′.0 Scope
 
 PoUD proves (a) content correctness for DU plaintext via KZG openings against `C_root`, and (b) timed derivations (PoDE) over 8 MiB windows to enforce on‑disk locality. It is the PRIMARY proof in plaintext mode (metaspec § 6.0a).
 
-\### 4′.1 Public Inputs
+### 4′.1 Public Inputs
 
 `{ du_id, C_root, epoch_id, indices[], beacon_t, R, B_min }`
 
-\### 4′.2 Prover Obligations
+### 4′.2 Prover Obligations
 
 1) KZG multi‑open for `indices[]` (1 KiB RS symbols) under `C_root`.
 2) For each scheduled 8 MiB window, compute `Derive(clear_window, beacon_salt, row_id)` (§ 3.3.1) and return `(leaf64, Δ_W)`. Derivations MUST complete before `Δ_submit` (metaspec § 7.3).
    **Normative (Cryptographic Timing):** The `Derive` output MUST be used as input to a Verifiable Delay Function (VDF). The proof object includes the VDF output and proof: $\pi_{vdf} = VDF\_Prove(beacon_t, T_{vdf}, \Delta\_W)$. The VDF delay $T_{vdf}$ is governance-tunable and MUST satisfy $T_{derive} + T_{vdf} < \Delta_{submit}$.
 3) Sum of verified bytes ≥ `B_min` and number of completed windows ≥ `R`.
 
-\### 4′.3 Verify API (DA chain precompiles)
+### 4′.3 Verify API (DA chain precompiles)
 
 `verify_poud(C_root, indices[], opens[], bytes[], leaf64[], Δ_W[], \pi_{vdf}[], R, B_min) → bool`
 
@@ -903,33 +196,33 @@ PoUD proves (a) content correctness for DU plaintext via KZG openings against `C
 • Verify VDF proof: $VDF\_Verify(beacon_t, T_{vdf}, \Delta\_W, \pi_{vdf})$.
 • Enforce `R`, `B_min`.
 
-\### 4′.4 Security Notes
+### 4′.4 Security Notes
 
 • Correctness reduces to KZG soundness; timing is cryptographically enforced by the VDF, removing reliance on watcher honesty for PoDE timing.
 • PDP‑PLUS coverage SLO is enforced by scheduler and governance (metaspec § 6.0c).
 
 Gas upper bound (NilStore L1): **≈ 9.7k** assuming a **Blake2s precompile** with cost model `C_hash × (#hashes) + C_misc`. This figure is **chain‑specific** and MUST be re‑benchmarked on parameter changes.
 
-\### 4.6 Performance Targets
+### 4.6 Performance Targets
 
 | Step              | Disk I/O | CPU (ms) | Gas      |
 | ----------------- | -------- | -------- | -------- |
 | Prove (miner)     | ≤ 8 MiB  | ≤ 50     | —        |
 | Verify (on‑chain) | —        | —        | ≤ 10 000 |
 
-\### 4.7 Security Assertions (reference § 7.5)
+### 4.7 Security Assertions (reference § 7.5)
 
 * **Soundness:** Any prover who forges `(row, col)` without the replica must break the collision resistance of Blake2s (Merkle path and row digest Δ).
 * **Sequentiality:** Challenge uses fresh beacon hash `B_t`; proofs prepared in advance fail with overwhelming probability.
 * **Window overlap:** Let β be the independent fault rate per window and let each proof check `w=8` adjacent 1 MiB windows. Over `C` proofs/day, the miss probability is `(1−β)^{wC}`. To achieve ≤2⁻¹¹⁰ with β=0.2 one needs `wC ≥ ceil(110·ln2 / (−ln(1−0.2))) = 342` total windows, i.e., `C ≥ 43` proofs/day for `w=8`. Networks MUST set the per‑replica challenge rate accordingly and publish `C` in the dial profile.
 
-\### 4.8 Versioning
+### 4.8 Versioning
 
 `poss²` is bound to the dial profile.  Changing `(rows, window, hash)` requires a **minor** version bump (§ 0.3) and regenerated Annex B vectors.
 
 ---
 
-\### 4.9 Retrieval Sampling (informative)
+### 4.9 Retrieval Sampling (informative)
 
 Retrieval sampling referenced by the metaspec is an audit‑only mechanism that operates over bandwidth‑receipt Merkle roots (`BW_root`) and watcher verification. It is orthogonal to `poss²` and does not alter circuits or public inputs.
 
@@ -943,7 +236,7 @@ Retrieval sampling referenced by the metaspec is an audit‑only mechanism that 
  
 ## § 5 Nil‑VRF / Epoch Beacon (`nilvrf`)
 
-\### 5.0 Purpose & Design Choice
+### 5.0 Purpose & Design Choice
 
 Nilcoin derives per‑epoch randomness from a **BLS12‑381‑based Verifiable Random Function (VRF)** that is:
 
@@ -956,7 +249,7 @@ DST (normative): `"BLS12381G2_XMD:SHA-256_SSWU_RO_NIL_VRF_H2G"`.
 
 ---
 
-\### 5.1 Notation & Parameters
+### 5.1 Notation & Parameters
 
 | Object | Group | Encoding   | Comment                             |
 | ------ | ----- | ---------- | ----------------------------------- |
@@ -971,9 +264,9 @@ Curve: **BLS12‑381**; subgroup order
 
 ---
 
-\### 5.2 Algorithms (IETF BLS VRF)
+### 5.2 Algorithms (IETF BLS VRF)
 
-\#### 5.2.1 Key Generation
+#### 5.2.1 Key Generation
 
 ```rust
 fn vrf_keygen(rng) -> (sk: Scalar, pk: G1) {
@@ -983,7 +276,7 @@ fn vrf_keygen(rng) -> (sk: Scalar, pk: G1) {
 }
 ```
 
-\#### 5.2.2 Evaluation (`vrf_eval`)
+#### 5.2.2 Evaluation (`vrf_eval`)
 
 ```rust
 fn vrf_eval(sk: Scalar, pk: G1, msg: &[u8]) -> (y: [u8;32], π: G2) {
@@ -996,7 +289,7 @@ fn vrf_eval(sk: Scalar, pk: G1, msg: &[u8]) -> (y: [u8;32], π: G2) {
 
 *The output `y` is the VRF value (32 B); `π` is the proof (96 B).*
 
-\#### 5.2.3 Verification (`vrf_verify`)
+#### 5.2.3 Verification (`vrf_verify`)
 
 ```rust
 fn vrf_verify(pk: G1, msg: &[u8], y: [u8;32], π: G2) -> bool {
@@ -1011,7 +304,7 @@ Security follows directly from the EUF‑CMA security of BLS signatures under th
 
 ---
 
-\### 5.3 Epoch Beacon ( solo miner )
+### 5.3 Epoch Beacon ( solo miner )
 
 For epoch counter `ctr`:
 
@@ -1024,9 +317,9 @@ The 32‑byte `beacon_t` feeds **§ 4.2** challenge derivation and seeds the r
 
 ---
 
-\### 5.4 BATMAN Threshold Aggregation (t ≥ 2/3)
+### 5.4 BATMAN Threshold Aggregation (t ≥ 2/3)
 
-\#### 5.4.1 Setup
+#### 5.4.1 Setup
 
 * Committee size `N`; threshold `t = ⌈2N/3⌉`.
 * Polynomial secret sharing: master key `s (= sk_master)` split into `sk_i = f(i)` degree `d = N−t`.
@@ -1034,7 +327,7 @@ The 32‑byte `beacon_t` feeds **§ 4.2** challenge derivation and seeds the r
 * Proof of Possession (PoP): each participant MUST provide a signature `pop_i = Sign(sk_i, pk_i)` during registration to prevent rogue‑key attacks.
 * Constant public coefficients for Lagrange interpolation modulo `r`.
 
-\#### 5.4.2 Per‑epoch share posting
+#### 5.4.2 Per‑epoch share posting
 
 Each participant `i` publishes `(pk_i, π_i)` where
 
@@ -1044,7 +337,7 @@ Each participant `i` publishes `(pk_i, π_i)` where
 
 No `y_i` is required.
 
-\#### 5.4.3 Aggregator
+#### 5.4.3 Aggregator
 
 Collect any `t` valid shares; compute Lagrange coefficients `λ_i` in ℤ\_r:
 
@@ -1068,7 +361,7 @@ share_id_i := Blake2s‑256("BATMAN-SHARE" ‖ compress(pk_i) ‖ u64_le(epoch_c
 
 Publish `(π_agg, pk_agg)` where `pk_agg = Σ λ_i · pk_i`.
 
-\#### 5.4.4 On‑chain Verification & Beacon
+#### 5.4.4 On‑chain Verification & Beacon
 
 ```solidity
 function verify_beacon(
@@ -1088,7 +381,7 @@ function verify_beacon(
 
 ---
 
-\### 5.5 Parameter Changes & Versioning
+### 5.5 Parameter Changes & Versioning
 
 | Parameter                     | Governance tier | Effect                          |
 | ----------------------------- | --------------- | ------------------------------- |
@@ -1100,7 +393,7 @@ All changes require updated KATs in Annex A.5.
 
 ---
 
-\### 5.6 Known‑Answer Tests (Annex A.5)
+### 5.6 Known‑Answer Tests (Annex A.5)
 
 * Deterministic `vrf_keygen` seeds via ChaCha20(`seed=1`).
 * Solo VRF vectors: `(msg, pk, π, y)`.
@@ -1108,7 +401,7 @@ All changes require updated KATs in Annex A.5.
 
 ---
 
-\### 5.7 Sampling Seed & Expansion (normative)
+### 5.7 Sampling Seed & Expansion (normative)
 
 NilStore’s retrieval‑sampling RNG derives from the epoch beacon and does not interact with any `poss²` circuit.
 
@@ -1136,7 +429,7 @@ Notes:
 
 ## § 6 Governance‑Tunable Dial Policy
 
-\### 6.0 Governance Bodies
+### 6.0 Governance Bodies
 
 | Abbrev. | Role                                         | Quorum / Majority       |
 | ------- | -------------------------------------------- | ----------------------- |
@@ -1146,7 +439,7 @@ Notes:
 
 The **Council** enacts parameter changes after receiving a recommendation from the Technical Committee and, when required, consent of the Miner Caucus.
 
-\### 6.1 Tunables & Version Impact
+### 6.1 Tunables & Version Impact
 
 | Parameter        | Symbol | Units  | Version bump           |
 | ---------------- | ------ | ------ | ---------------------- |
@@ -1162,7 +455,7 @@ The **Council** enacts parameter changes after receiving a recommendation from t
 | PoDE sub‑challs  | `R`    | count  | **governance runtime** |
 | Verified bytes   | `B_min`| bytes  | **governance runtime** |
 
-\### 6.2 Security Invariant
+### 6.2 Security Invariant
 
 **Plaintext primacy:** All content checks and repairs **open against `C_root`** (cleartext).
 
@@ -1181,7 +474,7 @@ t_recreate_replica(row)  ≥  5 · Δ_work
 * **NTT block size:** `k ≥ 64`; increases require updated Annex A KATs.
 * **Challenge sampling:** Modulo‑bias‑free selection required (§ 4.2); profiles that change `rows`/`cols` MUST preserve this.
 
-\### 6.3 Review Cadence & Metrics
+### 6.3 Review Cadence & Metrics
 
 * **Quarterly Review** – Technical Committee publishes anonymised telemetry:
 
@@ -1192,7 +485,7 @@ t_recreate_replica(row)  ≥  5 · Δ_work
 
 * **Trigger condition** – If ≥ 75 % of proofs arrive in < 0.3 Δ, the TC issues a **dial‑tightening recommendation**.
 
-\### 6.4 Adjustment Rule‑Set
+### 6.4 Adjustment Rule‑Set
 
 Priority order (apply only one per quarter):
 
@@ -1204,7 +497,7 @@ Priority order (apply only one per quarter):
 |  4   | ↑ `λ` by 20 (fixed‑point)             | `λ ≤ 500`               |
 |  5   | Set `γ = 4 MiB` *(requires MC vote)* | HDD impact analysis     |
 
-\### 6.5 Proposal & Activation Timeline
+### 6.5 Proposal & Activation Timeline
 
 | Phase                                | Duration | Required vote                 |
 | ------------------------------------ | -------- | ----------------------------- |
@@ -1219,7 +512,7 @@ A failed vote resets the dial to its previous state.
 
 **Window finalization rule (normative):** During each timeline phase or audit window, any task that is **started** MUST be **finished** within that window by publishing its transcript in `_artifacts/` (added to `SHA256SUMS`). Incomplete changes are **reverted** before the window closes; partial artifacts MUST NOT be carried forward.
 
-\### 6.6 Frozen Reference Profiles
+### 6.6 Frozen Reference Profiles
 
 | ID           | Purpose              | m     | k   | r | λ   | H | γ     | Δ    |
 | ------------ | -------------------- | ----- | --- | - | --- | - | ----- | ---- |
@@ -1228,7 +521,7 @@ A failed vote resets the dial to its previous state.
 
 Profile strings are **immutable identifiers**; new profiles append rows.
 
-\### 6.7 Governance Dials (linking/derivation)
+### 6.7 Governance Dials (linking/derivation)
 
 The following protocol dials control optional content‑binding and derivation workload. All changes MUST respect the chain’s Verification Load Cap (metaspec § 6.1) and follow § 6.5.
 
@@ -1251,14 +544,14 @@ Guard‑rails:
 
 ## § 7 Security Rationale & Proofs
 
-\### 7.1 Threat Model & Goals
+### 7.1 Threat Model & Goals
 
 * Adversaries may control arbitrary compute and storage, but not break standard cryptographic assumptions.
 * Goal 1 — **Sound replication**: forging a proof without the replica requires ≥ ε‑negligible probability.
 * Goal 2 — **Sequential work**: recomputing a replica in time < `Δ/5` is infeasible.
 * Goal 3 — **Bias‑free randomness**: beacon output unpredictable until VRF proofs are posted.
 
-\### 7.2 Core Assumptions
+### 7.2 Core Assumptions
 
 | #    | Assumption                                     | Reference      |
 | ---- | ---------------------------------------------- | -------------- |
@@ -1268,41 +561,41 @@ Guard‑rails:
 |  A4  | Disk bandwidth ≥ 400 MB/s (SSD profile)        | 2025 median    |
 
  
-\### 7.3 `nilfield` + `nilhash`
+### 7.3 `nilfield` + `nilhash`
 
 * **Binding** – Under the enforced bound `||r||_∞ ≤ β` (verified by π), two openings (x,r) ≠ (x′,r′) yield a **short non‑zero** kernel vector `(Δx,Δr)` of `(A‖B)` with `||Δx||_∞ ≤ 4095` (12‑bit limbs) and `||Δr||_∞ ≤ 2β` (=8190). Since A and B are circulant, finding such a vector solves an instance of **Module‑SIS** over 𝔽_q (or 𝔽_{q₁}×𝔽_{q₂} under CRT) at parameters (m,q,β) (Assumption A3).
 * **Hiding** – The commitment is statistically revealing (see § 2.2).
 
-\### 7.4 `nilseal`
+### 7.4 `nilseal`
 
-\#### 7.4.1 Sequential‑Work Proof
+#### 7.4.1 Sequential‑Work Proof
 
 * Pass `p` depends on `ζ_p` (256-bit), a Blake2s‑256 hash (with domain tag "NIL_SEAL_ZETA") of the IteratedHash over per‑chunk Blake2s‑256 digests of pass `p−1` data.
 * Any strategy to pipeline passes must predict 256‑bit hash pre‑images → breaks Assumption A1.
 
 Hence an adversary must complete pass `p−1` before starting pass `p`, giving a lower‑bound time `≥ r · S / disk_bw`.
 
-\#### 7.4.2 Replica Indistinguishability
+#### 7.4.2 Replica Indistinguishability
 
 Gaussian noise (σ set by `λ`, § 3.5) aims to mask structure; precise entropy depends on σ relative to `Q` and quantization. Implementations MUST publish empirical tests (min‑entropy estimate and χ²) for the active `λ`, and the specification makes **no unconditional ≤2⁻¹²⁸** distance claim without that evidence.
 
-\### 7.5 PoUD + PoDE (plaintext)
+### 7.5 PoUD + PoDE (plaintext)
 
 * **Soundness (PoUD):** Forging a membership opening without holding the symbol set breaks KZG binding.
 * **Timing (PoDE):** Window‑local `Derive` is beacon‑salted and re‑computable from plaintext only; providing it within `Δ_submit` implies local possession given `Δ_work` vs network RTT and disk bandwidth assumptions.
 * **Full‑file coverage:** With q·T chosen per § 4.5, the probability of any symbol escaping audit is ≤ δ for the declared DU class.
 
-\### 7.6 (Annex A) PoS²‑L
+### 7.6 (Annex A) PoS²‑L
 See Annex A for sealed‑replica assertions; not active in the baseline mode.
 
  
-\### 7.7 `nilvrf`
+### 7.7 `nilvrf`
 
 * **Uniqueness** – BLS signature uniqueness (Assumption A2).
 * **Pseudorandomness** – EUF‑CMA security ⇒ VRF pseudorandomness under random‑oracle model (A1, A2).
 * **BATMAN soundness** – With ≥ t shares, Lagrange coefficients reconstruct the master secret’s signature; forging output without t shards breaks BLS.
 
-\### 7.7 Composition
+### 7.7 Composition
 
 * Beacon unpredictability (VRF) feeds seal offset; circularity avoided because VRF input (epoch counter) is independent of replica data.
 * Replay attacks blocked by `ctr` monotonicity (Section 4.2).
