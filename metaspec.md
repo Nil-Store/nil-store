@@ -28,6 +28,8 @@ NilStore retains strong cryptographic guarantees while reducing the "sealing" pr
 *   **Hybrid Settlement:** A specialized L1 for efficient proof verification bridged via ZK-Rollup to an EVM L2 for liquidity and composability.
 
 ## 2. System Architecture
+Manifest & crypto policy follow Core Appendix A (Root CID, DU CID, HPKE FMK wraps, HKDF‑derived CEKs, AES‑GCM per DU).
+
 
 NilStore employs a hybrid architecture that decouples Data Availability (DA) consensus from economic settlement, optimizing for both cryptographic efficiency and ecosystem composability.
 
@@ -388,7 +390,39 @@ Additional dial (content‑audited receipts):
 #### 6.3.5 Security & Liveness
 Sampling renders expected value of receipt fraud negative under rational slashing. Unlike asynchronous challenges that pause reads, NilStore maintains continuous liveness; PoS² remains valid regardless of sampling outcomes.
 
+
+### 6.4  Bandwidth‑Driven Redundancy (Normative)
+
+NilStore aligns replica count and provider selection with observed demand and measured provider capability:
+
+1) **Heat Index.** For DU `d` at epoch `e`, define `H_e(d)` as an EMA over verifiable retrieval receipts (served bytes; p95 latency), half‑life `τ`. Watchers aggregate via BATMAN.
+
+2) **Target Redundancy & Lanes.** Redundancy `r_e(d) = clamp(r_min, r_max, ceil(H_e / μ_target))`. The number of parallel client lanes `m(req) = clamp(1, m_max, ceil(B_req / μ_conn))`.
+
+3) **Placement (WRP).** The per‑DU provider set is chosen by **weighted rendezvous hashing** on `(du_id, epoch)`, with weight `w_i = f(cap_i, conc_i, rel_i, price_i, geo_fit)` derived from **Provider Capability Vectors (PCV)** and watcher probes. Clients stripe requests across the top‑score providers (m lanes), failing over to the next candidates if SLA is not met.
+
+4) **Hot replicas.** When `H_e(d)` crosses tier `T_hot(k)`, a VRF committee assigns `Δr` short‑TTL replicas to additional providers chosen by the same WRP. Providers post a `bond_bw`; rewards per verified byte follow `R_hot(H)`. Replicas expire when `H_e(d) < T_cool(k)` (hysteresis).
+
+5) **Receipts.** Per‑chunk receipts commit to `{du_id, chunk_id, bytes, t_start, t_end, rtt, p99, client_nonce, provider_id}` with provider signatures. Receipts aggregate into `BW_root` per provider per epoch. Rewards apply only if quality factor `q ≥ q_floor`.
+
+
 ## 7. The Deal Lifecycle
+
+
+### 7.y  Bandwidth Receipts & BW_root (Normative)
+
+- **Receipt schema:** `{ du_id, chunk_id, bytes, t_start, t_end, rtt_ms, p99_ms, client_nonce, provider_id, payer_id?, sig_provider }` hashed under `"BW-RECEIPT-V1"`.
+- **Aggregation:** leaves → Poseidon Merkle → `"BW-ROOT-V1"`; providers submit `(provider_id, epoch, BW_root, served_bytes, med_latency, agg_sig)`.
+- **Eligibility:** payer‑funded (uploader or sponsor); fraud screens (mono‑ASN discount); watcher sampling.
+
+
+### 7.x  L2 Registries & Calls (New)
+
+- `register_pcv(provider_id, PCV, proof_bundle)` — Provider Capability Vector registry; watcher probes attached and aggregated via BATMAN.
+- `submit_bw_root(provider_id, epoch, BW_root, served_bytes, med_latency, agg_sig)` — Aggregation of per‑chunk receipts into a per‑epoch bandwidth root.
+- `spawn_hot_replicas(du_id, epoch, Δr, TTL)` — VRF‑mediated hot‑replica assignment; requires capacity bonds and enforces TTL/hysteresis.
+
+
 
 ### 7.1 Quoting and Negotiation (Off-Chain)
 
@@ -468,6 +502,12 @@ To manage systemic risk and enable sophisticated financial instruments, NilStore
     **Normative (Oracle Dampening and Management):** The function $f(\sigma, \sigma_{price})$ MUST incorporate a dampening mechanism (e.g., a 30-day Exponential Moving Average) to prevent sudden spikes in collateral requirements. A mechanism for collateral top-ups for existing deals MUST be defined, including a grace period (default 72 hours) before liquidation/slashing.
 
 ## 9. Governance (NilDAO)
+
+### 9.x  Bandwidth Quota, Auto‑Top‑Up & Sponsors (Normative)
+
+The protocol uses a **hybrid** bandwidth model: each file has an **included quota** (budget reserved per epoch from uploader deposits in $STOR, converted to $BW on verified receipts). On exhaustion, the file enters a **grace tier** with reduced placement weight until **auto‑top‑up** or **sponsor** budgets restore full weight. APIs: `set_quota`, `set_auto_top_up`, `sponsor`. Governance sets `w_grace`, roll‑over caps, region multipliers, price bands, sponsor caps, and ASN/geo abuse discounts.
+
+
 
 The network is governed by the NilDAO, utilizing stake-weighted ($STOR) voting on the L2 Settlement Layer.
 
