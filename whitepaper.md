@@ -49,7 +49,7 @@ The Data Availability Chain is a minimal L1 (built using Cosmos-SDK/Tendermint B
 
 Settlement occurs on a ZK-Rollup (using PlonK/Kimchi) bridged to a major EVM ecosystem.
 
-  * **Function (One‑Token Profile):** Manages **$STOR only**, mints Deal NFTs, hosts the NilDAO, and executes **$STOR‑denominated** settlement for storage and bandwidth. **Non‑$STOR assets are out‑of‑scope** for protocol contracts; any conversions happen off‑protocol.
+  * **Function (One‑Token Profile):** Manages **\$STOR only**, mints Deal NFTs, hosts the NilDAO, and executes **\$STOR‑denominated** settlement for storage and bandwidth. **Non‑\$STOR assets are out‑of‑scope** for protocol contracts; any conversions happen off‑protocol.
 
 ### 2.4 The ZK-Bridge
 
