@@ -41,8 +41,10 @@ A **dial profile** defines the core cryptographic parameters and the Proof-of-De
 | `r`    | BLS12-381 subgroup order                   | (See §5.1)                      |
 | `Nonce`| Profile Nonce (high-entropy)               | 0x1A2B3C4D5E6F7890AABBCCDDEEFF0011 (example) |
 | `H_t`  | PoDE Argon2id time cost (iterations)       | 3 (Calibrated for Δ_work=1s)    |
-| `H_m`  | PoDE Argon2id memory cost (KiB)            | 524288 (512 MiB)                |
+| `H_m`  | PoDE Argon2id memory cost (KiB)            | 1048576 (1 GiB)                 |
 | `H_p`  | PoDE Argon2id parallelism                  | 1 (Mandatory Sequential)        |
+
+**Normative (PoDE Recalibration):** The NilDAO MUST establish a process for periodically monitoring baseline hardware performance and recalibrating the `H_t` and `H_m` parameters to ensure the target `Δ_work` (1s) is maintained. Recalibration requires a Minor version increment (§0.3) and MUST be announced with sufficient lead time (minimum 30 days).
 
 Dial parameters are **frozen** per profile string (e.g., `"S-512"`).  Changes introduce a new profile ID (see § 6).
 
@@ -81,7 +83,7 @@ For transparency and auditability, Core defines the following fixed ASCII domain
 | Tag                  | Purpose                                  | Section    |
 | -------------------- | ---------------------------------------- | ---------- |
 | `"NIL_VRF_OUT"`     | VRF output compression                    | § 5.2      |
-| `"NIL_VRF_H2G"`     | VRF hash_to_G2 DST                        | § 5.2      |
+| `"BLS12381G2_XMD:SHA-256_SSWU_RO_NIL_VRF_H2G"` | VRF hash_to_G2 DST                        | § 5.0, 5.2 |
 | `"NIL_BEACON"`      | Epoch beacon derivation from VRF output   | § 5.3      |
 | `"NilStore-Sample"` | Retrieval‑sampling seed from epoch beacon | § 5.7 (new) |
 | `"SAMPLE-EXP"`      | PRF expansion for sampling indices        | § 5.7 (new) |
@@ -120,9 +122,11 @@ Derive(clear_window: bytes, beacon_salt: bytes,
 ```
 tag  = "PODE_DERIVE_ARGON_V1"
 salt = Blake2s-256(tag ‖ beacon_salt ‖ u32_le(row_id) ‖ u64_le(epoch_id) ‖ u128_le(du_id))
+// Hash the input data to ensure high entropy input to Argon2id, mitigating TMTO risks with low-entropy data.
+input_digest = Blake2s-256("PODE_INPUT_DIGEST_V1" ‖ clear_window)
 // Parameters (H_t, H_m, H_p) are defined by the Dial Profile (§0.2).
-// H_p MUST be 1 to enforce sequentiality. Parameters MUST be calibrated to meet Δ_work.
-acc = Argon2id(password=clear_window, salt=salt, t_cost=H_t, m_cost=H_m, parallelism=H_p, output_len=64)
+// H_p MUST be strictly 1 to enforce sequentiality. Implementations MUST reject profiles where H_p != 1.
+acc = Argon2id(password=input_digest, salt=salt, t_cost=H_t, m_cost=H_m, parallelism=1, output_len=64)
 leaf64 := acc
 Δ_W    := Blake2s-256(clear_window)
 return (leaf64, Δ_W)
@@ -139,7 +143,11 @@ Attest, per epoch, that an SP (a) stores the **cleartext** bytes of their assign
 ### 4.1 DU Representation & Commitment
 A **Data Unit (DU)** is the canonical chunking unit used for commitment and sampling.
 
-Let a DU be encoded with systematic RS(n,k) over GF(2⁸) and segmented into **1 KiB symbols**. The client computes a **KZG commitment** `C_root` to the RS‑symbol polynomial(s) at deal creation and posts `C_root` on L2; all subsequent storage proofs **must open against this original commitment**.
+Let a DU be encoded with systematic RS(n,k) over GF(2⁸) and segmented logically into **1 KiB symbols**.
+
+**Normative (KZG Embedding):** To commit the data using KZG (which operates over the BLS12-381 scalar field), the DU data MUST be serialized and chunked into 31-byte elements. Each chunk is interpreted as an integer (little-endian) and embedded as a field element. The KZG commitment `C_root` is computed over the polynomial formed by these field elements.
+
+The client computes `C_root` at deal creation and posts `C_root` on L2; all subsequent storage proofs **must open against this original commitment**.
 
 ### 4.1.1 KZG Structured Reference String (SRS) (Normative)
 
@@ -200,7 +208,7 @@ DST (normative): `"BLS12381G2_XMD:SHA-256_SSWU_RO_NIL_VRF_H2G"`.
 | ------ | ----- | ---------- | ----------------------------------- |
 | `pk`   | `G1`  | 48 B comp. | `pk = sk·G₁`                        |
 | `π`    | `G2`  | 96 B comp. | Proof (BLS signature)               |
-| `H`    | `G2`  | 96 B       | `H = hash_to_G2("NIL_VRF_H2G", msg)` |
+| `H`    | `G2`  | 96 B       | `H = hash_to_G2("BLS12381G2_XMD:SHA-256_SSWU_RO_NIL_VRF_H2G", msg)` |
 | `e`    | —     | —          | Optimal Ate pairing `e: G1×G2→G_T`  |
 | `Hash` | —     | 32 B       | Blake2s‑256, domain `"NIL_VRF_OUT"` |
 
@@ -225,7 +233,7 @@ fn vrf_keygen(rng) -> (sk: Scalar, pk: G1) {
 
 ```rust
 fn vrf_eval(sk: Scalar, pk: G1, msg: &[u8]) -> (y: [u8;32], π: G2) {
-    H = hash_to_G2("NIL_VRF_H2G", msg); // RFC 9380 Simple SWU with DST
+    H = hash_to_G2("BLS12381G2_XMD:SHA-256_SSWU_RO_NIL_VRF_H2G", msg); // RFC 9380 Simple SWU with DST
     π = sk · H;                          // BLS signature
     y = Blake2s-256("NIL_VRF_OUT" ‖ compress(pk) ‖ compress(H) ‖ compress(π));
     return (y, π);
@@ -238,7 +246,7 @@ fn vrf_eval(sk: Scalar, pk: G1, msg: &[u8]) -> (y: [u8;32], π: G2) {
 
 ```rust
 fn vrf_verify(pk: G1, msg: &[u8], y: [u8;32], π: G2) -> bool {
-    H   = hash_to_G2("NIL_VRF_H2G", msg);
+    H   = hash_to_G2("BLS12381G2_XMD:SHA-256_SSWU_RO_NIL_VRF_H2G", msg);
     ok  = (e(pk, H) == e(G1_GENERATOR, π));      // one pairing + eq
     y′  = Blake2s-256("NIL_VRF_OUT" ‖ compress(pk) ‖ compress(H) ‖ compress(π));
     return ok && (y′ == y);
@@ -299,9 +307,9 @@ Collect any `t` valid shares; compute Lagrange coefficients `λ_i` in ℤ\_r:
 share_id_i := Blake2s‑256("BATMAN-SHARE" ‖ compress(pk_i) ‖ u64_le(epoch_ctr))
 ```
   (c) **Grinding Mitigation (Normative):** Let `Seed_select` be the finalized beacon of the previous epoch (`beacon_{t-1}`). This seed is fixed before share posting begins.
-  (d) If the candidate set size > t, select the `t` shares that minimize `HMAC-SHA256(Key=Seed_select, Message=share_id_i)`.
+  (d) **Canonical Set Definition (Normative):** Compute `Score_i = HMAC-SHA256(Key=Seed_select, Message=share_id_i)` for all shares in the candidate set. The canonical aggregation set is strictly defined as the `t` shares with the lowest `Score_i` values (using `share_id_i` as a deterministic tie-breaker if scores collide).
 
-Publish `(π_agg, pk_agg)` where `pk_agg = Σ λ_i · pk_i`.
+The aggregator MUST use this canonical set to compute and publish `(π_agg, pk_agg)` where `pk_agg = Σ λ_i · pk_i`.
 
 #### 5.4.4 On‑chain Verification & Beacon
 
@@ -310,7 +318,7 @@ function verify_beacon(
     bytes48 pkAgg, bytes96 piAgg, bytes8 ctr
 ) returns (bytes32 beacon)
 {
-    G2 H = hash_to_G2("NIL_VRF_H2G", ctr);
+    G2 H = hash_to_G2("BLS12381G2_XMD:SHA-256_SSWU_RO_NIL_VRF_H2G", ctr);
     require( pairing(pkAgg, H) == pairing(G1_GEN, piAgg) );
     bytes32 y  = blake2s256(
         "NIL_VRF_OUT" ‖ compress(pkAgg) ‖ compress(H) ‖ compress(piAgg)
@@ -383,6 +391,7 @@ NilStore uses a content‑addressed **file manifest** (Root CID) that enumerates
 - **Normative (Deterministic Key/Nonce Derivation):**
 - (CEK_32B, Nonce_12B) = HKDF-SHA256(IKM=FMK, info="DU-KEYS-V1" || du_id, L=44).
 - AEAD: AES-256-GCM using the derived CEK and the deterministic 96-bit (12-byte) Nonce.
+  **Normative (Security Warning - Nonce Reuse):** The security of AES-GCM is catastrophically broken if a (Key, Nonce) pair is reused. The deterministic derivation above is secure ONLY under the strict assumption that DUs are immutable (Write-Once) and that `du_id` is unique for every distinct plaintext under the same FMK.
 - Rekey by adding/removing FMK wraps; delete by crypto-erasure (remove wraps).
 
 <!-- Appendices B–F excised: application-level material lives in metaspec. -->

@@ -120,6 +120,7 @@ Notes:
 - `epoch_written` records the epoch the DU was first committed and is REQUIRED for routing (§7.4).
 - `meta_root` (Poseidon) and `meta_scheme` are REQUIRED when the resolved profile uses encoded metadata (all RS‑2D‑Hex profiles; optional for RS).
 - Fields marked `?` are present if required by the resolved profile and/or metadata scheme (see §3.2.y–§3.2.z).
+**Normative (Anti-Grinding):** `ClientSalt_32B` MUST be derived deterministically from the client's signature over the Deal parameters (e.g., `Blake2s-256("NILSTORE-SALT-V1" || Sig_Client)`) to prevent placement grinding.
 
 *   **Deterministic Placement (Nil-Lattice):** Shards are placed on a directed hex-ring lattice to maximize topological distance. The coordinate (r, θ) is determined by:
     `pos := Hash(CID_DU ∥ ClientSalt_32B ∥ SlotIndex) → (r, θ)`
@@ -218,11 +219,14 @@ NilDAO maintains the mapping table (durability target → profile), caps allowed
 The network autonomously maintains durability through a bounty system.
 
 1.  **Detection:** If DU availability drops below the resilience threshold (e.g., k+1), a `RepairNeeded` event is triggered.
-2.  **Execution:** Any node can reconstruct the missing shards **and MUST produce openings against the original DU KZG commitment** (no new commitment is accepted). The repair submission includes a Merkle proof to the DU’s original `C_root` plus KZG openings for the repaired shards.
-3.  **Resilience Bounty:** The first node to submit proof of correct regeneration claims the bounty (default: 5% of the remaining escrowed fee for that DU).
+2.  **Commitment (Commit-Reveal Phase 1):** Repair nodes reconstruct the missing shards. They compute `Commitment = Hash(RepairSolution ∥ Nonce)` and submit this commitment on-chain with a refundable bond during the commitment window (`Δ_commit`).
+3.  **Reveal (Commit-Reveal Phase 2):** Nodes submit the `RepairSolution` and `Nonce` during the reveal window (`Δ_reveal`). The solution MUST include openings against the original DU KZG commitment (no new commitment accepted) and a Merkle proof to the DU’s original `C_root`.
+4.  **Verification and Bounty:** The L1 chain verifies the solution. The Resilience Bounty (default: 5% of the remaining escrowed fee) is awarded to the earliest valid commitment. Bonds for valid solutions are refunded; others are burned.
 
 **Normative (Anti‑withholding):** When a repair for shard `j` is accepted, the SP originally assigned `j` incurs an immediate penalty on their bonded $STOR strictly greater than the repair bounty (Default: Penalty = 1.5 × Bounty), in addition to an automatic demerit. Repeated events within a sliding window escalate to further slashing unless the SP supplies signed RTT‑oracle transcripts proving inclusion in a whitelisted incident.
+**Normative (Anti‑withholding Slashing):** The penalty for failing to maintain a shard (triggering a repair) MUST be a significant fraction of the SP's bonded collateral for that specific DU (Default: 25% of the DU collateral), independent of the PoUD/PoDE slashing schedule.
 **Normative (Collocation Filter):** An identity is disqualified from claiming bounty on any shard it was previously assigned for `Δ_repair_cooldown` epochs (DAO‑tunable). Furthermore, any identity within the same /24 IPv4 (or /48 IPv6) OR the same ASN **for the same window** is likewise disqualified. Cooldown MUST be ≥ 2× mean repair time.
+    **Normative (RTT Profile Similarity):** The Collocation Filter MUST incorporate RTT profile data from the QoS Oracle (§4.2). If the RTT profiles of two SPs exhibit statistically significant similarity (defined by a governance-tunable correlation threshold) across diverse vantage points, they MUST be treated as collocated, regardless of their IP/ASN.
     **Normative (Dynamic Bounty):** The bounty MUST be dynamically adjusted based on the urgency of the repair, the cost of reconstruction, and network conditions (DAO‑tunable parameters).
 
 ## 4. Network Layer (Nil-Mesh)
@@ -248,10 +252,13 @@ Verifiable Quality of Service (QoS) is crucial for performance and security.
 *   **Attestation:** Nodes continuously monitor and sign Round-Trip Time (RTT) attestations with peers.
 *   **On‑Chain Oracle:** A **stake‑weighted attester set** posts RTT digests (Poseidon Merkle roots) to the DA chain. **Normative**:
     1) **Challenge‑response**: clients issue random tokens; SPs must echo tokens within `T_max`; vantage nodes verify end‑to‑end.
-    2) **VDF Enforcement (Mandatory Baseline + Conditional Escalation):** Every attestation MUST include a short-delay VDF proof (Baseline VDF). If the anomaly rate exceeds `ε_sys` for ≥ 3 consecutive epochs, the VDF delay is increased (Conditional Escalation) until the anomaly rate drops for 2 consecutive clean epochs. Total VDF cost per probe is capped by the **Verification Load Cap** (§ 6.1). Protocol MUST publish the current VDF parameters (delay, modulus) on‑chain per epoch.
+    2) **VDF Enforcement (Mandatory Baseline + Conditional Escalation):** Every attestation MUST include a short-delay VDF proof (Baseline VDF).
+       **Normative (VDF Anchoring):** The VDF input MUST include the random challenge token issued by the client/attester. The VDF MUST be computed after receiving the challenge and before transmitting the response, proving the delay occurred within the RTT measurement window and preventing pre-computation.
+       If the anomaly rate exceeds `ε_sys` for ≥ 3 consecutive epochs, the VDF delay is increased (Conditional Escalation) until the anomaly rate drops for 2 consecutive clean epochs. Total VDF cost per probe is capped by the **Verification Load Cap** (§ 6.1). Protocol MUST publish the current VDF parameters (delay, modulus) on‑chain per epoch.
     3) **Diversity & rotation**: The attester set MUST achieve a minimum diversity score (e.g., Shannon index over ASN/Region distribution) defined by governance (default: score equivalent to uniform distribution over ≥ 5 regions and ≥ 8 ASNs). Assignments are epoch‑randomized and **committed on‑chain** (rotation proof) before measurements begin.
     4) **Slashing**: equivocation or forged attestations are slashable with on‑chain fraud proofs (submit raw transcripts).
     5) **Sybil control**: weight attesters using **quadratic weighting** of bonded $STOR (weight ∝ √STOR) to reduce the influence of large stakeholders. Apply decay weights for co‑located /24s and ASNs.
+    **Normative (Influence Cap):** The total weight of any single entity or correlated group (defined by ASN/Region cluster or RTT Profile Similarity (§3.3)) MUST NOT exceed 20% of the total attester weight (DAO-tunable cap).
 *   **Usage:**
     1.  **Path Selection:** Clients use the Oracle to select the fastest 'k' providers.
     2.  **Fraud Prevention:** The Oracle verifies that bandwidth receipts are genuine (verifying RTT > network floor), preventing Sybil self-dealing.
@@ -322,17 +329,19 @@ On‑chain: L1 verifies KZG openings (precompile § 2.2) and checks `B_min` & 
 To account for bandwidth, clients sign receipts upon successful retrieval.
 
 *   **Receipt Schema (Normative):**
-    `Receipt := { CID_DU, Bytes, ChallengeNonce, ExpiresAt, Tip_BW, Miner_ID, Client_Pubkey, Sig_Ed25519 [, GatewaySig?] }`
+    `Receipt := { CID_DU, Bytes, EpochID, ChallengeNonce, ExpiresAt, Tip_BW, Miner_ID, Client_Pubkey, Sig_Ed25519 [, GatewaySig?] }`
     - `ChallengeNonce` is issued per‑session by the SP/gateway and bound to the DU slice; `ExpiresAt` prevents replay.
+    - `EpochID` binds the receipt to the specific accounting period and MUST match the current epoch during submission.
     - **Verification model:** Ed25519 signatures are verified **off‑chain by watchers and/or on the DA chain**; the protocol commits to a **Poseidon Merkle root** of receipts and proves byte‑sum consistency. In‑circuit Ed25519 verification is **not required**.
       **Commit requirement:** For epoch `t`, SPs MUST have posted `BW_commit := Blake2s‑256(BW_root)` by the last block of epoch `t−1` (see § 6.3.1). Receipts not covered by `BW_commit` are ineligible.
       **Penalty:** Failure to post `BW_commit` for epoch `t` sets counted bytes to zero for `t` and forfeits all bandwidth payouts for `t`.
-      **Normative anchor:** At least **2% of receipts by byte‑volume per epoch** MUST be verified on the DA chain (randomly sampled via § 6.3) and escalate automatically under anomaly (§ 6.3.4).  
+      **Normative anchor:** At least **5% of receipts by byte‑volume per epoch** MUST be verified (randomly sampled via § 6.3) and escalate automatically under anomaly (§ 6.3.4). Sampling MUST be volume-weighted.
       **Normative (Verification Load Cap):** The total on‑chain verification load MUST be capped (DAO‑tunable) to prevent DoS via forced escalation.
       **Normative (VLC Prioritization and Security Floors):** Governance MUST define Security Floors for critical parameters ($p_{kzg\_floor}$, $R_{floor}$, $B_{min\_floor}$). The system MUST NOT automatically reduce these parameters below their floors.
       **Normative (Economic Circuit Breaker):** If the Verification Load Cap (VLC) is reached during a security escalation (e.g., increase in $p$), and parameters are already at their floors, the system MUST activate an Economic Circuit Breaker instead of suppressing the escalation:
-      1. **Throttle Bandwidth Payouts:** Apply a global discount factor to the counted bytes for bandwidth payouts for the epoch, proportional to the excess load.
-      2. **Prioritize High-Risk Receipts:** The sampling mechanism MUST prioritize receipts associated with SPs exhibiting high abuse scores (§5.2.1.c.1).
+      1. **Prioritize High-Risk Receipts:** The sampling mechanism MUST prioritize receipts associated with SPs exhibiting high abuse scores (See §6.3.1).
+      2. **Source Verification Costs:** The excess verification load costs MUST first be sourced from the dedicated Security Treasury (DAO-managed).
+      3. **Dynamic BaseFee Adjustment:** If the Treasury is insufficient, the protocol MUST dynamically increase the `BaseFee` (Burn component) (§5.2) for the duration of the escalation. Bandwidth payouts (PremiumPerByte) MUST NOT be throttled.
       This ensures that security auditing proceeds unimpeded during an attack, while imposing an economic cost on the network instead of compromising storage integrity.
 
 ### 6.2 Storage Proof Binding (PoUD + PoDE)
@@ -341,9 +350,10 @@ For each SP and each assigned DU interval per epoch the DA chain enforces:
 
 1. **PoUD (KZG‑PDP on cleartext):** The SP submits one or more **KZG openings** at verifier‑chosen **1 KiB symbol indices** proving membership in the **original** DU commitment `C_root` recorded at deal creation. Multi‑open is RECOMMENDED; indices are derived from the epoch beacon.
 2. **PoDE (timed derivation):** For each challenged **W = 8 MiB** window, compute a salted local transform `Derive(clear_window, beacon_salt, row_id)` **within the proof window** and submit `H(deriv)` with the minimal bytes to recompute. **`R ≥ 16`** sub‑challenges/window and **Σ verified bytes ≥ B_min = 128 MiB** per epoch (defaults; DAO‑tunable).
+   **Normative (PoDE Linkage):** The prover MUST include a KZG opening proof `π_kzg` demonstrating that the `clear_window` input bytes correspond exactly to the data committed in `C_root` (See Core Spec §4.3).
 3. **Deadlines:** Proofs must arrive within `Δ_submit` after epoch end. Timing may be attested by RTT‑oracle transcripts for remote verification.
 
-**On‑chain checks:** L1 verifies KZG openings via pre‑compiles and enforces `R` and `B_min`; watchers produce timing digests for PoDE. The rollup compresses per‑SP results into `poud_root` for the bridge.
+**On‑chain checks:** L1 verifies all KZG openings (including `π_kzg` for the PoDE linkage) via pre‑compiles and enforces `R` and `B_min`; watchers produce timing digests for PoDE. The rollup compresses per‑SP results into `poud_root` for the bridge.
 
 ### 6.3 Probabilistic Retrieval Sampling (QoS Auditing)
 
@@ -352,11 +362,19 @@ Strengthen retrieval QoS without suspending reads by sampling and verifying a go
 
 #### 6.3.1 Sampling Set Derivation
 0) **Commit‑then‑sample (Normative):** Each SP MUST post `BW_commit := Blake2s‑256(BW_root)` no later than the last block of epoch `t−1`.
+
+1) **Abuse Score Calculation (Normative):** At epoch boundary `t`, calculate an Abuse Score `A_score(SP)` for each provider. This score MUST incorporate factors including:
+    * Historical receipt verification failures.
+    * Anomalies detected by the RTT QoS Oracle (e.g., RTT near the network floor).
+    * Sudden spikes in receipt volume.
+    * RTT Profile Similarity (§3.3) with other high-scoring SPs.
+
 1) At epoch boundary `t`, derive `seed_t := Blake2s-256("NilStore-Sample" ‖ beacon_t ‖ epoch_id)`, where `beacon_t` is the Nil‑VRF epoch beacon.
-2) Expand `seed_t` into a PRF stream and select a fraction `p` of receipts **from the set committed by `BW_commit`** for verification (`0.5% ≤ p ≤ 10%`, default ≥ 5%). Receipts not committed in `t−1` MUST NOT be counted for `t`.
+2) **Risk-Based Sampling (Normative):** Expand `seed_t` into a PRF stream. Select receipts **from the set committed by `BW_commit`**. The global sampling fraction `p` remains governance-tunable (`0.5% ≤ p ≤ 10%`, default ≥ 5%). However, the per-SP sampling rate `p_sp` MUST be dynamically adjusted based on `A_score(SP)`. High-risk SPs MUST have a significantly higher sampling rate. Receipts not committed in `t−1` MUST NOT be counted for `t`.
 3) The sample MUST be unpredictable to SPs prior to epoch end and sized so that expected coverage ≥ 1 receipt per active SP. Auditor assignment SHOULD be stake‑weighted and region/ASN‑diverse (per §4.2) to avoid correlated blind‑spots and to bound per‑auditor load.
 4) **Honeypot DUs:** MUST be **profile‑indistinguishable** from ordinary DUs: sizes drawn from the same power‑of‑two distribution; RS profiles sampled from governance‑approved mixes; Nil‑Lattice slots assigned via the standard hash; and metadata randomized within normal bounds. Any retrieval receipt for a Honeypot DU is automatically selected for 100% verification.
    **Normative (Indistinguishability):** Honeypot DUs MUST be created and funded pseudonymously (e.g., using zero-knowledge proofs of funding) to prevent identification via on-chain analysis. Retrieval patterns MUST mimic organic traffic distributions.
+   **Normative (Blinded Funding):** Funding for Honeypot DUs MUST originate from a decentralized, blinded pool (e.g., a shielded treasury or mixer) managed by the NilDAO. Funding transactions MUST NOT be linkable to the governance process.
 
 #### 6.3.2 Verification Procedure
 Watchers (or DA validators) MUST, for each sampled receipt:
@@ -450,11 +468,14 @@ NilStore aligns replica count and provider selection with observed demand and me
 *   **Slashing Rule (Normative):** Missed **PoUD + PoDE** proofs trigger a quadratic penalty on the bonded $STOR collateral:
     `Penalty = min(0.50, 0.05 × (Consecutive_Missed_Epochs)²) × Correlation_Factor(F)`
 * `F` is computed **per diversity cluster** (ASN×region cell) and globally.
-* **Correlation_Factor(F) (Revised):**
-      * Apply an SP‑level floor `floor_SP = 0.10`.
-      * Allocate the global correlation discount to SPs via a **Shapley‑like share** of their clusters’ contribution to the global miss set, so that dispersion across clusters does not trivially reduce aggregate penalties.
-      * For `F_global > F*` (default 15%), cap network‑aggregate burn at 2%/epoch while preserving `floor_SP`.
-      * Collocated identities (same /24 or ASN) are merged for F‑computation to prevent sybil dilution.
+* **Correlation_Factor(F) (Tractable Definition):**
+      * The use of "Shapley-like shares" is removed due to computational infeasibility.
+      * Let $F_{cluster}$ be the fraction of total capacity within a diversity cluster that failed in the current epoch.
+      * $Correlation\_Factor(F) = 1 + \alpha \cdot (F_{cluster})^{\beta}$
+      * $\alpha$ (Scaling Factor) and $\beta$ (Exponent, $\beta \ge 2$ for superlinear penalty) are DAO-tunable.
+      * The Correlation_Factor MUST be capped (e.g., 5x). An SP-level floor `floor_SP = 1.0` MUST be applied (correlation should increase, not decrease, the penalty).
+      * **Normative (Collocation Definition):** Collocated identities (same /24, ASN, OR high RTT Profile Similarity (§3.3)) MUST be merged for $F_{cluster}$ computation to prevent Sybil dilution.
+      * For $F_{global} > F^{*}$ (default 15%), the DAO MAY activate a temporary cap on network-aggregate burn (e.g., 2%/epoch).
     The penalty resets upon submission of a valid proof.
 
 ### 7.4 Multi‑Stage Epoch Reconfiguration
@@ -493,12 +514,14 @@ To manage systemic risk and enable sophisticated financial instruments, NilStore
     `σ_t := ||Δλ₁..k(Graph_t)||₂` (tracking the k lowest eigenvalues).
     **Normative (Oracle Input Hardening):** The input `Graph_t` MUST be filtered to exclude manipulative patterns, such as rapid creation/deletion of deals by the same entity (Sybil filtering) and traffic associated with high abuse scores (§5.2.1.c.1).
 *   **Application (Dynamic Collateral):** The required collateral for a deal is dynamically adjusted based on volatility:
-    `Required_Collateral := Base_Collateral · f(σ, σ_price)`
-    where $\sigma_{price}$ is the realized volatility of the $STOR token price.
+    `Required_Collateral := Base_Collateral · f(σ)`
+    // Collateral MUST be anchored solely to internal network volatility (σ).
+    // External price volatility ($σ_{price}$) is excluded to maintain the no-oracle design (§5.2)
+    // and prevent importing market volatility into the core data security model.
     Higher volatility (σ) necessitates higher slashable stake. This also informs pricing for storage ETFs and insurance pools.
-    **Normative (Oracle Dampening and Management):** The function $f(\sigma, \sigma_{price})$ MUST incorporate a dampening mechanism (e.g., a 30-day Exponential Moving Average).
+    **Normative (Oracle Dampening and Management):** The function $f(\sigma)$ MUST incorporate a dampening mechanism (e.g., a 30-day Exponential Moving Average).
     **Normative (Circuit Breakers and Rate Limits):** The rate of change in Required_Collateral MUST be capped per epoch (e.g., max 10% increase) to prevent sudden shocks.
-    **Normative (Dynamic Grace Period):** A mechanism for collateral top-ups MUST be defined. The grace period before liquidation/slashing (default 72 hours) MUST be dynamically extended (up to 7 days) if $\sigma_{price}$ exceeds a high volatility threshold (DAO-tunable).
+    **Normative (Grace Period):** A mechanism for collateral top-ups MUST be defined. The grace period before liquidation/slashing is DAO-tunable (default 72 hours).
 
 ## 9. Governance (NilDAO)
 
@@ -523,8 +546,11 @@ Additional PoDE/PoUD pressure dials:
 
 *   **Standard Upgrades:** Require a proposal, a voting period, and a mandatory 72-hour execution timelock.
 *   **Emergency Circuit (Hot-Patch):** A predefined **5‑of‑9** threshold **with role diversity** can enact **VK‑only** emergency patches (see § 2.4). Keys MUST be HSM/air‑gapped.
-    *   **Key Allocation and Independence (Normative):** The 9 keys MUST be strictly allocated as: Core Team (3), Independent Security Auditor (3), Community/Validator Rep (3). The Auditor role MUST be filled by entities with no financial or control relationship with the Core Team, ratified by DAO vote annually. The 5-of-9 threshold MUST include at least one valid signature from each of these three groups.
+    *   **Key Allocation and Independence (Normative):** The 9 keys MUST be strictly allocated as: Core Team (3), Independent Security Auditor (3), Community/Validator Rep (3).
+       The Auditor role MUST be distributed across three distinct entities (1 key each) with provably no financial or control relationship with the Core Team, ratified by DAO vote annually.
+       The 5-of-9 threshold MUST include at least one valid signature from each of these three main groups (Core, Auditor, Community).
     *   **Sunset Clause (Normative):** Emergency patches automatically expire 14 days after activation unless ratified by a full DAO vote.
+    *   **Key Lifecycle Management (Normative):** Auditor and Community keys MUST be rotated annually. Core Team keys MUST be revoked and rotated upon personnel changes, requiring DAO ratification of the new keyholders.
     *   **Sunset Integrity (Normative):** The emergency patch mechanism MUST NOT be capable of modifying the Sunset Clause duration or the ratification requirement. If an emergency patch is ratified by a full DAO vote during the 14-day window, the automatic expiration MUST be disabled. The ratified patch remains active until it is superseded by the standard upgrade cycle.
 
 ### 9.3 Freeze Points
@@ -564,4 +590,3 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 | **Bridge/rollup trust** | VK swap or replay of old epoch | L2 bridge pins `vk_hash`; public inputs `{epoch_id, DA_state_root, poud_root, bw_root}`; monotone `epoch_id`; timelocked VK upgrades | §2.4 (ZK‑Bridge) |
 | **Lattice capture (ring‑cell cartel)** | SPs concentrate shards topologically | One‑shard‑per‑SP‑per‑cell; minimum cell distance; DAO can raise separation if concentration increases | §3.2 (Placement constraints), §9 (Governance) |
 | **Shard withholding (availability)** | SP stores but doesn’t serve | Vesting tied to valid PoUD + PoDE; Bandwidth distribution requires receipts; slashing for missed epochs | §7.3 (Vesting/Slashing), §6 |
-
