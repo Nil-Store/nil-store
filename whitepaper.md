@@ -1,7 +1,3 @@
-Here is the comprehensive white paper combining the provided specifications for the NilStore Network.
-
------
-
 # NilStore Network: A Protocol for Decentralized, Verifiable, and Economically Efficient Storage
 
 **(White Paper v1.0)**
