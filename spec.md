@@ -9,7 +9,7 @@
 
 It specifies, in a fully reproducible manner:
 
-1. **Plaintext possession proofs** — **Proof‑of‑Useful‑Data (PoUD)** using **Kate–Zaverucha–Goldberg (KZG) polynomial commitments** and **Proof‑of‑Delayed‑Encode (PoDE)** timed window derivations (normative liveness path).
+1. **Canonical byte possession proofs** — **Proof‑of‑Useful‑Data (PoUD)** using **Kate–Zaverucha–Goldberg (KZG) polynomial commitments** and **Proof‑of‑Delayed‑Encode (PoDE)** timed window derivations (normative liveness path), evaluated strictly over a canonical byte representation per deal (`privacy_mode`).
 2. **BLS VRF** and BATMAN aggregation for unbiased epoch beacons.
 3. **Dial policy** and governance process for safe parameter evolution.
 4. **Security rationale** and Known‑Answer Tests for all normative components.
@@ -108,12 +108,12 @@ For transparency and auditability, Core defines the following fixed ASCII domain
 
 ### 4.0a Derive (window‑scoped, normative for PoDE)
 
-*Purpose:* deterministically compress a cleartext DU window into a verifier‑recomputable digest, domain‑separated by the epoch beacon.
+*Purpose:* deterministically compress a canonical DU window into a verifier‑recomputable digest, domain‑separated by the epoch beacon.
 
 **Signature (normative):**
 
 ```
-Derive(clear_window: bytes, beacon_salt: bytes,
+Derive(canon_window: bytes, beacon_salt: bytes,
        row_id: u32, epoch_id: u64, du_id: u128) -> (leaf64: bytes[64], Δ_W: bytes[32])
 ```
 
@@ -123,12 +123,12 @@ Derive(clear_window: bytes, beacon_salt: bytes,
 tag  = "PODE_DERIVE_ARGON_V1"
 salt = Blake2s-256(tag ‖ beacon_salt ‖ u32_le(row_id) ‖ u64_le(epoch_id) ‖ u128_le(du_id))
 // Hash the input data to ensure high entropy input to Argon2id, mitigating TMTO risks with low-entropy data.
-input_digest = Blake2s-256("PODE_INPUT_DIGEST_V1" ‖ clear_window)
+input_digest = Blake2s-256("PODE_INPUT_DIGEST_V1" ‖ canon_window)
 // Parameters (H_t, H_m, H_p) are defined by the Dial Profile (§0.2).
 // H_p MUST be strictly 1 to enforce sequentiality. Implementations MUST reject profiles where H_p != 1.
 acc = Argon2id(password=input_digest, salt=salt, t_cost=H_t, m_cost=H_m, parallelism=1, output_len=64)
 leaf64 := acc
-Δ_W    := Blake2s-256(clear_window)
+Δ_W    := Blake2s-256(canon_window)
 return (leaf64, Δ_W)
 ```
 
@@ -136,7 +136,7 @@ return (leaf64, Δ_W)
 
 ### 4.0 Objective & Model
 
-Attest, per epoch, that an SP (a) stores the **cleartext** bytes of their assigned DU intervals and (b) can perform **timed, beacon‑salted derivations** over randomly selected windows quickly enough that fetching from elsewhere is infeasible within the proof window.
+Attest, per epoch, that an SP (a) stores the canonical bytes of their assigned DU intervals and (b) can perform **timed, beacon‑salted derivations** over randomly selected windows quickly enough that fetching from elsewhere is infeasible within the proof window.
 
 **Security anchors:** (i) DU **KZG commitment** `C_root` recorded at deal creation; (ii) BLS‑VRF epoch beacon for unbiased challenges; (iii) on‑chain **KZG multi‑open** pre‑compiles; (iv) watcher‑enforced timing digests.
 
@@ -145,7 +145,9 @@ A **Data Unit (DU)** is the canonical chunking unit used for commitment and samp
 
 Let a DU be encoded with systematic RS(n,k) over GF(2⁸) and segmented logically into **1 KiB symbols**.
 
-**Normative (KZG Embedding):** To commit the data using KZG (which operates over the BLS12-381 scalar field), the DU data MUST be serialized and chunked into 31-byte elements. Each chunk is interpreted as an integer (little-endian) and embedded as a field element. The KZG commitment `C_root` is computed over the polynomial formed by these field elements.
+**Normative (KZG Embedding):** To commit the data using KZG (which operates over the BLS12-381 scalar field), the DU bytes (as selected by `privacy_mode`) MUST be serialized and chunked into 31-byte elements. Each chunk is interpreted as an integer (little-endian) and embedded as a field element. The KZG commitment `C_root` is computed over the polynomial formed by these field elements.
+
+**Normative (Deal Privacy Mode):** A deal parameter `privacy_mode ∈ {"ciphertext" (default), "plaintext"}` selects the canonical bytes over which `C_root` and PoDE derivations are computed. Providers do not require decryption keys when `privacy_mode = "ciphertext"`.
 
 The client computes `C_root` at deal creation and posts `C_root` on L2; all subsequent storage proofs **must open against this original commitment**.
 
@@ -163,14 +165,14 @@ For epoch `t` with beacon `beacon_t`, expand domain‑separated randomness to pi
 ### 4.3 Prover Obligations per DU Interval
 
 1) **PoUD — KZG‑PDP (content correctness):** Provide KZG **multi‑open** at the chosen 1 KiB symbol indices proving membership in `C_root`.
-2) **PoDE — Timed derivation:** For each challenged window, compute `deriv = Derive(clear_window, beacon_salt, row_id, epoch_id, du_id)` and submit `H(deriv)` plus the **minimal** clear bytes for verifier recompute, all **within** the per‑epoch `Δ_submit` window. Enforce **Σ verified bytes ≥ B_min = 128 MiB** over all windows and **R ≥ 16** sub‑challenges/window (defaults; DAO‑tunable).
+2) **PoDE — Timed derivation:** For each challenged window, compute `deriv = Derive(canon_window, beacon_salt, row_id, epoch_id, du_id)` and submit `H(deriv)` plus the **minimal** canonical bytes for verifier recompute, all **within** the per‑epoch `Δ_submit` window. Enforce **Σ verified bytes ≥ B_min = 128 MiB** over all windows and **R ≥ 16** sub‑challenges/window (defaults; DAO‑tunable).
    **Normative (Security Bounds):** Governance MUST NOT set R < 8 or B_min < 64 MiB. Changes below these thresholds require a Major version increment and associated security analysis.
-   **Normative (PoDE Linkage):** The prover MUST provide a KZG opening proof `π_kzg` demonstrating that the `clear_window` input bytes correspond exactly to the data committed in `C_root`.
+   **Normative (PoDE Linkage):** The prover MUST provide a KZG opening proof `π_kzg` demonstrating that the `canon_window` input bytes correspond exactly to the data committed in `C_root`.
 
 ### 4.4 Verifier (On‑chain / Watchers)
 
 * **On‑chain:** Verify **KZG multi‑open** against `C_root`; check counters for `R` and `B_min`.
-* **On‑chain (PoDE):** Verify `π_kzg` against `C_root` for the `clear_window`.
+* **On‑chain (PoDE):** Verify `π_kzg` against `C_root` for the `canon_window`.
 * **Watchers:** Verify PoDE recomputations and timing (RTT‑oracle transcripts). Aggregate pass/fail into an on‑chain digest per SP.
 
 ### 4.5 Coverage & Parameters (Auditor math)
@@ -179,7 +181,7 @@ Let DU contain **M** symbols. With **q** fresh symbols per epoch over **T** epoc
 
 ### 4.6 On‑chain Interfaces (normative)
 
-L1 **MUST** expose: `verify_kzg_multiopen(...)`, `verify_poseidon_merkle(...)`, `blake2s(bytes)`. Proof acceptance window: `T_epoch = 86 400 s`, `Δ_submit = 30 s`. Per‑replica work bound used by timing invariants: `Δ_work = 1 s`.
+L1 **MUST** expose: `verify_kzg_multiopen(...)`, `verify_poseidon_merkle(...)`, `blake2s(bytes)`. Proof acceptance window: `T_epoch = 86 400 s`, `Δ_submit = 120 s` (DAO‑tunable; normative floor 60 s). Per‑replica work bound used by timing invariants: `Δ_work = 1 s`.
 
 ---
 
@@ -379,7 +381,7 @@ Notes:
 
 ### 0.6  File Manifests & Encryption (normative pointers)
 
-NilStore uses a content‑addressed **file manifest** (Root CID) that enumerates per‑file **Data Units (DUs)** and a **crypto policy**: a File Master Key (FMK) is HPKE‑wrapped to authorized retrieval keys; per‑DU Content Encryption Keys (CEKs) and Nonces are derived deterministically (Appendix A), and each DU is encrypted with **AES‑256‑GCM**. DU ciphertexts are addressed by `DU‑CID` = `Blake2s‑256("DU-CID-V1" || C)`. Appendix A specifies the canonical manifest, key wrapping, rekey/delete, and KATs.
+NilStore uses a content‑addressed **file manifest** (Root CID) that enumerates per‑file **Data Units (DUs)** and a **crypto policy**: a File Master Key (FMK) is HPKE‑wrapped to authorized retrieval keys; per‑DU Content Encryption Keys (CEKs) and Nonces are derived deterministically (Appendix A), and each DU is encrypted with **AES‑256‑GCM**. DU ciphertexts are addressed by `DU‑CID` = `Blake2s‑256("DU-CID-V1" || C)`. Appendix A specifies the canonical manifest, key wrapping, rekey/delete, and KATs. By default, deals set `privacy_mode = "ciphertext"`; a deal MAY opt into `privacy_mode = "plaintext"` for public/open‑data workloads.
 
 ## Appendix A  File Manifest & Crypto Policy (Normative)
 

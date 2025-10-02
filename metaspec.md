@@ -3,12 +3,12 @@
 **(White Paper Draft v0.5)**
 
 **Date:** 2025-09-15
-**Status:** Working Draft (plaintext‑proofs baseline)
+**Status:** Working Draft (privacy‑mode default: ciphertext)
 **Authors:** NilStore Core Team
 
 ## Abstract
 
-NilStore is a decentralized storage network designed to provide high-throughput, verifiable data storage with significantly reduced operational overhead. It leverages a novel consensus mechanism based on Proof-of-Useful-Data (PoUD) and Proof-of-Delayed-Encode (PoDE), utilizing plaintext storage verified via KZG commitments and timed derivations. By employing a topological data placement strategy (Nil-Lattice), NilStore drastically lowers the hardware barrier to entry, enabling participation from edge devices to data centers. This paper details the system architecture, the NilFS data abstraction layer, the Nil-Mesh routing protocol, the $STOR-Only economic model, and the hybrid L1/L2 settlement architecture designed for EVM compatibility and robust governance.
+NilStore is a decentralized storage network designed to provide high-throughput, verifiable data storage with significantly reduced operational overhead. It leverages a novel consensus mechanism based on Proof-of-Useful-Data (PoUD) and Proof-of-Delayed-Encode (PoDE), utilizing a canonical byte representation (plaintext or ciphertext) verified via KZG commitments and timed derivations. By employing a topological data placement strategy (Nil-Lattice), NilStore drastically lowers the hardware barrier to entry, enabling participation from edge devices to data centers. This paper details the system architecture, the NilFS data abstraction layer, the Nil-Mesh routing protocol, the $STOR-Only economic model, and the hybrid L1/L2 settlement architecture designed for EVM compatibility and robust governance.
 
 ## 1. Introduction
 
@@ -20,8 +20,9 @@ NilStore retains strong cryptographic guarantees while reducing the "sealing" pr
 
 ### 1.2 Key Innovations
 
-*   **Plaintext possession as first‑class:** Storage providers keep the **cleartext** bytes of assigned Data Units (DUs) on disk and prove it regularly with near‑certain full‑coverage over time.
-*   **PoUD + PoDE:** **PoUD** (KZG‑based Provable Data Possession over DU cleartext) + **PoDE** (timed window derivations) are the **normative** per‑epoch proofs.
+*   **Canonical byte‑accurate possession:** Storage providers (SPs) keep a canonical byte representation of assigned Data Units (DUs) on disk—either ciphertext or plaintext as selected per deal policy—and prove possession regularly with near‑certain full‑coverage over time.
+    Deal parameter: `privacy_mode ∈ {"ciphertext" (default), "plaintext"}`. All commitments (`C_root`) and PoDE derivations operate strictly over the chosen canonical bytes.
+*   **PoUD + PoDE:** **PoUD** (KZG‑based Provable Data Possession over DU canonical bytes) + **PoDE** (timed window derivations) are the **normative** per‑epoch proofs.
 *   **Nil-Mesh Routing:** Heisenberg-lifted K-shortest paths for optimized latency and Sybil resistance.
 *   **$STOR-Only Economy:** A unified economic model using $STOR for capacity commitment, bandwidth settlement, and governance.
 *   **Hybrid Settlement:** A specialized L1 for efficient proof verification bridged via ZK-Rollup to an EVM L2 for liquidity and composability.
@@ -302,7 +303,7 @@ The economic model is enforced cryptographically through the PoUD+PoDE consensus
 
 ### 6.0a  Proof Mode — **Plaintext only (research phase)**
 
-Core supports **one** normative proof mode: **plaintext** — **PoUD** (KZG multi‑open on DU cleartext) + **PoDE** (timed derivations).
+Core supports **one** normative proof mode evaluated over a canonical byte representation — **PoUD** (KZG multi‑open on DU canonical bytes) + **PoDE** (timed derivations). Deals set `privacy_mode` (default: `ciphertext`).
 
 ### 6.0b  PoUD (Proof of Useful Data) – Plaintext Mode (normative)
 
@@ -310,7 +311,7 @@ For each epoch and each assigned DU sliver interval:
 
 1) Content correctness: The SP MUST provide one or more **KZG multi‑open** proofs at verifier‑chosen 1 KiB symbol indices proving membership in the DU commitment `C_root` recorded at deal creation. When multiple indices are scheduled for the same DU in the epoch, SPs SHOULD batch using multi‑open to minimize calldata.
 
-2) Timed derivation (PoDE): Let `W = 8 MiB` (governance‑tunable). The SP MUST compute `deriv = Derive(clear_bytes[interval], beacon_salt, row_id)` within the proof window; `deriv` is fixed by the micro‑seal profile (Core § 3.3.1) restricted to the bytes of the interval (no cross‑window state). The proof includes `H(deriv)` and the clear bytes needed for recomputation.
+2) Timed derivation (PoDE): Let `W = 8 MiB` (governance‑tunable). The SP MUST compute `deriv = Derive(canon_bytes[interval], beacon_salt, row_id)` within the proof window; `deriv` is fixed by the micro‑seal profile (Core § 3.3.1) restricted to the bytes of the interval (no cross‑window state). The proof includes `H(deriv)` and the canonical bytes needed for recomputation.
 
 3) Concurrency & volume: The prover MUST satisfy at least `R` parallel PoDE sub‑challenges per proof window, each targeting a distinct DU interval (default `R ≥ 16`; DAO‑tunable). The aggregate verified bytes per window MUST be ≥ `B_min` (default `B_min ≥ 128 MiB`, DAO‑tunable). B_min counts only bytes that are both (a) KZG‑opened and (b) successfully derived under PoDE.
 
@@ -348,9 +349,9 @@ To account for bandwidth, clients sign receipts upon successful retrieval.
 
 For each SP and each assigned DU interval per epoch the DA chain enforces:
 
-1. **PoUD (KZG‑PDP on cleartext):** The SP submits one or more **KZG openings** at verifier‑chosen **1 KiB symbol indices** proving membership in the **original** DU commitment `C_root` recorded at deal creation. Multi‑open is RECOMMENDED; indices are derived from the epoch beacon.
-2. **PoDE (timed derivation):** For each challenged **W = 8 MiB** window, compute a salted local transform `Derive(clear_window, beacon_salt, row_id)` **within the proof window** and submit `H(deriv)` with the minimal bytes to recompute. **`R ≥ 16`** sub‑challenges/window and **Σ verified bytes ≥ B_min = 128 MiB** per epoch (defaults; DAO‑tunable).
-   **Normative (PoDE Linkage):** The prover MUST include a KZG opening proof `π_kzg` demonstrating that the `clear_window` input bytes correspond exactly to the data committed in `C_root` (See Core Spec §4.3).
+1. **PoUD (KZG‑PDP on canonical bytes):** The SP submits one or more **KZG openings** at verifier‑chosen **1 KiB symbol indices** proving membership in the **original** DU commitment `C_root` recorded at deal creation. Multi‑open is RECOMMENDED; indices are derived from the epoch beacon.
+2. **PoDE (timed derivation):** For each challenged **W = 8 MiB** window, compute a salted local transform `Derive(canon_window, beacon_salt, row_id)` **within the proof window** and submit `H(deriv)` with the minimal canonical bytes to recompute. **`R ≥ 16`** sub‑challenges/window and **Σ verified bytes ≥ B_min = 128 MiB** per epoch (defaults; DAO‑tunable).
+   **Normative (PoDE Linkage):** The prover MUST include a KZG opening proof `π_kzg` demonstrating that the `canon_window` input bytes correspond exactly to the data committed in `C_root` (See Core Spec §4.3).
 3. **Deadlines:** Proofs must arrive within `Δ_submit` after epoch end. Timing may be attested by RTT‑oracle transcripts for remote verification.
 
 **On‑chain checks:** L1 verifies all KZG openings (including `π_kzg` for the PoDE linkage) via pre‑compiles and enforces `R` and `B_min`; watchers produce timing digests for PoDE. The rollup compresses per‑SP results into `poud_root` for the bridge.
@@ -462,7 +463,7 @@ NilStore aligns replica count and provider selection with observed demand and me
 *   **Vesting:** The escrowed fee is released linearly to the SP each epoch, contingent on a valid **PoUD + PoDE** submission.
 *   **Consensus Parameters (Normative):**
     *   **Epoch Length (`T_epoch`)**: 86,400 s (24 h).
-    *   **Proof Window (`Δ_submit`)**: 30 s after epoch end — this is the *network scheduling window* for accepting proofs. (See Core Spec §4.6).
+    *   **Proof Window (`Δ_submit`)**: 120 s after epoch end — this is the *network scheduling window* for accepting proofs (DAO‑tunable; normative floor 60 s). (See Core Spec §4.6).
     *   **Per‑replica Work Bound (`Δ_work`)**: 1 s (baseline profile), the minimum wall‑clock work per replica defined by the PoDE calibration (See Core Spec §0.2).
     *   **Block Time** (Tendermint BFT): 6 s.
 *   **Slashing Rule (Normative):** Missed **PoUD + PoDE** proofs trigger a quadratic penalty on the bonded $STOR collateral:
@@ -572,7 +573,7 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 
 | Metric                  | Target                               |
 | ----------------------- | ------------------------------------ |
-| Seal Time (64 GiB)      | N/A (Plaintext only)                 |
+| Seal Time (64 GiB)      | N/A (no sealing)                     |
 | Epoch Proof Size (Aggregated) | ≤ 1.2 kB (post-recursion)            |
 | Retrieval RTT (p95)     | ≤ 400 ms (across 5 geo regions)      |
 | On-chain Verify Gas (L2)| ≤ 120k Gas                           |
