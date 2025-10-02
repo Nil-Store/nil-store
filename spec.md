@@ -1,6 +1,6 @@
-# Nilcoin Core v 2.0
+# NilStore Core v 2.0
 
-### Cryptographic Primitives & Proof System Specification
+### Cryptographic Primitives & Proof System Specification
 
 ---
 
@@ -33,20 +33,16 @@ All integers, vectors, and matrices are interpreted **little‑endian** unless i
 
 ### 0.2 Dial Parameters
 
-A **dial profile** is a parameter set:
-`(m, k, r, λ, H_t, H_m, H_p, γ, q, Nonce)`:
+A **dial profile** defines the core cryptographic parameters and the Proof-of-Delayed-Encode (PoDE) settings.
 
 | Symbol | Description                                | Baseline "S‑512"                |
 | ------ | ------------------------------------------ | ------------------------------- |
-| `q`    | Prime field modulus                        | **CRT (Mandatory):** $q_1$=**998 244 353** and $q_2$=**1 004 535 809**. Effective modulus $Q = q_1 \times q_2 \approx 2^{60}$. |
+| `Curve`| Elliptic Curve (for KZG and VRF)           | **BLS12-381** (Mandatory)       |
+| `r`    | BLS12-381 subgroup order                   | (See §5.1)                      |
 | `Nonce`| Profile Nonce (high-entropy)               | 0x1A2B3C4D5E6F7890AABBCCDDEEFF0011 (example) |
-| `k`    | NTT block size (radix‑k)                   | 128                             |
-| `r`    | Passes of data‑dependent permutation       | 3                               |
-| `λ`    | Gaussian noise σ (compression)             | 350 (fixed-point ×100)          |
 | `H_t`  | PoDE Argon2id time cost (iterations)       | 3 (Calibrated for Δ_work=1s)    |
 | `H_m`  | PoDE Argon2id memory cost (KiB)            | 524288 (512 MiB)                |
 | `H_p`  | PoDE Argon2id parallelism                  | 1 (Mandatory Sequential)        |
-| `γ`    | Interleave fragment size (MiB)             | 0 (sequential)                  |
 
 Dial parameters are **frozen** per profile string (e.g., `"S-512"`).  Changes introduce a new profile ID (see § 6).
 
@@ -59,7 +55,7 @@ Version = {major : u8 = 0x02, minor : u8 = 0x00, patch : u8 = 0x00}
 digest  = Blake2s‑256( Version ‖ DomainID ‖ payload )
 ```
 
-* **minor** increments when tuning `k, r, λ, H_t, H_m, γ`.
+* **minor** increments when tuning `H_t, H_m`.
 * **patch** increments for non‑semantic errata (typos, clarifications).
 
 ### 0.4 Domain Identifiers
@@ -72,7 +68,7 @@ digest  = Blake2s‑256( Version ‖ DomainID ‖ payload )
 |  `0x0200` | PoDE/Derive digest (window‑local)  | § 4            |
 |  `0x0300` | Nil‑VRF transcripts                | § 5            |
 
-Further IDs are allocated by Nilcoin governance (informative Appendix D).
+Further IDs are allocated by NilStore governance.
 
 #### 0.4.1 String Domain Tags (Blake2s separators)
 
@@ -187,13 +183,13 @@ L1 **MUST** expose: `verify_kzg_multiopen(...)`, `verify_poseidon_merkle(...)`, 
 We use a BLS12‑381‑based **verifiable random function (VRF)** to derive unbiased epoch randomness.
 ### 5.0 Purpose & Design Choice
 
-Nilcoin derives per‑epoch randomness from a **BLS12‑381‑based Verifiable Random Function (VRF)** that is:
+NilStore derives per‑epoch randomness from a **BLS12‑381‑based Verifiable Random Function (VRF)** that is:
 
 * **Uniquely provable** – a single, deterministic proof per `(pk,msg)`.
 * **Deterministically verifiable** on‑chain with **one pairing**.
 * **Aggregate‑friendly** – shares combine linearly (BATMAN threshold, ≥ 2/3 honest).
 
-We instantiate a **BLS‑signature‑based VRF**: VRF proofs are BLS signatures on `hash_to_G2(msg)`, and verification is a single pairing check. We follow **RFC 9380** for `hash_to_G2` (Simple SWU, XMD:SHA‑256) with a Nilcoin‑specific DST. **Note:** The IETF VRF standard **RFC 9381** does not define a BLS VRF; our construction relies on BLS signature **uniqueness**, which also implies an aggregator cannot grind the beacon by subset selection.  
+We instantiate a **BLS‑signature‑based VRF**: VRF proofs are BLS signatures on `hash_to_G2(msg)`, and verification is a single pairing check. We follow **RFC 9380** for `hash_to_G2` (Simple SWU, XMD:SHA‑256) with a NilStore‑specific DST. **Note:** The IETF VRF standard **RFC 9381** does not define a BLS VRF; our construction relies on BLS signature **uniqueness**, which also implies an aggregator cannot grind the beacon by subset selection.  
 DST (normative): `"BLS12381G2_XMD:SHA-256_SSWU_RO_NIL_VRF_H2G"`.
 
 ---
@@ -302,7 +298,7 @@ Collect any `t` valid shares; compute Lagrange coefficients `λ_i` in ℤ\_r:
 ```
 share_id_i := Blake2s‑256("BATMAN-SHARE" ‖ compress(pk_i) ‖ u64_le(epoch_ctr))
 ```
-  (c) **Grinding Mitigation (Normative):** Let `Seed_select` be the VRF beacon of the first block strictly after `τ_close`. (This seed is unpredictable before `τ_close`).
+  (c) **Grinding Mitigation (Normative):** Let `Seed_select` be the finalized beacon of the previous epoch (`beacon_{t-1}`). This seed is fixed before share posting begins.
   (d) If the candidate set size > t, select the `t` shares that minimize `HMAC-SHA256(Key=Seed_select, Message=share_id_i)`.
 
 Publish `(π_agg, pk_agg)` where `pk_agg = Σ λ_i · pk_i`.
@@ -349,7 +345,7 @@ All changes require updated KATs in Annex A.5. Derive vectors are parameterize
 
 ### 5.7 Sampling Seed & Expansion (normative)
 
-NilStore’s retrieval‑sampling RNG derives from the epoch beacon and does not interact with any `poss²` circuit.
+NilStore’s retrieval‑sampling RNG derives from the epoch beacon and is independent of storage‑proof circuits.
 
 Definition (per‑epoch):
 
@@ -366,7 +362,7 @@ ExpandSample(seed_t, i) := Blake2s‑256("SAMPLE-EXP" ‖ seed_t ‖ u32_le(i))
 Notes:
 - `seed_t` and `ExpandSample` are used off‑chain by watchers/validators to select receipts for auditing.
 - Domain strings are fixed ASCII constants (see § 0.4.1).
-- No changes to `poss²` public inputs or verification keys.
+- This derivation does not alter public inputs or verification keys.
 
 *Sections § 6 through § 9 discuss governance, security proofs, and performance metrics building on this VRF construction.*
 
@@ -375,7 +371,7 @@ Notes:
 
 ### 0.6  File Manifests & Encryption (normative pointers)
 
-Nilcoin uses a content‑addressed **file manifest** (Root CID) that enumerates per‑file **Data Units (DUs)** and a **crypto policy**: a File Master Key (FMK) is HPKE‑wrapped to authorized retrieval keys; per‑DU Content Encryption Keys (CEKs) and Nonces are derived deterministically (Appendix A), and each DU is encrypted with **AES‑256‑GCM**. DU ciphertexts are addressed by `DU‑CID` = `Blake2s‑256("DU-CID-V1" || C)`. Appendix A specifies the canonical manifest, key wrapping, rekey/delete, and KATs. Appendix B defines the Edge Retrieval API (streaming, Range, provider selection hooks).
+NilStore uses a content‑addressed **file manifest** (Root CID) that enumerates per‑file **Data Units (DUs)** and a **crypto policy**: a File Master Key (FMK) is HPKE‑wrapped to authorized retrieval keys; per‑DU Content Encryption Keys (CEKs) and Nonces are derived deterministically (Appendix A), and each DU is encrypted with **AES‑256‑GCM**. DU ciphertexts are addressed by `DU‑CID` = `Blake2s‑256("DU-CID-V1" || C)`. Appendix A specifies the canonical manifest, key wrapping, rekey/delete, and KATs.
 
 ## Appendix A  File Manifest & Crypto Policy (Normative)
 
@@ -389,40 +385,4 @@ Nilcoin uses a content‑addressed **file manifest** (Root CID) that enumerates 
 - AEAD: AES-256-GCM using the derived CEK and the deterministic 96-bit (12-byte) Nonce.
 - Rekey by adding/removing FMK wraps; delete by crypto-erasure (remove wraps).
 
-## Appendix B  Edge Retrieval Client & API (Normative)
-
-# Addendum B — Edge Retrieval Client & API (Normative)
-(Integrated summary)
-- HTTP: GET /f/{rootCid} (200) or Range (206), Accept-Ranges: bytes.
-- Flow: fetch manifest → unwrap FMK (HPKE or GRANT) → compute CEKs → parallel fetch DUs → verify DU CID → decrypt → stream.
-- Provider selection via WRP (Metaspec §6.4). Emits optional BW receipts.
-
-## Appendix C  Bandwidth Economics — Hybrid Model (Normative)
-
-# Addendum C — Bandwidth Economics: Hybrid Model (Normative)
-(Integrated summary)
-- Quota per file per epoch (reserved $STOR → $BW) + auto-top-up + sponsor pools.
-- Grace tier when quota exhausted; reduced placement weight until replenished.
-- Governance dials: w_grace, rollover caps, region multipliers, price bands, sponsor caps, ASN/geo discounts.
-
-## Appendix D  Provider Capability Vectors (PCV) & WRP (Normative)
-
-# Addendum D — PCV & WRP (Normative)
-(Integrated summary)
-- PCV schema per region: cap_mibs, conc, med/p95 RTT, reliability, price_mul, ASN, geo; watcher probe attestations.
-- WRP: score_i = -ln(U)/w_i seeded with "PLACER-KEY-V1"; select top r. Weights reflect capacity, reliability, latency, price, geo fit.
-- VRF committee samples/penalizes chronic under-delivery.
-
-## Appendix E  Hot Replica Market (VRF‑Mediated)
-
-# Addendum E — Hot Replica Market (VRF-Mediated)
-(Integrated summary)
-- Trigger on heat H_e(d) ≥ T_hot(k); assign Δr replicas with TTL; require bond_bw; hot reward R_hot(H). Hysteresis with T_cool.
-
-## Appendix F  Bandwidth Receipts & Roots (`BW_root`)
-
-# Addendum F — Bandwidth Receipts & Roots (BW_root)
-(Integrated summary)
-- Receipt fields: {du_id, chunk_id, bytes, t_start, t_end, rtt, p99, client_nonce, provider_id, sig_provider, payer_id?}
-- Leaves hashed under "BW-RECEIPT-V1"; per-epoch root "BW-ROOT-V1"; providers submit (provider_id, epoch, BW_root, served_bytes, med_latency, agg_sig).
-- Eligibility: payer-funded; fraud controls: ASN discount, watcher sampling.
+<!-- Appendices B–F excised: application-level material lives in metaspec. -->

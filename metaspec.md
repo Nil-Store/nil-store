@@ -8,7 +8,7 @@
 
 ## Abstract
 
-NilStore is a decentralized storage network designed to provide high-throughput, verifiable data storage with significantly reduced operational overhead. It leverages a novel consensus mechanism, Proof-of-Spacetime-Squared (PoS²), which merges storage verification with bandwidth accounting in a single, succinct proof. By utilizing CPU-efficient sealing based on KZG commitments and a topological data placement strategy (Nil-Lattice), NilStore drastically lowers the hardware barrier to entry, enabling participation from edge devices to data centers. This paper details the system architecture, the NilFS data abstraction layer, the Nil-Mesh routing protocol, the dual-token ($STOR/$BW) economic model, and the hybrid L1/L2 settlement architecture designed for EVM compatibility and robust governance.
+NilStore is a decentralized storage network designed to provide high-throughput, verifiable data storage with significantly reduced operational overhead. It leverages a novel consensus mechanism based on Proof-of-Useful-Data (PoUD) and Proof-of-Delayed-Encode (PoDE), utilizing plaintext storage verified via KZG commitments and timed derivations. By employing a topological data placement strategy (Nil-Lattice), NilStore drastically lowers the hardware barrier to entry, enabling participation from edge devices to data centers. This paper details the system architecture, the NilFS data abstraction layer, the Nil-Mesh routing protocol, the $STOR-Only economic model, and the hybrid L1/L2 settlement architecture designed for EVM compatibility and robust governance.
 
 ## 1. Introduction
 
@@ -22,9 +22,8 @@ NilStore retains strong cryptographic guarantees while reducing the "sealing" pr
 
 *   **Plaintext possession as first‑class:** Storage providers keep the **cleartext** bytes of assigned Data Units (DUs) on disk and prove it regularly with near‑certain full‑coverage over time.
 *   **PoUD + PoDE:** **PoUD** (KZG‑based Provable Data Possession over DU cleartext) + **PoDE** (timed window derivations) are the **normative** per‑epoch proofs.
-*   **CPU‑only sealing (research scaffold):** A sealed PoS² path exists **only** as a **research‑only supplement** (**`rfcs/PoS2L_scaffold_v1.md`**), intended for phased rollout experiments and incident‑response modeling. It is **non‑normative** and **disabled** in all profiles; plaintext is the only supported mode in Core.
 *   **Nil-Mesh Routing:** Heisenberg-lifted K-shortest paths for optimized latency and Sybil resistance.
-*   **Dual-Token Economy:** Decoupling long-term capacity commitment ($STOR) from immediate utility ($BW).
+*   **$STOR-Only Economy:** A unified economic model using $STOR for capacity commitment, bandwidth settlement, and governance.
 *   **Hybrid Settlement:** A specialized L1 for efficient proof verification bridged via ZK-Rollup to an EVM L2 for liquidity and composability.
 
 ## 2. System Architecture
@@ -52,7 +51,7 @@ The Data Availability Chain is a minimal L1 (built using Cosmos-SDK/Tendermint B
 
 Settlement occurs on a ZK-Rollup (using PlonK/Kimchi) bridged to a major EVM ecosystem (e.g., Ethereum L2).
 
-*   **Function:** Manages ERC-20 representations of $STOR and $BW, mints Deal NFTs, hosts the NilDAO, and integrates with DeFi.
+*   **Function (One‑Token Profile):** Manages **$STOR only**, mints Deal NFTs, hosts the NilDAO, and executes **$STOR‑denominated** settlement for storage and bandwidth. **Non‑$STOR assets are out‑of‑scope** for protocol contracts; any conversions happen off‑protocol.
 
 ### 2.4 The ZK-Bridge
 
@@ -95,7 +94,7 @@ This walkthrough illustrates what happens when a client uploads an object **F** 
 6) **Deal creation (L2).** The client calls **`CreateDeal`** on L2, posting `C_root`, locking $STOR escrow, and minting a **Deal NFT**.
 7) **Miner uptake (L2+L1).** Selected SPs bond $STOR, fetch their assigned shards, and store the **plaintext DU bytes** locally. The client‑posted **DU KZG commitment (`C_root`)** binds content for all future proofs.
 8) **Epoch service.** During each epoch, SPs (a) serve retrievals; clients sign **Ed25519 receipts**; SPs aggregate receipts into a Poseidon Merkle (`BW_root`), and (b) post **PoUD + PoDE** storage proofs against the original `C_root`.
-9) **Settlement & rewards.** L1 verifies KZG openings and enforces PoDE timing and posts a compressed digest to L2 (**ZK‑Bridge**). L2 updates `{poud_root, bw_root, epoch_id}` and releases vested fees / $BW rewards per distribution rules.
+9) **Settlement & rewards.** L1 verifies KZG openings and enforces PoDE timing and posts a compressed digest to L2 (**ZK‑Bridge**). L2 updates `{poud_root, bw_root, epoch_id}` and releases vested fees per distribution rules.
 10) **Repair (as needed).** If shard availability drops below threshold, the network triggers **Autonomous Repair**—repaired shards must open against the original DU commitment (no drift).
 
 **Message flow (illustrative):**
@@ -103,7 +102,7 @@ This walkthrough illustrates what happens when a client uploads an object **F** 
 Client  →  SDK:  CDC+DAG → DU pack → RS(n,k) → placement map
 Client  →  L2:  CreateDeal(C_root, terms) → Deal NFT
 SP      ←  L2:  MinerUptake(collateral)   ← selected SPs
-SP      ↔  L1:  Seal (h_row, delta_head)  ; Epoch PoS²(bw_root)
+SP      ↔  L1:  Epoch PoUD+PoDE(C_root)
 Clients ↔  SP:  Retrieval ↔ Receipts(Ed25519) → SP aggregates
 L1      →  L2:  ZK-Bridge(recursive SNARK) → state update & vesting
 ```
@@ -153,8 +152,8 @@ It maps row redundancy → radial rings and column redundancy → angular slices
   - Primary sliver repair: query 2f+1 neighbors on the same slice.
 - All repairs MUST open against the original DU commitment (§3.3).
 
-#### 3.2.y.5 Integration with PoS²
-RS‑2D‑Hex affects only NilFS shard layout; PoS² remains file‑agnostic and unmodified (§6).
+#### 3.2.y.5 Integration with Consensus
+RS‑2D‑Hex affects only NilFS shard layout; the PoUD+PoDE mechanism remains file‑agnostic and unmodified (§6).
 
 #### 3.2.y.6 Governance
 - Default RS(12,9) remains mandatory.
@@ -206,7 +205,7 @@ If an SP detects inconsistency between a received sliver and `C_root`, it MUST p
 - `meta_inclusion[]` are Merkle proofs to `meta_root` for the relevant sliver commitments.
 - `witness_meta_root` and `witness_C_root` bind to on‑chain Deal metadata and DU commit.
 
-On‑chain action (DoS‑safe): Any party MAY call `MarkInconsistent(C_root, evidence_root)` on L1 with a refundable **bond** ≥ `B_min` (DAO‑tunable). The contract verifies at most `K_max` symbols/openings per call (cost‑capped). If ≥ f+1 proofs from distinct SPs verify, the DU is marked invalid, excluded from PoS²/BW accounting, the writer’s escrowed $STOR is slashed per §7.3, and the bond is refunded; otherwise the bond is burned. Repeat submissions for the same `C_root` within a cool‑off window are rejected.
+On‑chain action (DoS‑safe): Any party MAY call `MarkInconsistent(C_root, evidence_root)` on L1 with a refundable **bond** ≥ `B_min` (DAO‑tunable). The contract verifies at most `K_max` symbols/openings per call (cost‑capped). If ≥ f+1 proofs from distinct SPs verify, the DU is marked invalid, excluded from PoUD/PoDE/BW accounting, the writer’s escrowed $STOR is slashed per §7.3, and the bond is refunded; otherwise the bond is burned. Repeat submissions for the same `C_root` within a cool‑off window are rejected.
 
 #### 3.2.z.5 Lattice Coupling
 Resolved profiles MUST respect §3.2.y placement rules for 2D cases, and the standard ring‑cell separation for RS.
@@ -257,9 +256,9 @@ Verifiable Quality of Service (QoS) is crucial for performance and security.
     1.  **Path Selection:** Clients use the Oracle to select the fastest 'k' providers.
     2.  **Fraud Prevention:** The Oracle verifies that bandwidth receipts are genuine (verifying RTT > network floor), preventing Sybil self-dealing.
 
-## 5. Economic Model (Dual-Token)
+## 5. Economic Model ($STOR‑Only)
 
-NilStore employs a dual-token economy to decouple long-term security incentives from short-term utility incentives.
+NilStore employs a unified token economy ($STOR) to align long-term security incentives with network utility.
 
 ### 5.1 $STOR (Staking and Capacity Token)
 
@@ -267,53 +266,36 @@ NilStore employs a dual-token economy to decouple long-term security incentives 
 *   **Functions:** Staking collateral for SPs and Validators; medium of exchange for storage capacity; governance voting power.
 *   **Sink:** Slashing events.
 
-### 5.2 $BW (Bandwidth Scrip)
 
-$BW is the utility token rewarding data retrieval. It is elastic and minted based on network activity.
+### 5.2 Fee Market for Bandwidth ($STOR‑1559)
 
-#### 5.2.1 Inflation Formula (Minting)
+**One‑token profile (normative):** The protocol uses **$STOR only** for bandwidth settlement. **No activity‑based inflation** is permitted. Each region r and epoch t defines **BaseFee_r,t** (in $STOR per MiB), adjusted EIP‑1559‑style toward a byte‑throughput target U*. For a payable origin→edge transfer of b bytes:
 
-Inflation per epoch (I_epoch) is calculated using a sublinear function to incentivize usage while controlling inflation:
+  Burn      = BaseFee[r,t] × b        // burn in $STOR
+  Payout    = PremiumPerByte × b      // pay provider in $STOR
+  Tip_native (optional)               // additional burn in $STOR
 
-`I_epoch = clamp( α · sqrt(Total_Bytes_Served_NetworkWide), 0, I_epoch_max )`  // **Normative bounds:** (a) Per‑epoch cap: `I_epoch_max ≤ 0.10%` of circulating $BW (DAO‑tunable within [0.02%, 0.10%]); (b) Rolling cap: over any 30‑day window, Σ I_epoch ≤ `I_30d_max` (DAO‑tunable corridor, default 6%); (c) Attack‑traffic filter: bytes counted toward inflation MUST be discounted by an abuse‑score derived from §6.3 sampling failures and RTT‑oracle anomalies;  
+**Update rule (bounded):**
+BaseFee_{t+1} = BaseFee_t · (1 + δ · (U_t − U*) / U*)
+with |δ·(U_t−U*)/U*| ≤ Δ_max (DAO‑tunable, default ±12.5%). BaseFee is per‑region; no price oracles are used.
 
- (c.1) **Normative (Abuse Score Formula):** The abuse score $S_{abuse} \in [0, 1]$ for an SP is calculated as:
- $S_{abuse} = clamp( w_1 \cdot (F_{sample} - \epsilon) + w_2 \cdot A_{rtt} + w_3 \cdot C_{topology}, 0, 1 )$
- Where $F_{sample}$ is the fraction of failed receipt samples (§6.3), $A_{rtt}$ is the fraction of anomalous RTT attestations (§4.2), $C_{topology}$ is the topological concentration score of the clients served (measuring centralization in the Nil-Mesh graph), $\epsilon$ is the tolerance threshold, and $w_1, w_2, w_3$ are governance-tunable weights (default w1=5, w2=1, w3=2). Discounted bytes = $Bytes_\!Served \cdot (1 - S_{abuse})$.
+**Protocol currency invariant:** Settlement and escrow contracts **MUST accept $STOR only**; deposits in other assets MUST be rejected. Any off‑protocol conversions are invisible to the contracts.
 
- (d) **Per‑counterparty caps (Normative):** apply caps per (Client,SP) pair and per DU to bound bilateral wash‑retrieval. Default caps (DAO-tunable): $Cap_{Pair\_Epoch} \leq 1\,TiB$; $Cap_{DU\_Epoch} \leq 10\,GiB$.
- (e) **Honeypot zeroing:** any receipt associated with a Honeypot DU (§ 6.3.1, 6.3.4) that fails auditor checks contributes **zero** to inflation and triggers stake‑weighted escalation for the SP.
-where:
-- `α ∈ [α_min, α_max]` (DAO‑tunable);
-- `I_epoch_max` caps epoch inflation (DAO‑tunable);
-- per‑DU and per‑Miner **service caps** apply to the counted bytes to mitigate wash‑trading.
+### 5.3 Off‑Protocol Payer Adapters (No In‑Protocol Stables)
 
-*   α (Alpha) is a governance-tunable constant scaling the inflation rate.
+The protocol’s settlement layer accepts **$STOR only** and exposes no stablecoin paths or price oracles. Wallets, edges, and merchant gateways MAY implement **off‑protocol adapters** that:
+  (a) quote human‑readable prices off‑chain,
+  (b) acquire $STOR via external venues, and
+  (c) fund payer **$STOR escrow** before retrieval.
 
-#### 5.2.2 Distribution
-
-Minted $BW is distributed pro-rata to SPs based on the volume of verified retrieval receipts submitted in their PoS² proofs.
-
-#### 5.2.3 Burn Mechanism (Tipping)
-
-**Normative (Mandatory Base Burn):** A fixed fraction $\beta$ (DAO-tunable, default 5%) of the $BW$ reward generated by every verified receipt MUST be burned upon settlement. This introduces a baseline cost for all retrievals, increasing the absolute cost of wash-retrieval.
-
-Users can optionally "tip" for priority retrieval by including a `tip_bw` amount in the receipt, which is burned upon settlement.
-
-*   **Incentive Alignment:** Distribution shares are calculated *before* the burn. By capturing tipped traffic, a miner increases their effective share of the total inflation pie relative to others and improves their QoS reputation, creating competition for prioritized traffic.
-
-### 5.3 Stablecoin UX
-
-While the protocol strictly uses $BW for tips, client software can provide a seamless stablecoin (e.g., USDC) experience by executing a DEX swap (USDC -> $BW) client-side before signing the receipt.
-
+Adapters are **not** part of consensus; their failures cannot affect protocol accounting. Grants (§ 7.y, Core “GRANT‑TOKEN‑V1”) remain the recommended mechanism to control spend.
 ## 6. Consensus and Verification (Storage + Bandwidth)
 
-The economic model is enforced cryptographically through the PoS² consensus mechanism on the L1 DA Chain.
+The economic model is enforced cryptographically through the PoUD+PoDE consensus mechanism on the L1 DA Chain.
 
 ### 6.0a  Proof Mode — **Plaintext only (research phase)**
 
-Core supports **one** normative proof mode: **plaintext** — **PoUD** (KZG multi‑open on DU cleartext) + **PoDE** (timed derivations).  
-The sealed **PoS²‑L** path is **not part of Core**; it is archived as a **research‑only supplement** in **`rfcs/PoS2L_scaffold_v1.md`** and is **disabled** in all profiles. Any experimental activation MUST follow the governance and sunset requirements defined in that supplement, and does **not** alter the Core’s plaintext primacy.
+Core supports **one** normative proof mode: **plaintext** — **PoUD** (KZG multi‑open on DU cleartext) + **PoDE** (timed derivations).
 
 ### 6.0b  PoUD (Proof of Useful Data) – Plaintext Mode (normative)
 
@@ -342,14 +324,14 @@ To account for bandwidth, clients sign receipts upon successful retrieval.
 *   **Receipt Schema (Normative):**
     `Receipt := { CID_DU, Bytes, ChallengeNonce, ExpiresAt, Tip_BW, Miner_ID, Client_Pubkey, Sig_Ed25519 [, GatewaySig?] }`
     - `ChallengeNonce` is issued per‑session by the SP/gateway and bound to the DU slice; `ExpiresAt` prevents replay.
-    - **Verification model:** Ed25519 signatures are verified **off‑chain by watchers and/or on the DA chain**; PoS² only commits to a **Poseidon Merkle root** of receipts and proves byte‑sum consistency. In‑circuit Ed25519 verification is **not required**.  
-      **Commit requirement:** For epoch `t`, SPs MUST have posted `BW_commit := Blake2s‑256(BW_root)` by the last block of epoch `t−1` (see § 6.3.1). Receipts not covered by `BW_commit` are ineligible.  
-      **Penalty:** Failure to post `BW_commit` for epoch `t` sets counted bytes to zero for `t` and forfeits all $BW rewards for `t`.  
+    - **Verification model:** Ed25519 signatures are verified **off‑chain by watchers and/or on the DA chain**; the protocol commits to a **Poseidon Merkle root** of receipts and proves byte‑sum consistency. In‑circuit Ed25519 verification is **not required**.
+      **Commit requirement:** For epoch `t`, SPs MUST have posted `BW_commit := Blake2s‑256(BW_root)` by the last block of epoch `t−1` (see § 6.3.1). Receipts not covered by `BW_commit` are ineligible.
+      **Penalty:** Failure to post `BW_commit` for epoch `t` sets counted bytes to zero for `t` and forfeits all bandwidth payouts for `t`.
       **Normative anchor:** At least **2% of receipts by byte‑volume per epoch** MUST be verified on the DA chain (randomly sampled via § 6.3) and escalate automatically under anomaly (§ 6.3.4).  
       **Normative (Verification Load Cap):** The total on‑chain verification load MUST be capped (DAO‑tunable) to prevent DoS via forced escalation.
       **Normative (VLC Prioritization and Security Floors):** Governance MUST define Security Floors for critical parameters ($p_{kzg\_floor}$, $R_{floor}$, $B_{min\_floor}$). The system MUST NOT automatically reduce these parameters below their floors.
       **Normative (Economic Circuit Breaker):** If the Verification Load Cap (VLC) is reached during a security escalation (e.g., increase in $p$), and parameters are already at their floors, the system MUST activate an Economic Circuit Breaker instead of suppressing the escalation:
-      1. **Throttle $BW$ Minting:** Apply a global discount factor to the counted bytes for $BW$ inflation for the epoch, proportional to the excess load.
+      1. **Throttle Bandwidth Payouts:** Apply a global discount factor to the counted bytes for bandwidth payouts for the epoch, proportional to the excess load.
       2. **Prioritize High-Risk Receipts:** The sampling mechanism MUST prioritize receipts associated with SPs exhibiting high abuse scores (§5.2.1.c.1).
       This ensures that security auditing proceeds unimpeded during an attack, while imposing an economic cost on the network instead of compromising storage integrity.
 
@@ -366,7 +348,7 @@ For each SP and each assigned DU interval per epoch the DA chain enforces:
 ### 6.3 Probabilistic Retrieval Sampling (QoS Auditing)
 
 #### 6.3.0 Objective
-Strengthen retrieval QoS without suspending reads by sampling and verifying a governance‑tunable fraction of receipts each epoch. This mechanism is additive to PoS² and does not alter the proof object.
+Strengthen retrieval QoS without suspending reads by sampling and verifying a governance‑tunable fraction of receipts each epoch.
 
 #### 6.3.1 Sampling Set Derivation
 0) **Commit‑then‑sample (Normative):** Each SP MUST post `BW_commit := Blake2s‑256(BW_root)` no later than the last block of epoch `t−1`.
@@ -386,8 +368,8 @@ Aggregate results into `SampleReport_t`.
 
 #### 6.3.3 Enforcement
 - Pass: If ≥ (1−ε) of sampled receipts per SP verify (`ε` default 1%), rewards vest as normal.
-- Fail (Minor): If failures ≤ ε, deduct failing receipts from counted bytes and forfeit all $BW rewards for the epoch.
-- Fail (Major): If failures > ε, deduct failing receipts, forfeit rewards, and apply quadratic slashing to bonded $STOR. Repeat offenders MAY be suspended pending DAO vote.
+- Fail (Minor): If failures ≤ ε, deduct failing receipts from counted bytes and **forfeit all retrieval payouts** for the epoch.
+- Fail (Major): If failures > ε, deduct failing receipts, **forfeit payouts**, and apply quadratic slashing to bonded $STOR. Repeat offenders MAY be suspended pending DAO vote.
 
 #### 6.3.4 Governance Dials
 NilDAO MAY tune: sampling fraction `p`, tolerance `ε` (default 0.1%), slashing ratio, and escalation behavior.
@@ -399,7 +381,7 @@ Additional dial (content‑audited receipts):
 
 
 #### 6.3.5 Security & Liveness
-Sampling renders expected value of receipt fraud negative under rational slashing. Unlike asynchronous challenges that pause reads, NilStore maintains continuous liveness; PoS² remains valid regardless of sampling outcomes.
+Sampling renders expected value of receipt fraud negative under rational slashing. Unlike asynchronous challenges that pause reads, NilStore maintains continuous liveness.
 
 
 ### 6.4  Bandwidth‑Driven Redundancy (Normative)
@@ -420,16 +402,19 @@ NilStore aligns replica count and provider selection with observed demand and me
 ## 7. The Deal Lifecycle
 
 
+
 ### 7.y  Bandwidth Receipts & BW_root (Normative)
 
-- **Receipt schema:** `{ du_id, chunk_id, bytes, t_start, t_end, rtt_ms, p99_ms, client_nonce, provider_id, payer_id?, sig_provider }` hashed under `"BW-RECEIPT-V1"`.
-- **Aggregation:** leaves → Poseidon Merkle → `"BW-ROOT-V1"`; providers submit `(provider_id, epoch, BW_root, served_bytes, med_latency, agg_sig)`.
-- **Eligibility:** payer‑funded (uploader or sponsor); fraud screens (mono‑ASN discount); watcher sampling.
-
-
+- **Receipt schema ($STOR‑only):** `{ du_id, chunk_id, bytes, region, t_start, t_end, provider_id, payer_id, [edge_id?, EdgeSig?], [grant_id?], PremiumPerByte, sig_provider }` hashed under `"BW-RECEIPT-V1"`.
+- **Aggregation:** leaves → Poseidon Merkle → `"BW-ROOT-V1"`; providers submit `(provider_id, epoch, BW_root, served_bytes, agg_sig)`.
+- **Eligibility (payer‑only + A/B):**
+  (A) Edge‑settled: `edge_id` + `EdgeSig` from a payer‑registered edge; payable bytes = **origin→edge** only.
+  (B) Grant‑token: `grant_id` valid under the payer’s `"GRANT‑TOKEN‑V1"` Merkle root and unspent.
+  Receipts lacking `payer_id` are ineligible. Settlement MUST compute `Burn = BaseFee[region, epoch] × bytes` and burn it in $STOR **before** Payout.
 ### 7.x  L2 Registries & Calls (New)
 
 - `register_pcv(provider_id, PCV, proof_bundle)` — Provider Capability Vector registry; watcher probes attached and aggregated via BATMAN.
+- `register_edge(edge_id, payer_id, max_miss_budget, bond_stor)` — Registers an edge authorized to emit edge‑settled receipts on behalf of `payer_id`. `bond_stor` MUST be ≥ f(max_miss_budget) (DAO‑tunable). Edges are slashable for forged receipts.
 - `submit_bw_root(provider_id, epoch, BW_root, served_bytes, med_latency, agg_sig)` — Aggregation of per‑chunk receipts into a per‑epoch bandwidth root.
 - `spawn_hot_replicas(du_id, epoch, Δr, TTL)` — VRF‑mediated hot‑replica assignment; requires capacity bonds and enforces TTL/hysteresis.
 
@@ -444,25 +429,25 @@ NilStore aligns replica count and provider selection with observed demand and me
 ### 7.2 Deal Initiation (On-Chain - L2)
 
 1.  **`CreateDeal`:** Client calls the function on the L2 settlement contract.
-    *   It posts the Commitment Root (C_root) and the initial seal SNARK.
+    *   It posts the Commitment Root (C_root).
     *   It locks the total storage fee in $STOR escrow.
     *   A **Deal NFT** (ERC-721) is minted to the client, representing the contract.
 2.  **`MinerUptake`:** The selected SP bonds the required $STOR collateral and commences service.
-3.  **`SealAttest`:** Before any PoS² proofs for this deal are counted toward vesting,
+3.  **`StorageAttest`:** Before any PoUD+PoDE proofs for this deal are counted toward vesting,
     the SP MUST post on L1/L2 an attestation tuple
-    `{sector_id, h_row_root, delta_head_root, origin_root, deal_id}`
-    where `origin_root` commits to per‑row `{du_id, sliver_index, symbol_range, C_root}` (see Core § 3.7.1).
-    Vesting and $BW distribution for this sector are **disabled** unless a matching `SealAttest` exists.
+    `{sector_id, origin_root, deal_id}`
+    where `origin_root` commits to the data layout `{du_id, sliver_index, symbol_range, C_root}`.
+    Vesting and bandwidth distribution for this sector are **disabled** unless a matching `StorageAttest` exists.
 
 ### 7.3 Vesting and Slashing
 
 *   **Vesting:** The escrowed fee is released linearly to the SP each epoch, contingent on a valid **PoUD + PoDE** submission.
 *   **Consensus Parameters (Normative):**
     *   **Epoch Length (`T_epoch`)**: 86,400 s (24 h).
-    *   **Proof Window (`Δ_submit`)**: 1,800 s (30 min) after epoch end — this is the *network scheduling window* for accepting PoS² proofs.
-    *   **Per‑replica Work Bound (`Δ_work`)**: 60 s (baseline profile), the minimum wall‑clock work per replica referenced by the Core Spec’s § 6.2 security invariant. Implementations **MUST** ensure `t_recreate_replica ≥ 5·Δ_work` (see Nilcoin Core v2.0 § 6.2).
+    *   **Proof Window (`Δ_submit`)**: 30 s after epoch end — this is the *network scheduling window* for accepting proofs. (See Core Spec §4.6).
+    *   **Per‑replica Work Bound (`Δ_work`)**: 1 s (baseline profile), the minimum wall‑clock work per replica defined by the PoDE calibration (See Core Spec §0.2).
     *   **Block Time** (Tendermint BFT): 6 s.
-*   **Slashing Rule (Normative):** Missed **PoUD** proofs (plaintext mode) or missed **PoS²** proofs (scaffold mode) trigger a quadratic penalty on the bonded $STOR collateral:
+*   **Slashing Rule (Normative):** Missed **PoUD + PoDE** proofs trigger a quadratic penalty on the bonded $STOR collateral:
     `Penalty = min(0.50, 0.05 × (Consecutive_Missed_Epochs)²) × Correlation_Factor(F)`
 * `F` is computed **per diversity cluster** (ASN×region cell) and globally.
 * **Correlation_Factor(F) (Revised):**
@@ -519,7 +504,7 @@ To manage systemic risk and enable sophisticated financial instruments, NilStore
 
 ### 9.x  Bandwidth Quota, Auto‑Top‑Up & Sponsors (Normative)
 
-The protocol uses a **hybrid** bandwidth model: each file has an **included quota** (budget reserved per epoch from uploader deposits in $STOR, converted to $BW on verified receipts). On exhaustion, the file enters a **grace tier** with reduced placement weight until **auto‑top‑up** or **sponsor** budgets restore full weight. APIs: `set_quota`, `set_auto_top_up`, `sponsor`. Governance sets `w_grace`, roll‑over caps, region multipliers, price bands, sponsor caps, and ASN/geo abuse discounts.
+The protocol uses a **hybrid** bandwidth model: each file has an **included quota** (budget reserved per epoch from uploader deposits in **$STOR**; verified receipts **debit $STOR escrow**). On exhaustion, the file enters a **grace tier** with reduced placement weight until **auto‑top‑up** or **sponsor** budgets restore full weight. APIs: `set_quota`, `set_auto_top_up`, `sponsor`. Governance sets `w_grace`, roll‑over caps, region multipliers, price bands, sponsor caps, and ASN/geo abuse discounts.
 
 
 
@@ -527,11 +512,11 @@ The network is governed by the NilDAO, utilizing stake-weighted ($STOR) voting o
 
 ### 9.1 Scope
 
-The DAO controls economic parameters (α, slashing ratios, bounty percentages), QoS sampling dials (`p`, `ε`, `ε_sys`), multi‑stage reconfiguration thresholds (`Δ_ready_timeout`, quorum, `Δ_ready_backoff`), Durability Dial mapping (target → profile), metadata‑encoding parameters (`n_meta`, `k_meta`, `meta_scheme`), network upgrades, and the treasury.
-It also controls content‑binding dials across Core and Metaspec: PoS² linking fraction `p_link` (Core § 4.2.1), PoDE fraction `p_derive` (Core § 4.2.2), the micro‑seal profile (`micro_seal`, Core § 3.4.3), and receipt‑level content‑check fraction `p_kzg` (this § 6.3.4).
-Additional PoDE/PoUD pressure dials (plaintext/scaffold modes):
-- `R` — Minimum parallel PoDE sub‑challenges per proof window (default `R ≥ 16` for plaintext mode; `R ≥ 8` for scaffold mode).
-- `B_min` — Minimum verified bytes per proof window (default `≥ 128 MiB` for plaintext mode; `≥ 64 MiB` for scaffold mode).
+The DAO controls economic parameters (slashing ratios, bounty percentages), QoS sampling dials (`p`, `ε`, `ε_sys`), multi‑stage reconfiguration thresholds (`Δ_ready_timeout`, quorum, `Δ_ready_backoff`), Durability Dial mapping (target → profile), metadata‑encoding parameters (`n_meta`, `k_meta`, `meta_scheme`), network upgrades, and the treasury.
+It also controls content‑binding dials across Core and Metaspec, primarily the receipt‑level content‑check fraction `p_kzg` (this § 6.3.4).
+Additional PoDE/PoUD pressure dials:
+- `R` — Minimum parallel PoDE sub‑challenges per proof window (default `R ≥ 16`).
+- `B_min` — Minimum verified bytes per proof window (default `≥ 128 MiB`).
 - Escalation: If sampled fail rate `ε_sys` exceeds the threshold for 2 epochs, increase `R` and/or `B_min` stepwise (×1.5 max per epoch) subject to the Verification Load Cap (§ 6.1).
 
 ### 9.2 Upgrade Process
@@ -552,7 +537,7 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 
 1.  **MVP SDK (Rust/TS):** (2025-09)
 2.  **DAO Launch & Tokenomics Freeze:** (2025-11)
-3.  **Public Testnet-0 (L1 DA Chain):** (2026-01) - PoS², basic economics.
+3.  **Public Testnet-0 (L1 DA Chain):** (2026-01) - PoUD+PoDE, basic economics.
 4.  **Edge-Swarm Beta (Retrieval Economy):** (2026-04) - Mobile client, $BW activated.
 5.  **Rollup Bridge Mainnet (L2 Settlement):** (2026-06) - EVM L2 integration, Deal NFTs.
 6.  **Mainnet-1:** (2026-09).
@@ -561,8 +546,8 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 
 | Metric                  | Target                               |
 | ----------------------- | ------------------------------------ |
-| Seal Time (64 GiB)      | ≤ 5 min (8-core CPU, AVX2)           |
-| Epoch Proof Size (PoS²) | ≤ 1.2 kB (post-recursion)            |
+| Seal Time (64 GiB)      | N/A (Plaintext only)                 |
+| Epoch Proof Size (Aggregated) | ≤ 1.2 kB (post-recursion)            |
 | Retrieval RTT (p95)     | ≤ 400 ms (across 5 geo regions)      |
 | On-chain Verify Gas (L2)| ≤ 120k Gas                           |
 | Durability              | ≥ 11 nines (modeled)                 |
@@ -573,26 +558,10 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 
 | Scenario | Attack surface | Detect / Prevent (Design) | Normative anchor(s) |
 | --- | --- | --- | --- |
-| **Wash‑retrieval / Self‑dealing** | SP scripts fake clients to farm $BW receipts | Challenge‑nonce + expiry in receipts; watchers or L1 verify Ed25519 off‑chain/on‑chain; PoS² only commits to **Poseidon receipt root** and byte‑sum; per‑DU/epoch service caps; /16 down‑weighting | §6.1 (Receipt schema & verification model), §6.2 (BW_root), §5.2.1 (caps) |
+| **Wash‑retrieval / Self‑dealing** | SP scripts fake clients to inflate bandwidth usage | Challenge‑nonce + expiry in receipts; watchers or L1 verify Ed25519 off‑chain/on‑chain; protocol commits to **Poseidon receipt root** and byte‑sum; per‑DU/epoch service caps; /16 down‑weighting | §6.1 (Receipt schema & verification model), §6.2 (BW_root) |
 | **RTT Oracle collusion** | Gateways/attesters collude to post low RTT | Stake‑weighted attesters; challenge‑response tokens; ASN/region diversity; randomized assignments; slashable fraud proofs with raw transcripts | §4.2 (RTT Oracle) |
 | **Commitment drift in repair** | Repaired shards bound to a *new* commitment | Repaired shards MUST open against the **original DU KZG**; reject new commitments | §3.3 (Autonomous Repair) |
 | **Bridge/rollup trust** | VK swap or replay of old epoch | L2 bridge pins `vk_hash`; public inputs `{epoch_id, DA_state_root, poud_root, bw_root}`; monotone `epoch_id`; timelocked VK upgrades | §2.4 (ZK‑Bridge) |
 | **Lattice capture (ring‑cell cartel)** | SPs concentrate shards topologically | One‑shard‑per‑SP‑per‑cell; minimum cell distance; DAO can raise separation if concentration increases | §3.2 (Placement constraints), §9 (Governance) |
-| **Shard withholding (availability)** | SP stores but doesn’t serve | Vesting tied to valid PoUD + PoDE; $BW distribution requires receipts; slashing for missed epochs | §7.3 (Vesting/Slashing), §6 |
+| **Shard withholding (availability)** | SP stores but doesn’t serve | Vesting tied to valid PoUD + PoDE; Bandwidth distribution requires receipts; slashing for missed epochs | §7.3 (Vesting/Slashing), §6 |
 
----
-## Annex B (Optional): Sealed PoS²‑L Scaffold
-
-> Disabled by default. This annex preserves an optional sealed path for phased rollout or emergency response. When activated by governance, SPs maintain a sealed scaffold (fractional row coverage) and answer PoS²‑L window proofs bound back to the original DU commitment via KZG content openings. PoDE derivations MAY be required on a fraction of sealed rows to ensure the scaffold is still linked to plaintext. Switching out of scaffold mode MUST be monotonic and resets vesting gates to PoUD + PoDE.
-
-Governance dials (bounded): `φ_seal` (sealed‑row fraction), `p_link` (fraction of PoS²‑L challenges with KZG content binding), `p_derive` (fraction requiring row‑local PoDE), all subject to a Verification Load Cap.
-| **Beacon grinding** | Bias challenges | BLS VRF uniqueness; BATMAN threshold; on‑chain pairing check; domain separation | spec §5 (VRF), metaspec §6.2 (Challenge) |
-| **Merkle truncation misuse** | Excessive path truncation weakens PoS² | Prefer higher‑arity Merkle or longer per‑sibling bytes; security bound documented | spec §4.3.1 (witness); §4.1 (arity option) |
-| **Economic instability** | Excess $BW inflation via spam | Epoch cap `I_epoch_max`; α bounds; per‑DU caps; tips burned; RTT oracle weights | §5.2 (BW), §4.2 (RTT Oracle) |
-| **Deal fraud / mispricing** | Non‑delivery after payment | Escrowed $STOR; vesting gated by PoS²; repair bounties | §7.2–7.3, §3.3 |
-
-| **Receipt inflation via colluding gateways** | Faked signatures/RTT | Probabilistic sampling (§6.3); RTT oracle transcripts; slashing (`ε` threshold) | §6.3, §4.2 |
-| **Writer inconsistency (2D profiles)** | Malicious sliver encodings | Encoded metadata; f+1 inconsistency proofs → mark invalid; writer slashing | §3.2.z.3 |
-| **Epoch handover stalls** | New committee not ready | Multi‑stage reconfiguration; readiness signaling; emergency bounties | §7.4 |
-
-**Reviewer note:** Items labeled *Normative* above correspond to concrete MUST/SHALL language in the main text; others are informative guidance tied to governance levers.
