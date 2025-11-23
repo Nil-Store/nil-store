@@ -273,19 +273,23 @@ NilStore employs a unified token economy ($STOR) to align long-term security inc
 *   **Supply:** Fixed (1 Billion).
 *   **Functions:** Staking collateral for SPs and Validators; medium of exchange for storage capacity; governance voting power.
 *   **Sink:** Slashing events.
+*   **Float Health Monitors (normative):** Publish a **Circulating Float Ratio (CFR)** = (total supply – staked collateral – escrow – DAO/Treasury/vesting – unspent grants)/total supply. Define **yellow/red bands** (default 30% / 25%). Crossing yellow permits a temporary β taper (increase Treasury share) and widening of downward δ within published bands; crossing red triggers the Economic Circuit Breaker (§ 6.6.3). These measures MUST NOT reduce Core security floors (`p_kzg`, `R`, `B_min`) nor suppress PoUD/PoDE verification.
 
 
 ### 5.2 Fee Market for Bandwidth ($STOR‑1559)
 
 **One‑token profile (normative):** The protocol uses **$STOR only** for bandwidth settlement. **No activity‑based inflation** is permitted. Each region r and epoch t defines **BaseFee_r,t** (in $STOR per MiB), adjusted EIP‑1559‑style toward a byte‑throughput target U*. For a payable origin→edge transfer of b bytes:
 
-  Burn      = BaseFee[r,t] × b        // burn in $STOR
-  Payout    = PremiumPerByte × b      // pay provider in $STOR
-  Tip_native (optional)               // additional burn in $STOR
+  Burn       = β · BaseFee[r,t] × b                 // burn share in $STOR
+  Treasury   = (1−β) · BaseFee[r,t] × b             // route to Security Treasury
+  Payout     = PremiumPerByte × b                   // pay provider in $STOR
+
+**Burn‑Share Governor (normative).** β ∈ [β_min, β_max] is DAO‑governed (default β=0.95; bounds [0.90, 1.00]). During a declared Security Escalation (§ 6.6.3), β MAY be temporarily lowered but MUST satisfy β ≥ β_emergency_min (default 0.85) and MUST auto‑revert after de‑escalation. Changes to β and its bounds are time‑locked (≥ 24 h).
 
 **Update rule (bounded):**
 BaseFee_{t+1} = BaseFee_t · (1 + δ · (U_t − U*) / U*)
 with |δ·(U_t−U*)/U*| ≤ Δ_max (DAO‑tunable, default ±12.5%). BaseFee is per‑region; no price oracles are used.
+**Operating Bands (normative).** For each region‑class, the DAO MUST publish on‑chain `{U* band, δ band}` and a minimum 72 h timelock for any changes. The controller MUST clamp intra‑epoch adjustments to the published band; out‑of‑band moves require a DAO vote.
 
 **Protocol currency invariant:** Settlement and escrow contracts **MUST accept $STOR only**; deposits in other assets MUST be rejected. Any off‑protocol conversions are invisible to the contracts.
 
@@ -330,7 +334,8 @@ On‑chain: L1 verifies KZG openings (precompile § 2.2) and checks `B_min` & 
 To account for bandwidth, clients sign receipts upon successful retrieval.
 
 *   **Receipt Schema (Normative):**
-    `Receipt := { CID_DU, Bytes, EpochID, ChallengeNonce, ExpiresAt, Tip_BW, Miner_ID, Client_Pubkey, Sig_Ed25519 [, GatewaySig?] }`
+    `Receipt := { CID_DU, Bytes, EpochID, ChallengeNonce, ExpiresAt, Tip_BW, Miner_ID, payer_id, Client_Pubkey, Sig_Ed25519 [, GatewaySig?, grant_id?] }`
+    **Eligibility (normative).** Receipts lacking `payer_id` are ineligible. If `grant_id` is present, it MUST verify against the payer’s `"GRANT‑TOKEN‑V1"` Merkle root. Settlement MUST compute `Burn = β·BaseFee[region, epoch] × Bytes` **before** `Payout`, and MUST route `(1−β)` of `BaseFee × Bytes` to the Security Treasury.
     - `ChallengeNonce` is issued per‑session by the SP/gateway and bound to the DU slice; `ExpiresAt` prevents replay.
     - `EpochID` binds the receipt to the specific accounting period and MUST match the current epoch during submission.
     - **Verification model:** Ed25519 signatures are verified **off‑chain by watchers and/or on the DA chain**; the protocol commits to a **Poseidon Merkle root** of receipts and proves byte‑sum consistency. In‑circuit Ed25519 verification is **not required**.
@@ -342,7 +347,7 @@ To account for bandwidth, clients sign receipts upon successful retrieval.
       **Normative (Economic Circuit Breaker):** If the Verification Load Cap (VLC) is reached during a security escalation (e.g., increase in $p$), and parameters are already at their floors, the system MUST activate an Economic Circuit Breaker instead of suppressing the escalation:
       1. **Prioritize High-Risk Receipts:** The sampling mechanism MUST prioritize receipts associated with SPs exhibiting high abuse scores (See §6.3.1).
       2. **Source Verification Costs:** The excess verification load costs MUST first be sourced from the dedicated Security Treasury (DAO-managed).
-      3. **Dynamic BaseFee Adjustment:** If the Treasury is insufficient, the protocol MUST dynamically increase the `BaseFee` (Burn component) (§5.2) for the duration of the escalation. Bandwidth payouts (PremiumPerByte) MUST NOT be throttled.
+      3. **Emergency Burn‑Share Override + Surcharge (normative):** If the Treasury is insufficient, the protocol MUST temporarily lower `β` (routing a larger share of `BaseFee` to the Security Treasury) within `[β_emergency_min, β]` and MAY apply a bounded security surcharge `σ_sec` to `BaseFee` whose revenues are routed 100% to the Security Treasury. Bandwidth payouts (PremiumPerByte) MUST NOT be throttled. Both switches MUST auto‑revert after de‑escalation or after 14 days (whichever is sooner) and are subject to the standard timelock unless a yellow‑flag freeze is active.
       This ensures that security auditing proceeds unimpeded during an attack, while imposing an economic cost on the network instead of compromising storage integrity.
 
 ### 6.2 Storage Proof Binding (PoUD + PoDE)
@@ -429,7 +434,7 @@ NilStore aligns replica count and provider selection with observed demand and me
 - **Eligibility (payer‑only + A/B):**
   (A) Edge‑settled: `edge_id` + `EdgeSig` from a payer‑registered edge; payable bytes = **origin→edge** only.
   (B) Grant‑token: `grant_id` valid under the payer’s `"GRANT‑TOKEN‑V1"` Merkle root and unspent.
-  Receipts lacking `payer_id` are ineligible. Settlement MUST compute `Burn = BaseFee[region, epoch] × bytes` and burn it in $STOR **before** Payout.
+  Receipts lacking `payer_id` are ineligible. Settlement MUST compute `Burn = β·BaseFee[region, epoch] × bytes` **before** Payout and MUST route `(1−β)` of `BaseFee × bytes` to the Security Treasury.
 ### 7.x  L2 Registries & Calls (New)
 
 - `register_pcv(provider_id, PCV, proof_bundle)` — Provider Capability Vector registry; watcher probes attached and aggregated via BATMAN.

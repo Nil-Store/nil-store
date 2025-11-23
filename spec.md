@@ -35,6 +35,8 @@ All integers, vectors, and matrices are interpreted **little‑endian** unless i
 
 A **dial profile** defines the core cryptographic parameters and the Proof-of-Delayed-Encode (PoDE) settings.
 
+**Economic Param Set (normative pointer).** The DAO MUST publish a hash‑pinned **$STOR‑1559 Parameter Set** (`PSet`) on L2 under `"STOR-1559-PARAMS-V1"` covering `{U* by region‑class, δ bands, β, β_min, β_max, β_emergency_min, σ_sec_max}`. Clients and watchers MUST reject parameter changes not reflected in the latest `PSet` digest.
+
 | Symbol | Description                                | Baseline "S‑512"                |
 | ------ | ------------------------------------------ | ------------------------------- |
 | `Curve`| Elliptic Curve (for KZG and VRF)           | **BLS12-381** (Mandatory)       |
@@ -79,6 +81,12 @@ Further IDs are allocated by NilStore governance.
 | `"FMK-WRAP-HPKE-V1"` | HPKE envelope for FMK                         | § A |
 | `"GRANT-TOKEN-V1"`   | Retrieval grant token claims                  | § B |
 For transparency and auditability, Core defines the following fixed ASCII domain strings used with Blake2s‑256 across modules:
+
+| Tag                      | Purpose                                                     | Section |
+| ------------------------ | ----------------------------------------------------------- | ------- |
+| `"GRANT-TOKEN-V1"`       | Retrieval grant token claims                                | § B     |
+| `"STOR-1559-PARAMS-V1"`  | Digest of $STOR‑1559 economic params (`U*`, `δ`, `β`, bands, `β_emergency_min`, `σ_sec_max`) published on L2 | § 0.2, § 9 |
+| `"SECURITY-TREASURY-V1"` | Accounting route identifier for § 6.6.3 escalation financing | § 6.6.3 |
 
 | Tag                  | Purpose                                  | Section    |
 | -------------------- | ---------------------------------------- | ---------- |

@@ -148,6 +148,7 @@ NilStore employs a unified token economy ($STOR) to align long-term security inc
   * **Supply:** Fixed (1 Billion).
   * **Functions:** Staking collateral for SPs and Validators; medium of exchange for storage capacity and bandwidth; governance voting power.
   * **Sink:** Slashing events.
+  * **Float Health Monitors (normative):** Publish a **Circulating Float Ratio (CFR)** = (total supply – staked collateral – escrow – DAO/Treasury/vesting – unspent grants)/total supply. Define **yellow/red bands** (default 30% / 25%). Crossing yellow permits a temporary β taper (increase Treasury share) and widening of downward δ within published bands; crossing red triggers the Economic Circuit Breaker (§ 6.6.3). These measures MUST NOT reduce Core security floors (`p_kzg`, `R`, `B_min`) nor suppress PoUD/PoDE verification.
 
 ### 5.2 Fee Market for Bandwidth ($STOR‑1559)
 
@@ -156,13 +157,17 @@ NilStore employs a unified token economy ($STOR) to align long-term security inc
 Each region `r` and epoch `t` defines **BaseFee\_r,t** (in $STOR per MiB), adjusted EIP‑1559‑style toward a byte‑throughput target U\*. For a payable origin→edge transfer of `b` bytes:
 
 ```
-Burn      = BaseFee[r,t] × b        // burn in $STOR
-Payout    = PremiumPerByte × b      // pay provider in $STOR
+Burn       = β · BaseFee[r,t] × b                 // burn share in $STOR
+Treasury   = (1−β) · BaseFee[r,t] × b             // route to Security Treasury
+Payout     = PremiumPerByte × b                   // pay provider in $STOR
 ```
+
+**Burn‑Share Governor (normative).** β ∈ [β_min, β_max] is DAO‑governed (default β=0.95; bounds [0.90, 1.00]). During a declared Security Escalation (§ 6.6.3), β MAY be temporarily lowered but MUST satisfy β ≥ β_emergency_min (default 0.85) and MUST auto‑revert after de‑escalation. Changes to β and its bounds are time‑locked (≥ 24 h).
 
 **Update rule (bounded):**
 `BaseFee_{t+1} = BaseFee_t · (1 + δ · (U_t − U*) / U*)`
 with bounds (default ±12.5%).
+**Operating Bands (normative).** For each region‑class, the DAO MUST publish on‑chain `{U* band, δ band}` and a minimum 72 h timelock for any changes. The controller MUST clamp intra‑epoch adjustments to the published band; out‑of‑band moves require a DAO vote.
 
 **Protocol currency invariant:** Settlement and escrow contracts **MUST accept $STOR only**.
 
@@ -290,7 +295,8 @@ The scheduler MUST be commit‑then‑sample: indices for epoch `t` are pseudora
 To account for bandwidth and ensure Quality of Service, clients sign receipts upon successful retrieval, which are then probabilistically sampled for verification.
 
   * **Receipt Schema (Normative):**
-    `Receipt := { CID_DU, Bytes, EpochID, ChallengeNonce, ExpiresAt, Tip_BW, Miner_ID, Client_Pubkey, Sig_Ed25519 [, GatewaySig?] }`
+    `Receipt := { CID_DU, Bytes, EpochID, ChallengeNonce, ExpiresAt, Tip_BW, Miner_ID, payer_id, Client_Pubkey, Sig_Ed25519 [, GatewaySig?, grant_id?] }`
+    **Eligibility (normative).** Receipts lacking `payer_id` are ineligible. If `grant_id` is present, it MUST verify against the payer’s `"GRANT‑TOKEN‑V1"` Merkle root. Settlement MUST compute `Burn = β·BaseFee[region, epoch] × Bytes` **before** `Payout`, and MUST route `(1−β)` of `BaseFee × Bytes` to the Security Treasury.
   * **Verification model:** Ed25519 signatures are verified off‑chain by watchers and/or on the DA chain. The protocol commits to a **Poseidon Merkle root** of receipts (`BW_root`) and proves byte‑sum consistency.
   * **Commit requirement (Normative):** For epoch `t`, SPs MUST have posted `BW_commit := Blake2s‑256(BW_root)` by the last block of epoch `t−1`. Failure to post forfeits all bandwidth payouts for `t`.
 
@@ -317,7 +323,7 @@ The total on‑chain verification load MUST be capped (DAO‑tunable) to prevent
 
 1.  **Prioritize High-Risk Receipts:** Sampling prioritizes receipts associated with high abuse scores.
 2.  **Source Verification Costs:** Excess costs are sourced from the Security Treasury.
-3.  **Dynamic BaseFee Adjustment:** If the Treasury is insufficient, the protocol MUST dynamically increase the `BaseFee` (Burn component) (Section 5.2) for the duration of the escalation. Payouts MUST NOT be throttled.
+3.  **Emergency Burn‑Share Override + Surcharge (normative):** If the Treasury is insufficient, the protocol MUST temporarily lower `β` (routing a larger share of `BaseFee` to the Security Treasury) within `[β_emergency_min, β]` and MAY apply a bounded security surcharge `σ_sec` to `BaseFee` whose revenues are routed 100% to the Security Treasury. Payouts MUST NOT be throttled. Both switches MUST auto‑revert after de‑escalation or after 14 days (whichever is sooner) and are subject to the standard timelock unless a yellow‑flag freeze (§ 2.4) is active.
 
 ## 7\. The Deal Lifecycle
 
@@ -334,6 +340,7 @@ Clients query Nil-Mesh for SPs near the required lattice slots. SPs respond with
 ### 7.3 Vesting and Slashing
 
   * **Vesting:** The escrowed fee is released linearly to the SP each epoch, contingent on a valid **PoUD + PoDE** submission.
+  * **Vesting & Burning Semantics (normative):** Storage escrow is **not** subject to the § 5.2 1559 burn; it vests to the SP on proof of service. Protocol‑level burning occurs via (i) the **bandwidth BaseFee** in § 5.2 and (ii) **slashing events** under this § 7.3.1.
   * **Consensus Parameters (Normative):**
       * **Epoch Length (`T_epoch`)**: 86,400 s (24 h).
       * **Proof Window (`Δ_submit`)**: 120 s after epoch end (network scheduling window); DAO‑tunable with a normative floor of 60 s to accommodate cross‑geo jitter.
@@ -373,11 +380,25 @@ The network is governed by the NilDAO, utilizing stake-weighted ($STOR) voting o
 
 The DAO controls:
 
-  * **Economic parameters:** Slashing ratios, bounty percentages, BaseFee adjustment bounds.
+  * **Economic parameters:** Slashing ratios, bounty percentages, BaseFee adjustment bounds, **burn‑share β bounds (β, β_min, β_max, β_emergency_min)**, and **float monitor thresholds/actions** (CFR yellow/red, δ tapering limits, σ_sec_max).
   * **QoS sampling dials:** `p` (sampling fraction), `ε` (tolerance), `ε_sys` (system anomaly rate).
   * **PoDE/PoUD pressure dials:** `R` (parallel sub‑challenges), `B_min` (minimum verified bytes), and PoDE calibration (`H_t`, `H_m`).
   * **Network parameters:** Durability Dial mapping, reconfiguration thresholds, Verification Load Cap.
   * **Network upgrades and the treasury.**
+
+### 9.x Treasury & Token Distribution Policy (Normative)
+
+**Scope.** This section governs (a) initial token distribution (genesis/IO), (b) Treasury inflows/outflows, and (c) reporting & controls.
+
+**Supply & Genesis.** Total supply is fixed at 1,000,000,000 $STOR. The DAO MUST publish a hash‑pinned genesis ledger (allocations, vesting schedules, cliffs) and an IO policy, if any, prior to DAO launch (§ 10.1 Phase 2).
+
+**Inflows.** Treasury inflows MAY include: (i) `(1−β)·BaseFee` per § 5.2, (ii) earmarked penalties and forfeitures where specified by policy, and (iii) voluntary grants. Slashed collateral not explicitly routed to Treasury is burned.
+
+**Outflows.** Allowed spend categories: (i) security verification & audits (§ 6.6.3), (ii) protocol grants (grants/credits for bandwidth per § 9.x references), (iii) repair bounties (§ 3.3 top‑ups), (iv) client SDK infra. Each category MUST have annual caps and per‑tx caps, hash‑pinned.
+
+**Controls.** All outflows require on‑chain proposals, a minimum 72 h timelock, and multi‑sig execution by distinct roles (Core, Independent Auditor, Community) matching § 9.2 role diversity. The DAO MUST maintain a 12‑month security runway before discretionary outflows.
+
+**Reporting.** A quarterly, hash‑pinned Treasury report (CSV ledger + SHA256SUMS) is mandatory.
 
 ### 9.2 Upgrade Process
 
