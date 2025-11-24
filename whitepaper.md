@@ -446,11 +446,12 @@ The cryptographic specification and the tokenomics parameters are hash-pinned an
 
 ### 11.3 Redundancy Dial & Auto-Rebalance
 - Durability presets map to pinned profiles: `Standard`=RS(12,9), `Archive`=RS(16,12), `Mission-Critical`=RS‑2D‑Hex{rows=4, cols=7}. Deals record `durability_target` and resolved profile.
-- Auto‑rebalance restores target redundancy when degraded or when an SP exits; repairs must open against the original `C_root` and respect placement diversity.
+- Placement constraints per profile: `Standard` ring distance ≥ 2; `Archive` ring distance ≥ 3; `Mission-Critical` ring distance ≥ 3 and slice distance ≥ 2; one shard per SP per cell.
+- Auto‑rebalance restores target redundancy when degraded or when an SP exits; repairs must open against the original `C_root` and respect placement diversity. Defaults: `T_repair_max = 24h` (RS), `T_repair_max = 8h` (RS‑2D‑Hex).
 
 ### 11.4 Capacity-Aware Entry/Exit
 - Entry probation ramps rewards 50→100% over `N_probation = 7` epochs with a slashing multiplier `λ_entry = 1.25`.
-- Exit fee and unbonding window scale with capacity headroom: `F_exit = F_base × (1 + k_fee × (1 − headroom))` with defaults `F_base=0.5%`, `k_fee=2.0`, bounds `[0.5%,10%]`; `T_unbond = T_base + k_time × (1 − headroom)` with defaults `T_base=24h`, `k_time=72h`, bounds `[12h,7d]`. Surplus capacity → cheaper/faster exits; tight capacity → costlier/slower exits with mandatory handoff/repair before finalization.
+- Exit fee and unbonding window scale with capacity headroom: `headroom = clamp(0,1, free_capacity_ratio / target_headroom)` with default `target_headroom = 0.20` (optionally smoothed via 7‑day EMA). `F_exit = F_base × (1 + k_fee × (1 − headroom))` with defaults `F_base=0.5%`, `k_fee=2.0`, bounds `[0.5%,10%]`; `T_unbond = T_base + k_time × (1 − headroom)` with defaults `T_base=24h`, `k_time=72h`, bounds `[12h,7d]`. Surplus capacity → cheaper/faster exits; tight capacity → costlier/slower exits with mandatory handoff/repair before finalization.
 
 ### 11.5 Billing & Spend Guards
 - Single escrow per deal (storage + baseline egress) in $STOR; auto top‑up optional; grace mode reduces QoS weight when under‑funded. Defaults: `K_epoch=7` epochs funded; `K_low=3` epochs trigger grace. Retrieval billing is per epoch with bounded `β` and `PremiumPerByte` within `[0, premium_max]` and `price_cap_GiB`.

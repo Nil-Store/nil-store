@@ -599,11 +599,12 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 
 ### 11.3 Redundancy Dial & Auto-Rebalance (normative)
 - Durability slider presets map to governance‑pinned profiles (see Core §6.2): `Standard`=RS(12,9), `Archive`=RS(16,12), `Mission-Critical`=RS‑2D‑Hex{rows=4, cols=7}. Deals MUST record `durability_target` and resolved profile.
+- Placement constraints per profile: `Standard` ring distance ≥ 2; `Archive` ring distance ≥ 3; `Mission-Critical` ring distance ≥ 3 and slice distance ≥ 2, all with one shard per SP per cell.
 - Auto‑rebalance: when redundancy < target or an SP exits, the network MUST schedule repairs within `T_repair_max` to restore the profile, opening against the original `C_root` and respecting placement diversity. Defaults: `T_repair_max = 24h` (RS), `T_repair_max = 8h` (RS‑2D‑Hex). Status transitions `healthy/degraded/repairing` are emitted as events.
 
 ### 11.4 Capacity-Aware Entry/Exit (normative)
 - Entry probation: rewards ramp 50→100% over `N_probation = 7` epochs; slashing multiplier `λ_entry = 1.25` during ramp.
-- Exit: exit fee and unbonding window scale with capacity headroom (`H_free`): `F_exit = F_base × (1 + k_fee × (1 − headroom))` with defaults `F_base=0.5%`, `k_fee=2.0`, bounds `[0.5%, 10%]`; `T_unbond = T_base + k_time × (1 − headroom)` with defaults `T_base=24h`, `k_time=72h`, bounds `[12h, 7d]`. High headroom → low fee/fast exit; low headroom → higher fee/slower exit and mandatory handoff. Exits finalize only after repairs complete and `T_unbond` elapses.
+- Exit: exit fee and unbonding window scale with capacity headroom (`H_free`): `headroom = clamp(0,1, free_capacity_ratio / target_headroom)` with default `target_headroom = 0.20` (optionally smoothed via 7‑day EMA). `F_exit = F_base × (1 + k_fee × (1 − headroom))` with defaults `F_base=0.5%`, `k_fee=2.0`, bounds `[0.5%, 10%]`; `T_unbond = T_base + k_time × (1 − headroom)` with defaults `T_base=24h`, `k_time=72h`, bounds `[12h, 7d]`. High headroom → low fee/fast exit; low headroom → higher fee/slower exit and mandatory handoff. Exits finalize only after repairs complete and `T_unbond` elapses.
 
 ### 11.5 Billing & Spend Guards (normative)
 - Single DU escrow covers storage + baseline egress in $STOR; auto top‑up optional. Defaults: `K_epoch=7` epochs funded; `K_low=3` epochs trigger grace. Retrieval continues but no new replicas spawn.
