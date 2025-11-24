@@ -586,6 +586,36 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 | Sampling FP/FN rate       | ≤ 0.5% / ≤ 0.1% (monthly audit)    |
 | Handover ready time (p50) | ≤ 2 h (RS‑2D‑Hex), ≤ 6 h (RS)       |
 
+## 11. Product UX & Economics (Product-Aligned)
+
+### 11.1 Client APIs (informative; SDK requirement)
+- `store(file, durability_target, term)` → returns `{deal_id, profile, price_quote, placement_summary, estimated_retrieval_price}`. SDKs MUST expose escrow balance, spend caps, and redundancy status events.
+- `get(file_id)` → routes to healthy SPs, returns a price quote before retrieval. SDKs SHOULD expose “price cap would be exceeded” warnings and allow user confirmation.
+
+### 11.2 SP Selection & Pricing (normative where noted)
+- **AskBook:** Providers post standing asks `{capacity_free_GiB, qos_class, min_term, price_curve_id, region_cells[]}`. Deals MUST select SPs from the AskBook; off‑book providers are ineligible for PoUD/PoDE payouts.
+- **Price curves:** Derived from the hash‑pinned `$STOR-1559` `PSet` (BaseFee, β bands, surge cap). Frontends MAY badge “good rate” when within +1 band of the median. Quotes above `price_cap_GiB` are rejected. Defaults: `price_cap_GiB = 2.0 × median(BaseFee by region/class)`; `β_floor = 0.70`, `β_ceiling = 1.30`; `premium_max = 0.5 × BaseFee`.
+- **Deterministic assignment:** Client selection is deterministic given `{CID_DU, ClientSalt_32B, shard_index}` plus a secondary score combining price/QoS to break ties. One shard per SP per ring‑cell and governance‑set min ring/slice distance apply.
+
+### 11.3 Redundancy Dial & Auto-Rebalance (normative)
+- Durability slider presets map to governance‑pinned profiles (see Core §6.2): `Standard`=RS(12,9), `Archive`=RS(16,12), `Mission-Critical`=RS‑2D‑Hex{rows=4, cols=7}. Deals MUST record `durability_target` and resolved profile.
+- Auto‑rebalance: when redundancy < target or an SP exits, the network MUST schedule repairs within `T_repair_max` to restore the profile, opening against the original `C_root` and respecting placement diversity. Defaults: `T_repair_max = 24h` (RS), `T_repair_max = 8h` (RS‑2D‑Hex). Status transitions `healthy/degraded/repairing` are emitted as events.
+
+### 11.4 Capacity-Aware Entry/Exit (normative)
+- Entry probation: rewards ramp 50→100% over `N_probation = 7` epochs; slashing multiplier `λ_entry = 1.25` during ramp.
+- Exit: exit fee and unbonding window scale with capacity headroom (`H_free`): `F_exit = F_base × (1 + k_fee × (1 − headroom))` with defaults `F_base=0.5%`, `k_fee=2.0`, bounds `[0.5%, 10%]`; `T_unbond = T_base + k_time × (1 − headroom)` with defaults `T_base=24h`, `k_time=72h`, bounds `[12h, 7d]`. High headroom → low fee/fast exit; low headroom → higher fee/slower exit and mandatory handoff. Exits finalize only after repairs complete and `T_unbond` elapses.
+
+### 11.5 Billing & Spend Guards (normative)
+- Single DU escrow covers storage + baseline egress in $STOR; auto top‑up optional. Defaults: `K_epoch=7` epochs funded; `K_low=3` epochs trigger grace. Retrieval continues but no new replicas spawn.
+- Users MAY set `max_monthly_spend`; SDKs MUST enforce unless explicitly overridden. Retrieval receipts bill per epoch with bounded `β` and `PremiumPerByte` (within `[0, premium_max]`), subject to `price_cap_GiB`.
+
+### 11.6 Events & Emergency UX (normative)
+- Standard events: `DealCreated`, `RedundancyDegraded`, `RepairScheduled`, `RepairComplete`, `ProofMissed`, `ExitRequested`, `ExitFinalized`, `FreezeActivated`, `FreezeCleared`, `SpendGuardHit`. Clients and explorers SHOULD display these.
+- Yellow‑flag freeze: proofs continue; withdrawals, new deals, and exits pause; auto top‑ups pause. Messaging to users/SPs is mandatory; timers for grace/sunset follow Core §6.3.
+
+### 11.7 Research Isolation
+- PoS²‑L RFCs (`rfcs/PoS2L_*`) are research‑only and disabled for production profiles unless explicitly activated by DAO supermajority plus emergency signers with auto‑sunset.
+
 ## Annex A: Threat & Abuse Scenarios and Mitigations (Informative)
 
 | Scenario | Attack surface | Detect / Prevent (Design) | Normative anchor(s) |

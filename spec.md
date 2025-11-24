@@ -391,6 +391,48 @@ Notes:
 
 NilStore uses a content‑addressed **file manifest** (Root CID) that enumerates per‑file **Data Units (DUs)** and a **crypto policy**: a File Master Key (FMK) is HPKE‑wrapped to authorized retrieval keys; per‑DU Content Encryption Keys (CEKs) and Nonces are derived deterministically (Appendix A), and each DU is encrypted with **AES‑256‑GCM**. DU ciphertexts are addressed by `DU‑CID` = `Blake2s‑256("DU-CID-V1" || C)`. Appendix A specifies the canonical manifest, key wrapping, rekey/delete, and KATs. By default, deals set `privacy_mode = "ciphertext"`; a deal MAY opt into `privacy_mode = "plaintext"` for public/open‑data workloads.
 
+## § 6 Product‑Aligned Economics & Operations
+
+### 6.0 Pricing & Ask Book (normative)
+- The `$STOR-1559` Parameter Set (`PSet`) published on L2 MUST include a **price curve schema**: `{BaseFee[region/class], β bands, β_floor, β_ceiling, surge_multiplier_max, σ_sec_max}`. Clients and watchers MUST reject price calculations not derived from the current hash‑pinned `PSet`.
+- Providers MUST publish **standing asks** on L2: `{provider_id, capacity_free_GiB, qos_class, min_term_epochs, price_curve_id, latency_profile, region_cells[]}`. The DA chain maintains an **AskBook root** (Poseidon) updated each epoch; deals using providers absent from the AskBook are ineligible for PoUD/PoDE payouts.
+- **Canonical rate:** For a DU, the client MUST select providers from the AskBook whose `price_curve_id` is in the current `PSet`; the total quoted rate = `BaseFee × β_band × surge_multiplier` (bounded by `[β_floor, β_ceiling]`). Frontends MAY display “good rate” badges when `β_band ≤ median_band + 1`.
+
+### 6.1 Capacity Health Score, Entry & Exit (normative)
+- **Capacity Health Score (`H_score`)** is computed per epoch from `{free_capacity_ratio, proof_success_rate (30d), churn, RTT_outlier_rate}`. It is hash‑pinned in the epoch transcript and drives entry/exit parameters.
+- **Entry ramp:** New providers serve under probation for `N_probation = 7` epochs (DAO‑tunable). Rewards ramp linearly from 50% → 100%; slashing multiplier = `λ_entry = 1.25` during probation.
+- **Exit policy:** Providers request exit with `ExitIntent{epoch, provider_id}`. Unbonding time `T_unbond` and exit fee `F_exit` are functions of capacity headroom `H_free`:
+  - `headroom = clamp(0,1, free_capacity_ratio / target_headroom)` (target headroom default `0.20`).
+  - `F_base = 0.5%` of bonded collateral; `k_fee = 2.0`; bounds `F_min = 0.5%`, `F_max = 10%`.
+  - `T_base = 24h`, `k_time = 72h`; bounds `T_min = 12h`, `T_max = 7d`.
+  - `F_exit = F_base × (1 + k_fee × (1 − headroom))`, clamped `[F_min, F_max]`.
+  - `T_unbond = T_base + k_time × (1 − headroom)`, clamped `[T_min, T_max]`.
+  When `headroom > 1` (surplus), `F_exit → F_min` and `T_unbond → T_min`; when `headroom` is low, exits cost more and take longer.
+- **Handoff guard:** An exit is final only after (a) repairs restore each affected DU to its target redundancy profile and (b) the provider serves proofs until `T_unbond` elapses. Early deactivation without handoff is slashable.
+
+### 6.2 Durability Dial & Auto‑Rebalance (normative)
+- **Dial mapping:** Governance MUST publish a pinned table `durability_target → {RS_n, RS_k} | {rows, cols} | profile_id`, including at least:
+  - `Standard`: RS(12,9), min ring distance ≥ 2.
+  - `Archive`: RS(16,12), min ring distance ≥ 3.
+  - `Mission-Critical`: RS‑2D‑Hex `{rows=4, cols=7}`, ring distance ≥ 3, slice distance ≥ 2.
+  The mapping table is versioned and referenced in deal metadata; clients MUST record `durability_target` and resolved profile.
+- **Auto‑rebalance:** If any DU falls below its profile (due to exits or slashing), the scheduler MUST queue repairs within `T_repair_max` (DAO‑tunable) to restore the profile. Repairs MUST open against the original `C_root`; no re‑commit is allowed. Placement MUST obey the same lattice constraints and one‑shard‑per‑cell rule. Health state (`healthy/degraded/repairing`) is committed in epoch transcripts.
+  - Defaults: `T_repair_max = 24h` (RS), `T_repair_max = 8h` (RS‑2D‑Hex); governance MAY tighten but MUST NOT loosen without a minor version bump.
+
+### 6.3 Billing, Escrow & Spend Guards (normative)
+- **Single escrow:** Each deal escrows storage + baseline egress in $STOR. Escrow MUST cover at least `K_epoch` of service (DAO‑tunable); if balance < `K_low`, auto top‑up MAY be enabled by the payer; otherwise the deal enters **grace mode** (reduced QoS weight, no new replicas) until topped up.
+- Defaults: `K_epoch = 7` epochs funded; `K_low = 3` epochs trigger grace; auto top‑up resumes service weight upon funding.
+- **Retrieval charging:** Receipts are billed per epoch at `Burn = β·BaseFee × bytes` (bounded by `β_floor/β_ceiling`) plus optional `PremiumPerByte` within `[0, premium_max]`. Users MAY set `max_monthly_spend`; SDKs MUST refuse retrieval that would exceed it unless the payer consents.
+- Defaults: `premium_max = 0.5 × BaseFee`; `price_cap_GiB = 2.0 × median(BaseFee by region/class)`; `β_floor = 0.70`, `β_ceiling = 1.30`.
+- **Rate caps:** Governance sets `price_cap_GiB` (per region/class) and `egress_cap_epoch`. Quotes above cap MUST be rejected by clients/watchers.
+- **Emergency (yellow‑flag) behavior:** During a freeze, storage proofs continue; withdrawals, new deals, and exits are paused; retrieval billing continues but new auto top‑ups are disabled. These states MUST be emitted as events (see 6.4).
+
+### 6.4 Status & Events (normative)
+Chains and SDKs MUST surface the following canonical events with hashes binding to on‑chain state: `DealCreated`, `RedundancyDegraded`, `RepairScheduled`, `RepairComplete`, `ProofMissed`, `ExitRequested`, `ExitFinalized`, `FreezeActivated`, `FreezeCleared`, `SpendGuardHit`. Event hashes MUST be reproducible from the epoch transcript.
+
+### 6.5 Research Isolation (normative)
+The PoS²‑L scaffold (`rfcs/PoS2L_*`) is **research‑only** and **disabled** for all production profiles. Deals or payouts MUST NOT reference sealed‑mode proofs unless a DAO‑ratified research activation with auto‑sunset is in effect.
+
 ## Appendix A  File Manifest & Crypto Policy (Normative)
 
 # Addendum A — File Manifest & Crypto Policy (Normative)
