@@ -442,7 +442,7 @@ The cryptographic specification and the tokenomics parameters are hash-pinned an
 
 ### 11.2 Pricing & SP Selection
 - Providers post **standing asks** (capacity, QoS, min term, price curve id, region cells). Deals pick SPs from the AskBook; off‑book SPs are not eligible for PoUD/PoDE payouts.
-- Prices derive from the hash‑pinned `$STOR-1559` curve (BaseFee, β band, surge cap) with governance caps (`price_cap_GiB`) and badges for quotes within +1 band of median. Deterministic assignment uses `{CID_DU, ClientSalt, shard_index}` plus price/QoS scores; one shard per SP per ring‑cell with min distance.
+- Prices derive from the hash‑pinned `$STOR-1559` curve (BaseFee, β band, surge cap) with governance caps. Defaults: `β_floor=0.70`, `β_ceiling=1.30`, `premium_max=0.5×BaseFee`, `price_cap_GiB=2×` the regional/class median BaseFee. Clients/watchers MUST reject quotes outside caps. Deterministic assignment uses `{CID_DU, ClientSalt, shard_index}` plus price/QoS scores; one shard per SP per ring‑cell with min distance.
 
 ### 11.3 Redundancy Dial & Auto-Rebalance
 - Durability presets map to pinned profiles: `Standard`=RS(12,9), `Archive`=RS(16,12), `Mission-Critical`=RS‑2D‑Hex{rows=4, cols=7}. Deals record `durability_target` and resolved profile.

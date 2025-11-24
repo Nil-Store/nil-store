@@ -164,7 +164,7 @@ The client computes `C_root` at deal creation and posts `C_root` on L2; all subs
 All KZG operations MUST utilize a common, pinned Structured Reference String (SRS).
 * **Provenance:** The SRS MUST be generated via a verifiable Multi-Party Computation (MPC) ceremony (e.g., Perpetual Powers of Tau). Public transcripts of the ceremony MUST be available for audit.
 * **Parameters:** The SRS parameters (curve, degree) MUST align with BLS12-381 and support the maximum degree required for the largest DU commitment.
-* **Verification:** Implementations MUST verify the integrity of the loaded SRS against the hash-pinned canonical SRS defined in the protocol constants.
+* **Verification:** Implementations MUST verify the integrity of the loaded SRS against the hash-pinned canonical SRS defined in the protocol constants. The reference digest for the ckzg demo setup is published in `_artifacts/SRS_HASHES.md` (`d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7` for `demos/kzg/trusted_setup.txt`); production ceremonies MUST append their digests to this file.
 
 ### 4.2 Challenge Derivation
 
@@ -310,26 +310,27 @@ Collect any `t` valid shares; compute Lagrange coefficients `λ_i` in ℤ\_r:
 
 (No pairing, no `G_T` exponentiation.)
 
-**Deterministic Share‑Selection (Normative, strengthened):** Participants MUST post `(pk_i, π_i)` **on L1** before `τ_close`. The aggregator MUST:
-  (a) Collect all valid shares posted on L1 before `τ_close` (the candidate set).
+**Deterministic Share‑Selection (Normative, strengthened):** Participants MUST post `(pk_i, π_i)` **on L1** before `τ_close`. Let `candidate_set` be all valid shares posted before `τ_close`; let `candidate_root = MerkleRoot( canonical_encode(pk_i, π_i) for all shares in candidate_set)` published on L1 with `epoch_ctr`. The aggregator MUST:
+  (a) Collect all valid shares posted on L1 before `τ_close` (the candidate set) and publish `candidate_root` (Poseidon or Blake2s) in the epoch transcript.
   (b) Calculate the ID for each share:
 ```
 share_id_i := Blake2s‑256("BATMAN-SHARE" ‖ compress(pk_i) ‖ u64_le(epoch_ctr))
 ```
   (c) **Grinding Mitigation (Normative):** Let `Seed_select` be the finalized beacon of the previous epoch (`beacon_{t-1}`). This seed is fixed before share posting begins.
-  (d) **Canonical Set Definition (Normative):** Compute `Score_i = HMAC-SHA256(Key=Seed_select, Message=share_id_i)` for all shares in the candidate set. The canonical aggregation set is strictly defined as the `t` shares with the lowest `Score_i` values (using `share_id_i` as a deterministic tie-breaker if scores collide).
+  (d) **Canonical Set Definition (Normative):** Compute `Score_i = HMAC-SHA256(Key=Seed_select, Message=share_id_i)` for all shares in the candidate set. The canonical aggregation set is strictly defined as the `t` shares with the lowest `Score_i` values (using `share_id_i` as a deterministic tie-breaker if scores collide). The aggregator MUST provide Merkle inclusion proofs for each selected share against `candidate_root`.
 
-The aggregator MUST use this canonical set to compute and publish `(π_agg, pk_agg)` where `pk_agg = Σ λ_i · pk_i`.
+The aggregator MUST use this canonical set to compute and publish `(π_agg, pk_agg, candidate_root)` where `pk_agg = Σ λ_i · pk_i`.
 
 #### 5.4.4 On‑chain Verification & Beacon
 
 ```solidity
 function verify_beacon(
-    bytes48 pkAgg, bytes96 piAgg, bytes8 ctr
+    bytes48 pkAgg, bytes96 piAgg, bytes8 ctr, bytes32 candidateRoot
 ) returns (bytes32 beacon)
 {
     G2 H = hash_to_G2("BLS12381G2_XMD:SHA-256_SSWU_RO_NIL_VRF_H2G", ctr);
     require( pairing(pkAgg, H) == pairing(G1_GEN, piAgg) );
+    // Verify selected shares are the lowest-score subset of candidateRoot (inclusion + score check) off-chain or via light circuit.
     bytes32 y  = blake2s256(
         "NIL_VRF_OUT" ‖ compress(pkAgg) ‖ compress(H) ‖ compress(piAgg)
     );
@@ -358,6 +359,7 @@ All changes require updated KATs in Annex A.5. Derive vectors are parameterize
 * Deterministic `vrf_keygen` seeds via ChaCha20(`seed=1`).
 * Solo VRF vectors: `(msg, pk, π, y)`.
 * BATMAN vectors: `(ctr, pkAgg, piAgg, beacon)` for `N=5`, `t=4`.
+* All vectors and seeds MUST be published under `_artifacts/` with SHA256 digests; implementations MUST verify against the published hashes before acceptance.
 
 ---
 
@@ -425,7 +427,7 @@ NilStore uses a content‑addressed **file manifest** (Root CID) that enumerates
 - **Retrieval charging:** Receipts are billed per epoch at `Burn = β·BaseFee × bytes` (bounded by `β_floor/β_ceiling`) plus optional `PremiumPerByte` within `[0, premium_max]`. Users MAY set `max_monthly_spend`; SDKs MUST refuse retrieval that would exceed it unless the payer consents.
 - Defaults: `premium_max = 0.5 × BaseFee`; `price_cap_GiB = 2.0 × median(BaseFee by region/class)`; `β_floor = 0.70`, `β_ceiling = 1.30`.
 - **Rate caps:** Governance sets `price_cap_GiB` (per region/class) and `egress_cap_epoch`. Quotes above cap MUST be rejected by clients/watchers.
-- **Emergency (yellow‑flag) behavior:** During a freeze, storage proofs continue; withdrawals, new deals, and exits are paused; retrieval billing continues but new auto top‑ups are disabled. These states MUST be emitted as events (see 6.4).
+- **Emergency (yellow‑flag) behavior:** Freeze disables all fund‑moving paths (vesting, transfers/mints/burns, withdrawals/deposits), new deals/uptake, exits, slashing executions, and governance actions except the ratification vote. Storage proofs and retrieval billing continue; auto top‑ups pause. Yellow‑flag auto‑sunsets after 14 days unless ratified by a full DAO vote. These states MUST be emitted as events (see 6.4).
 
 ### 6.4 Status & Events (normative)
 Chains and SDKs MUST surface the following canonical events with hashes binding to on‑chain state: `DealCreated`, `RedundancyDegraded`, `RepairScheduled`, `RepairComplete`, `ProofMissed`, `ExitRequested`, `ExitFinalized`, `FreezeActivated`, `FreezeCleared`, `SpendGuardHit`. Event hashes MUST be reproducible from the epoch transcript.

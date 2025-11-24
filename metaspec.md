@@ -305,9 +305,9 @@ Adapters are **not** part of consensus; their failures cannot affect protocol ac
 
 The economic model is enforced cryptographically through the PoUD+PoDE consensus mechanism on the L1 DA Chain.
 
-### 6.0a  Proof Mode — **Plaintext only (research phase)**
+### 6.0a  Proof Mode — **Canonical bytes via privacy_mode**
 
-Core supports **one** normative proof mode evaluated over a canonical byte representation — **PoUD** (KZG multi‑open on DU canonical bytes) + **PoDE** (timed derivations). Deals set `privacy_mode` (default: `ciphertext`).
+Core supports **one** normative proof path evaluated over the deal’s canonical bytes (as selected by `privacy_mode ∈ {ciphertext (default), plaintext}`) — **PoUD** (KZG multi‑open on canonical bytes) + **PoDE** (timed derivations).
 
 ### 6.0b  PoUD (Proof of Useful Data) – Plaintext Mode (normative)
 
@@ -478,8 +478,8 @@ NilStore aligns replica count and provider selection with observed demand and me
       * The use of "Shapley-like shares" is removed due to computational infeasibility.
       * Let $F_{cluster}$ be the fraction of total capacity within a diversity cluster that failed in the current epoch.
       * $Correlation\_Factor(F) = 1 + \alpha \cdot (F_{cluster})^{\beta}$
-      * $\alpha$ (Scaling Factor) and $\beta$ (Exponent, $\beta \ge 2$ for superlinear penalty) are DAO-tunable.
-      * The Correlation_Factor MUST be capped (e.g., 5x). An SP-level floor `floor_SP = 1.0` MUST be applied (correlation should increase, not decrease, the penalty).
+      * Defaults: $\alpha = 1.0$, $\beta = 2.0$, `floor_SP = 1.0`, `cap_corr = 5.0`. Bounds (DAO‑tunable within): $\alpha ∈ [0.5, 2.0]$, $\beta ∈ [2, 4]$, `cap_corr ∈ [3, 8]`. Parameters MUST stay within bounds and respect standard timelocks.
+      * The Correlation_Factor MUST be capped by `cap_corr`. An SP-level floor `floor_SP = 1.0` MUST be applied (correlation should increase, not decrease, the penalty).
       * **Normative (Collocation Definition):** Collocated identities (same /24, ASN, OR high RTT Profile Similarity (§3.3)) MUST be merged for $F_{cluster}$ computation to prevent Sybil dilution.
       * For $F_{global} > F^{*}$ (default 15%), the DAO MAY activate a temporary cap on network-aggregate burn (e.g., 2%/epoch).
     The penalty resets upon submission of a valid proof.
