@@ -218,16 +218,17 @@ PoDE relies on the `Derive` function to deterministically compress a canonical D
 **Algorithm (Argon2id Sequential):**
 
 ```
-Derive(canon_window: bytes, beacon_salt: bytes, row_id: u32, epoch_id: u64, du_id: u128) -> leaf64: bytes[64]
+Derive(canon_window: bytes, beacon_salt: bytes, row_id: u32, epoch_id: u64, du_id: u128) -> (leaf64: bytes[64], Δ_W: bytes[32])
 
 tag  = "PODE_DERIVE_ARGON_V1"
 salt = Blake2s-256(tag ‖ beacon_salt ‖ u32_le(row_id) ‖ u64_le(epoch_id) ‖ u128_le(du_id))
 // Hash input to ensure high entropy input to Argon2id
 input_digest = Blake2s-256("PODE_INPUT_DIGEST_V1" ‖ canon_window)
 // Parameters (H_t, H_m, H_p) defined by Dial Profile (See Appendix A).
-// H_p MUST be strictly 1 to enforce sequentiality.
+// H_p MUST be strictly 1 to enforce sequentiality (parallelism=1).
 leaf64 = Argon2id(password=input_digest, salt=salt, t_cost=H_t, m_cost=H_m, parallelism=1, output_len=64)
-return leaf64
+Δ_W    = Blake2s-256(canon_window)
+return (leaf64, Δ_W)
 ```
 
 **PoDE Recalibration (Normative):** The NilDAO MUST periodically recalibrate `H_t` and `H_m` parameters to maintain the target `Δ_work` (1s) based on baseline hardware performance.
@@ -235,9 +236,9 @@ return leaf64
 #### 6.3.2 PoDE Mechanism
 
 1.  **Challenge Derivation:** The protocol selects `R` PoDE windows of size `W = 8 MiB` (governance‑tunable).
-2.  **Timed Derivation:** The SP MUST compute `deriv = Derive(canon_bytes[interval], beacon_salt, row_id, ...)` within the proof window. The proof includes `H(deriv)` and the canonical bytes needed for recomputation.
+2.  **Timed Derivation:** The SP MUST compute `deriv = Derive(canon_bytes[interval], beacon_salt, row_id, epoch_id, du_id)` within the proof window using Argon2id parameters `(H_t, H_m, H_p=1)` from the dial profile. The proof includes `H(leaf64, Δ_W)` and the canonical bytes needed for recomputation.
 3.  **PoDE Linkage (Normative):** The prover MUST include a KZG opening proof `π_kzg` demonstrating that the `canon_window` input bytes correspond exactly to the data committed in `C_root`.
-4.  **Concurrency & volume (Normative):** The prover MUST satisfy at least `R` parallel PoDE sub‑challenges per proof window (default `R ≥ 16`). The aggregate verified bytes per window MUST be ≥ `B_min` (default `B_min ≥ 128 MiB`).
+4.  **Concurrency & volume (Normative):** The prover MUST satisfy at least `R` parallel PoDE sub‑challenges per proof window (default `R ≥ 16`). The aggregate verified bytes per window MUST be ≥ `B_min` (default `B_min ≥ 128 MiB`); only bytes that are both KZG‑opened and successfully derived count toward `B_min`.
 5.  **Verification:** L1 verifies `π_kzg`. Watchers enforce timing via RTT‑Oracle and publish pass/fail digests.
 
 ### 6.4 Nil-VRF and Epoch Beacon
@@ -267,10 +268,10 @@ To ensure beacon liveness and security, NilStore uses BATMAN aggregation.
 To prevent the aggregator from grinding the beacon by subset selection:
 
 1.  Participants post shares on L1 before the deadline `τ_close`.
-2.  The aggregator identifies the candidate set.
-3.  **Grinding Mitigation:** Let `Seed_select` be the finalized beacon of the previous epoch (`beacon_{t-1}`).
-4.  **Canonical Set Definition:** Compute `Score_i = HMAC-SHA256(Key=Seed_select, Message=share_id_i)`. The canonical aggregation set is strictly the `t` shares with the lowest `Score_i` values.
-5.  The aggregator MUST use this canonical set to compute `(π_agg, pk_agg)`.
+2.  The aggregator forms `candidate_set = { (pk_i, π_i) | posted before τ_close }` and publishes `candidate_root = MerkleRoot(canonical_encode(pk_i, π_i))` plus the total candidate count in the epoch transcript.
+3.  **Grinding Mitigation:** Let `Seed_select = beacon_{t-1}` (finalized before share posting begins) and `share_id_i = Blake2s-256("BATMAN-SHARE" ‖ compress(pk_i) ‖ u64_le(epoch_ctr))`.
+4.  **Canonical Set Definition:** Compute `Score_i = HMAC-SHA256(Key=Seed_select, Message=share_id_i)` over the **entire** candidate_set; the canonical aggregation set is strictly the `t` shares with the lowest `Score_i` values (share_id tie‑break). Aggregators MUST attach Merkle proofs for each selected share to `candidate_root`.
+5.  Watchers/rollup circuits MUST verify that `candidate_root` covers every timely share (fraud proofs on omission) and that the selected subset is derived from that full set. The aggregator MUST use this canonical set to compute `(π_agg, pk_agg)`.
 
 #### 6.4.4 On‑chain Verification & Beacon Derivation
 
@@ -353,9 +354,10 @@ Missed **PoUD + PoDE** proofs trigger a quadratic penalty on the bonded $STOR co
 `Penalty = min(0.50, 0.05 × (Consecutive_Missed_Epochs)²) × Correlation_Factor(F)`
 
   * **Correlation\_Factor(F):**
-      * Let $F_{cluster}$ be the fraction of total capacity within a diversity cluster (ASN×region cell, or collocated identities) that failed.
-      * $Correlation\_Factor(F) = 1 + \alpha \cdot (F_{cluster})^{\beta}$ (where $\beta \ge 2$ for superlinear penalty).
-      * The Correlation\_Factor is capped (e.g., 5x).
+      * Let $F_{cluster}$ be the fraction of total capacity within a diversity cluster (ASN×region cell, merged with any collocated /24 IPv4, /48 IPv6, or high RTT Profile Similarity) that failed.
+      * $Correlation\_Factor(F) = 1 + \alpha \cdot (F_{cluster})^{\beta}$ (defaults: $\alpha = 1.0$, $\beta = 2.0$), capped at `cap_corr = 5.0` with an SP floor `floor_SP = 1.0`.
+      * Governance bounds (time‑locked): $\alpha ∈ [0.5, 2.0]$, $\beta ∈ [2, 4]`, `cap_corr ∈ [3, 8]`. Parameters MUST stay within bounds.
+      * If $F_{global} > F^{*}$ (default 15%), governance MAY cap network‑aggregate burn (e.g., 2%/epoch) but MUST NOT waive per‑SP penalties. Collocated identities MUST be merged before computing $F_{cluster}$ to prevent Sybil dilution.
 
 ### 7.4 Advanced Mechanisms
 
@@ -442,7 +444,7 @@ The cryptographic specification and the tokenomics parameters are hash-pinned an
 
 ### 11.2 Pricing & SP Selection
 - Providers post **standing asks** (capacity, QoS, min term, price curve id, region cells). Deals pick SPs from the AskBook; off‑book SPs are not eligible for PoUD/PoDE payouts.
-- Prices derive from the hash‑pinned `$STOR-1559` curve (BaseFee, β band, surge cap, `σ_sec_max`) with governance caps. `σ_sec_max` caps per‑epoch BaseFee movement (default ≤ 10%) to damp volatility. Defaults: `β_floor=0.70`, `β_ceiling=1.30`, `premium_max=0.5×BaseFee`, `price_cap_GiB=2×` the regional/class median BaseFee, `σ_sec_max ≤ 10%/epoch`. Clients/watchers MUST reject quotes outside caps. Deterministic assignment uses `{CID_DU, ClientSalt, shard_index}` plus price/QoS scores; one shard per SP per ring‑cell with min distance.
+- Prices derive from the hash‑pinned `$STOR-1559` curve (BaseFee, β band, surge cap, `σ_sec_max`, `price_cap_GiB` by region/class, `premium_max`, `egress_cap_epoch`). `σ_sec_max` caps per‑epoch BaseFee movement (default ≤ 10%) to damp volatility. Clients/watchers MUST reject price or payout calculations outside the pinned `PSet`, including caps and premium bounds. Defaults: `β_floor=0.70`, `β_ceiling=1.30`, `premium_max=0.5×BaseFee`, `price_cap_GiB=2×` the regional/class median BaseFee, `σ_sec_max ≤ 10%/epoch`. Deterministic assignment uses `{CID_DU, ClientSalt, shard_index}` plus price/QoS scores; one shard per SP per ring‑cell with min distance.
 
 ### 11.3 Redundancy Dial & Auto-Rebalance
 - Durability presets map to pinned profiles: `Standard`=RS(12,9), `Archive`=RS(16,12), `Mission-Critical`=RS‑2D‑Hex{rows=4, cols=7}. Deals record `durability_target` and resolved profile.

@@ -315,9 +315,18 @@ For each epoch and each assigned DU sliver interval:
 
 1) Content correctness: The SP MUST provide one or more **KZG multi‑open** proofs at verifier‑chosen 1 KiB symbol indices proving membership in the DU commitment `C_root` recorded at deal creation. When multiple indices are scheduled for the same DU in the epoch, SPs SHOULD batch using multi‑open to minimize calldata.
 
-2) Timed derivation (PoDE): Let `W = 8 MiB` (governance‑tunable). The SP MUST compute `deriv = Derive(canon_bytes[interval], beacon_salt, row_id)` within the proof window; `deriv` is fixed by the micro‑seal profile (Core § 3.3.1) restricted to the bytes of the interval (no cross‑window state). The proof includes `H(deriv)` and the canonical bytes needed for recomputation.
+2) Timed derivation (PoDE): Let `W = 8 MiB` (governance‑tunable). The SP MUST compute
+```
+Derive(canon_bytes[interval], beacon_salt, row_id, epoch_id, du_id) -> (leaf64, Δ_W)
+  tag  = "PODE_DERIVE_ARGON_V1"
+  salt = Blake2s-256(tag ‖ beacon_salt ‖ u32_le(row_id) ‖ u64_le(epoch_id) ‖ u128_le(du_id))
+  input_digest = Blake2s-256("PODE_INPUT_DIGEST_V1" ‖ canon_bytes[interval])
+  leaf64 = Argon2id(input_digest, salt; t_cost=H_t, m_cost=H_m, parallelism=1, out_len=64)
+  Δ_W    = Blake2s-256(canon_bytes[interval])
+```
+Parameters `H_t, H_m` come from the dial profile; **`H_p` MUST be exactly 1 (sequential‑only)** and profiles with `H_p ≠ 1` MUST be rejected. The proof includes `H(leaf64, Δ_W)` and the minimal canonical bytes needed for recomputation.
 
-3) Concurrency & volume: The prover MUST satisfy at least `R` parallel PoDE sub‑challenges per proof window, each targeting a distinct DU interval (default `R ≥ 16`; DAO‑tunable). The aggregate verified bytes per window MUST be ≥ `B_min` (default `B_min ≥ 128 MiB`, DAO‑tunable). B_min counts only bytes that are both (a) KZG‑opened and (b) successfully derived under PoDE.
+3) Concurrency & volume: The prover MUST satisfy at least `R` parallel PoDE sub‑challenges per proof window, each targeting a distinct DU interval (default `R ≥ 16`; DAO‑tunable). The aggregate verified bytes per window MUST be ≥ `B_min` (default `B_min ≥ 128 MiB`, DAO‑tunable). B_min counts only bytes that are both (a) KZG‑opened and (b) successfully derived under PoDE. The prover MUST include a KZG opening `π_kzg` binding the supplied `canon_bytes[interval]` to the original `C_root`.
 
 ### 6.0c  PDP‑PLUS Coverage SLO (normative)
 Define CoverageTargetDays (default 365). The governance scheduler MUST choose per‑epoch index sets (challenge rate $q/M$) so that for every active DU:
@@ -594,7 +603,7 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 
 ### 11.2 SP Selection & Pricing (normative where noted)
 - **AskBook:** Providers post standing asks `{capacity_free_GiB, qos_class, min_term, price_curve_id, region_cells[]}`. Deals MUST select SPs from the AskBook; off‑book providers are ineligible for PoUD/PoDE payouts.
-- **Price curves:** Derived from the hash‑pinned `$STOR-1559` `PSet` (BaseFee, β bands, surge cap, `σ_sec_max`). `σ_sec_max` caps per‑epoch BaseFee adjustment (default ≤ 10%) to damp volatility. Frontends MAY badge “good rate” when within +1 band of the median. Quotes above `price_cap_GiB` are rejected. Defaults: `price_cap_GiB = 2.0 × median(BaseFee by region/class)`; `β_floor = 0.70`, `β_ceiling = 1.30`; `premium_max = 0.5 × BaseFee`; `σ_sec_max ≤ 10%/epoch`.
+- **Price curves:** Derived from the hash‑pinned `$STOR-1559` `PSet` (BaseFee, β bands, surge cap, `σ_sec_max`, `price_cap_GiB` by region/class, `premium_max`, `egress_cap_epoch`). `σ_sec_max` caps per‑epoch BaseFee adjustment (default ≤ 10%) to damp volatility. Clients/watchers MUST reject price or payout calculations not derived from the pinned `PSet`, including cap/premium bounds. Frontends MAY badge “good rate” when within +1 band of the median. Quotes above `price_cap_GiB` are rejected. Defaults: `price_cap_GiB = 2.0 × median(BaseFee by region/class)`; `β_floor = 0.70`, `β_ceiling = 1.30`; `premium_max = 0.5 × BaseFee`; `σ_sec_max ≤ 10%/epoch`.
 - **Deterministic assignment:** Client selection is deterministic given `{CID_DU, ClientSalt_32B, shard_index}` plus a secondary score combining price/QoS to break ties. One shard per SP per ring‑cell and governance‑set min ring/slice distance apply.
 
 ### 11.3 Redundancy Dial & Auto-Rebalance (normative)

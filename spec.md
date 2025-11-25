@@ -35,7 +35,7 @@ All integers, vectors, and matrices are interpreted **little‑endian** unless i
 
 A **dial profile** defines the core cryptographic parameters and the Proof-of-Delayed-Encode (PoDE) settings.
 
-**Economic Param Set (normative pointer).** The DAO MUST publish a hash‑pinned **$STOR‑1559 Parameter Set** (`PSet`) on L2 under `"STOR-1559-PARAMS-V1"` covering `{U* by region‑class, δ bands, β, β_min, β_max, β_emergency_min, σ_sec_max}`. Clients and watchers MUST reject parameter changes not reflected in the latest `PSet` digest.
+**Economic Param Set (normative pointer).** The DAO MUST publish a hash‑pinned **$STOR‑1559 Parameter Set** (`PSet`) on L2 under `"STOR-1559-PARAMS-V1"` covering `{U* by region‑class, δ bands, β, β_min, β_max, β_emergency_min, σ_sec_max, price_cap_GiB by region/class, premium_max, egress_cap_epoch}`. Clients and watchers MUST reject price or payout calculations not derived from the current `PSet` digest, including caps and premium bounds.
 
 | Symbol | Description                                | Baseline "S‑512"                |
 | ------ | ------------------------------------------ | ------------------------------- |
@@ -85,8 +85,11 @@ For transparency and auditability, Core defines the following fixed ASCII domain
 | Tag                      | Purpose                                                     | Section |
 | ------------------------ | ----------------------------------------------------------- | ------- |
 | `"GRANT-TOKEN-V1"`       | Retrieval grant token claims                                | § B     |
-| `"STOR-1559-PARAMS-V1"`  | Digest of $STOR‑1559 economic params (`U*`, `δ`, `β`, bands, `β_emergency_min`, `σ_sec_max`) published on L2 | § 0.2, § 9 |
+| `"STOR-1559-PARAMS-V1"`  | Digest of $STOR‑1559 economic params (`U*`, `δ`, `β`, bands, `β_emergency_min`, `σ_sec_max`, `price_cap_GiB`, `premium_max`, `egress_cap_epoch`) published on L2 | § 0.2, § 9 |
 | `"SECURITY-TREASURY-V1"` | Accounting route identifier for § 6.6.3 escalation financing | § 6.6.3 |
+| `"PODE_DERIVE_ARGON_V1"` | PoDE Argon2id derive function tag                           | § 4.0a    |
+| `"PODE_INPUT_DIGEST_V1"` | PoDE canon window prehashing                                 | § 4.0a    |
+| `"NILSTORE-SALT-V1"`     | Placement anti‑grinding salt derivation                      | Appendix A |
 
 | Tag                  | Purpose                                  | Section    |
 | -------------------- | ---------------------------------------- | ---------- |
@@ -108,6 +111,7 @@ For transparency and auditability, Core defines the following fixed ASCII domain
 * **Public transcripts:** Any claim in §§ 2–5, 7 that depends on concrete parameters MUST have a reproducible transcript (JSON/CSV) in the release package (`_artifacts/`), accompanied by `SHA256SUMS`.
 * **Pinned inputs:** All randomness derives from fixed domain tags (see § 0.4.1) and explicit inputs; scripts MUST use integer‑only operations for consensus‑sensitive calculations.
 * **Make target:** Reference repos MUST provide `make publish` that regenerates `_artifacts/*` and `SHA256SUMS` from a clean checkout.
+* **Activation gate:** Mainnet/testnet activation MUST ship: (a) production SRS digests appended to `_artifacts/SRS_HASHES.md` (demo hashes MUST remain for audit), and (b) KAT bundles for PoDE Derive and VRF/BATMAN with SHA256 sums. Clients/watchers MUST refuse to start without verifying these artifacts.
 
 
 ---
@@ -165,6 +169,7 @@ All KZG operations MUST utilize a common, pinned Structured Reference String (SR
 * **Provenance:** The SRS MUST be generated via a verifiable Multi-Party Computation (MPC) ceremony (e.g., Perpetual Powers of Tau). Public transcripts of the ceremony MUST be available for audit.
 * **Parameters:** The SRS parameters (curve, degree) MUST align with BLS12-381 and support the maximum degree required for the largest DU commitment.
 * **Verification:** Implementations MUST verify the integrity of the loaded SRS against the hash-pinned canonical SRS defined in the protocol constants. The reference digest for the ckzg demo setup is published in `_artifacts/SRS_HASHES.md` (`d39b9f2d047cc9dca2de58f264b6a09448ccd34db967881a6713eacacf0f26b7` for `demos/kzg/trusted_setup.txt`); production ceremonies MUST append their digests to this file.
+* **Production requirement:** Mainnet/testnet deployments MUST NOT accept proofs until the production SRS digest has been published in `_artifacts/SRS_HASHES.md` and verified at startup.
 
 ### 4.2 Challenge Derivation
 
@@ -318,8 +323,9 @@ share_id_i := Blake2s‑256("BATMAN-SHARE" ‖ compress(pk_i) ‖ u64_le(epoch_c
 ```
   (c) **Grinding Mitigation (Normative):** Let `Seed_select` be the finalized beacon of the previous epoch (`beacon_{t-1}`). This seed is fixed before share posting begins.
   (d) **Canonical Set Definition (Normative):** Compute `Score_i = HMAC-SHA256(Key=Seed_select, Message=share_id_i)` for all shares in the candidate set. The canonical aggregation set is strictly defined as the `t` shares with the lowest `Score_i` values (using `share_id_i` as a deterministic tie-breaker if scores collide). The aggregator MUST provide Merkle inclusion proofs for each selected share against `candidate_root`.
+  (e) **Completeness (Normative):** The epoch transcript MUST include the total count of valid shares seen on L1 before `τ_close`. Watchers/rollup circuits MUST verify that `candidate_root` includes every timely share (fraud proofs allowed on omission) and that the selected lowest-score subset is computed from that full set.
 
-The aggregator MUST use this canonical set to compute and publish `(π_agg, pk_agg, candidate_root)` where `pk_agg = Σ λ_i · pk_i`.
+The aggregator MUST use this canonical set to compute and publish `(π_agg, pk_agg, candidate_root)` where `pk_agg = Σ λ_i · pk_i`. Aggregations derived from incomplete candidate sets are invalid and slashable.
 
 #### 5.4.4 On‑chain Verification & Beacon
 
@@ -396,7 +402,7 @@ NilStore uses a content‑addressed **file manifest** (Root CID) that enumerates
 ## § 6 Product‑Aligned Economics & Operations
 
 ### 6.0 Pricing & Ask Book (normative)
-- The `$STOR-1559` Parameter Set (`PSet`) published on L2 MUST include a **price curve schema**: `{BaseFee[region/class], β bands, β_floor, β_ceiling, surge_multiplier_max, σ_sec_max}`. `σ_sec_max` caps per‑epoch BaseFee adjustments (default ≤ 10% change per epoch) to damp volatility; clients and watchers MUST reject price calculations not derived from the current hash‑pinned `PSet`.
+- The `$STOR-1559` Parameter Set (`PSet`) published on L2 MUST include a **price curve schema**: `{BaseFee[region/class], β bands, β_floor, β_ceiling, surge_multiplier_max, σ_sec_max, price_cap_GiB by region/class, premium_max, egress_cap_epoch}`. `σ_sec_max` caps per‑epoch BaseFee adjustments (default ≤ 10% change per epoch) to damp volatility; clients and watchers MUST reject price or payout calculations not derived from the current hash‑pinned `PSet`, including caps and premium bounds.
 - Providers MUST publish **standing asks** on L2: `{provider_id, capacity_free_GiB, qos_class, min_term_epochs, price_curve_id, latency_profile, region_cells[]}`. The DA chain maintains an **AskBook root** (Poseidon) updated each epoch; deals using providers absent from the AskBook are ineligible for PoUD/PoDE payouts.
 - **Canonical rate:** For a DU, the client MUST select providers from the AskBook whose `price_curve_id` is in the current `PSet`; the total quoted rate = `BaseFee × β_band × surge_multiplier` (bounded by `[β_floor, β_ceiling]`). Frontends MAY display “good rate” badges when `β_band ≤ median_band + 1`.
 
@@ -434,6 +440,12 @@ Chains and SDKs MUST surface the following canonical events with hashes binding 
 
 ### 6.5 Research Isolation (normative)
 The PoS²‑L scaffold (`rfcs/PoS2L_*`) is **research‑only** and **disabled** for all production profiles. Deals or payouts MUST NOT reference sealed‑mode proofs unless a DAO‑ratified research activation with auto‑sunset is in effect.
+
+### 6.6 Correlation‑Aware Slashing (normative)
+- **Penalty:** Missed PoUD+PoDE epochs incur `Penalty = min(0.50, 0.05 × (Consecutive_Missed_Epochs)²) × Correlation_Factor(F)`.
+- **Correlation_Factor(F):** Let `F_cluster` be the fraction of total capacity within a diversity cluster (ASN×region cell, merged with any collocated /24 IPv4, /48 IPv6, or high RTT Profile Similarity) that failed in the current epoch. `Correlation_Factor(F) = 1 + α · (F_cluster)^β`, capped by `cap_corr`, with an SP floor `floor_SP = 1.0`. Defaults: `α = 1.0`, `β = 2.0`, `cap_corr = 5.0`. Bounds (DAO‑tunable, time‑locked): `α ∈ [0.5, 2.0]`, `β ∈ [2, 4]`, `cap_corr ∈ [3, 8]`. Parameters MUST stay within bounds.
+- **Global events:** If `F_global > F*` (default 15%), governance MAY apply a temporary cap on network‑aggregate burn (e.g., 2%/epoch) but MUST NOT waive per‑SP penalties.
+- **Enforcement:** Rollup circuits/watchers MUST apply the correlation factor to bonded $STOR slashing for missed proofs. Collocated identities MUST be merged before computing `F_cluster` to prevent Sybil dilution.
 
 ## Appendix A  File Manifest & Crypto Policy (Normative)
 
