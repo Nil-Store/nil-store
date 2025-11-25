@@ -396,7 +396,7 @@ NilStore uses a content‑addressed **file manifest** (Root CID) that enumerates
 ## § 6 Product‑Aligned Economics & Operations
 
 ### 6.0 Pricing & Ask Book (normative)
-- The `$STOR-1559` Parameter Set (`PSet`) published on L2 MUST include a **price curve schema**: `{BaseFee[region/class], β bands, β_floor, β_ceiling, surge_multiplier_max, σ_sec_max}`. Clients and watchers MUST reject price calculations not derived from the current hash‑pinned `PSet`.
+- The `$STOR-1559` Parameter Set (`PSet`) published on L2 MUST include a **price curve schema**: `{BaseFee[region/class], β bands, β_floor, β_ceiling, surge_multiplier_max, σ_sec_max}`. `σ_sec_max` caps per‑epoch BaseFee adjustments (default ≤ 10% change per epoch) to damp volatility; clients and watchers MUST reject price calculations not derived from the current hash‑pinned `PSet`.
 - Providers MUST publish **standing asks** on L2: `{provider_id, capacity_free_GiB, qos_class, min_term_epochs, price_curve_id, latency_profile, region_cells[]}`. The DA chain maintains an **AskBook root** (Poseidon) updated each epoch; deals using providers absent from the AskBook are ineligible for PoUD/PoDE payouts.
 - **Canonical rate:** For a DU, the client MUST select providers from the AskBook whose `price_curve_id` is in the current `PSet`; the total quoted rate = `BaseFee × β_band × surge_multiplier` (bounded by `[β_floor, β_ceiling]`). Frontends MAY display “good rate” badges when `β_band ≤ median_band + 1`.
 
@@ -404,12 +404,12 @@ NilStore uses a content‑addressed **file manifest** (Root CID) that enumerates
 - **Capacity Health Score (`H_score`)** is computed per epoch from `{free_capacity_ratio, proof_success_rate (30d), churn, RTT_outlier_rate}`. It is hash‑pinned in the epoch transcript and drives entry/exit parameters.
 - **Entry ramp:** New providers serve under probation for `N_probation = 7` epochs (DAO‑tunable). Rewards ramp linearly from 50% → 100%; slashing multiplier = `λ_entry = 1.25` during probation.
 - **Exit policy:** Providers request exit with `ExitIntent{epoch, provider_id}`. Unbonding time `T_unbond` and exit fee `F_exit` are functions of capacity headroom `H_free`:
-  - `headroom = clamp(0,1, free_capacity_ratio / target_headroom)` (target headroom default `0.20`).
+  - `headroom_raw = free_capacity_ratio / target_headroom` (default `target_headroom = 0.20`, chosen to preserve 20% spare for repairs/unbonding; governance re‑pins this in the `PSet` based on observed utilization). Systems MAY smooth `headroom_raw` via a 7‑day EMA to avoid oscillations; use `headroom = clamp(0,1, headroom_raw_smoothed)`.
   - `F_base = 0.5%` of bonded collateral; `k_fee = 2.0`; bounds `F_min = 0.5%`, `F_max = 10%`.
   - `T_base = 24h`, `k_time = 72h`; bounds `T_min = 12h`, `T_max = 7d`.
   - `F_exit = F_base × (1 + k_fee × (1 − headroom))`, clamped `[F_min, F_max]`.
   - `T_unbond = T_base + k_time × (1 − headroom)`, clamped `[T_min, T_max]`.
-  When `headroom > 1` (surplus), `F_exit → F_min` and `T_unbond → T_min`; when `headroom` is low, exits cost more and take longer.
+  When `headroom_raw ≥ 1` (surplus), `headroom` saturates at `1` so `F_exit → F_min` and `T_unbond → T_min`; when `headroom` is low, exits cost more and take longer.
 - **Handoff guard:** An exit is final only after (a) repairs restore each affected DU to its target redundancy profile and (b) the provider serves proofs until `T_unbond` elapses. Early deactivation without handoff is slashable.
 
 ### 6.2 Durability Dial & Auto‑Rebalance (normative)

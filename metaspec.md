@@ -594,7 +594,7 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 
 ### 11.2 SP Selection & Pricing (normative where noted)
 - **AskBook:** Providers post standing asks `{capacity_free_GiB, qos_class, min_term, price_curve_id, region_cells[]}`. Deals MUST select SPs from the AskBook; off‑book providers are ineligible for PoUD/PoDE payouts.
-- **Price curves:** Derived from the hash‑pinned `$STOR-1559` `PSet` (BaseFee, β bands, surge cap). Frontends MAY badge “good rate” when within +1 band of the median. Quotes above `price_cap_GiB` are rejected. Defaults: `price_cap_GiB = 2.0 × median(BaseFee by region/class)`; `β_floor = 0.70`, `β_ceiling = 1.30`; `premium_max = 0.5 × BaseFee`.
+- **Price curves:** Derived from the hash‑pinned `$STOR-1559` `PSet` (BaseFee, β bands, surge cap, `σ_sec_max`). `σ_sec_max` caps per‑epoch BaseFee adjustment (default ≤ 10%) to damp volatility. Frontends MAY badge “good rate” when within +1 band of the median. Quotes above `price_cap_GiB` are rejected. Defaults: `price_cap_GiB = 2.0 × median(BaseFee by region/class)`; `β_floor = 0.70`, `β_ceiling = 1.30`; `premium_max = 0.5 × BaseFee`; `σ_sec_max ≤ 10%/epoch`.
 - **Deterministic assignment:** Client selection is deterministic given `{CID_DU, ClientSalt_32B, shard_index}` plus a secondary score combining price/QoS to break ties. One shard per SP per ring‑cell and governance‑set min ring/slice distance apply.
 
 ### 11.3 Redundancy Dial & Auto-Rebalance (normative)
@@ -604,7 +604,7 @@ The cryptographic specification (`spec.md@<git-sha>`) and the tokenomics paramet
 
 ### 11.4 Capacity-Aware Entry/Exit (normative)
 - Entry probation: rewards ramp 50→100% over `N_probation = 7` epochs; slashing multiplier `λ_entry = 1.25` during ramp.
-- Exit: exit fee and unbonding window scale with capacity headroom (`H_free`): `headroom = clamp(0,1, free_capacity_ratio / target_headroom)` with default `target_headroom = 0.20` (optionally smoothed via 7‑day EMA). `F_exit = F_base × (1 + k_fee × (1 − headroom))` with defaults `F_base=0.5%`, `k_fee=2.0`, bounds `[0.5%, 10%]`; `T_unbond = T_base + k_time × (1 − headroom)` with defaults `T_base=24h`, `k_time=72h`, bounds `[12h, 7d]`. High headroom → low fee/fast exit; low headroom → higher fee/slower exit and mandatory handoff. Exits finalize only after repairs complete and `T_unbond` elapses.
+- Exit: exit fee and unbonding window scale with capacity headroom (`H_free`): `headroom_raw = free_capacity_ratio / target_headroom` with default `target_headroom = 0.20` (pinned in `PSet`, chosen to preserve ~20% spare for repairs/unbonding). Optionally smooth `headroom_raw` via 7‑day EMA; use `headroom = clamp(0,1, headroom_raw_smoothed)`. `F_exit = F_base × (1 + k_fee × (1 − headroom))` with defaults `F_base=0.5%`, `k_fee=2.0`, bounds `[0.5%, 10%]`; `T_unbond = T_base + k_time × (1 − headroom)` with defaults `T_base=24h`, `k_time=72h`, bounds `[12h, 7d]`. High headroom → low fee/fast exit; low headroom → higher fee/slower exit and mandatory handoff. Exits finalize only after repairs complete and `T_unbond` elapses.
 
 ### 11.5 Billing & Spend Guards (normative)
 - Single DU escrow covers storage + baseline egress in $STOR; auto top‑up optional. Defaults: `K_epoch=7` epochs funded; `K_low=3` epochs trigger grace. Retrieval continues but no new replicas spawn.

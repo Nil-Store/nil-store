@@ -442,7 +442,7 @@ The cryptographic specification and the tokenomics parameters are hash-pinned an
 
 ### 11.2 Pricing & SP Selection
 - Providers post **standing asks** (capacity, QoS, min term, price curve id, region cells). Deals pick SPs from the AskBook; off‑book SPs are not eligible for PoUD/PoDE payouts.
-- Prices derive from the hash‑pinned `$STOR-1559` curve (BaseFee, β band, surge cap) with governance caps. Defaults: `β_floor=0.70`, `β_ceiling=1.30`, `premium_max=0.5×BaseFee`, `price_cap_GiB=2×` the regional/class median BaseFee. Clients/watchers MUST reject quotes outside caps. Deterministic assignment uses `{CID_DU, ClientSalt, shard_index}` plus price/QoS scores; one shard per SP per ring‑cell with min distance.
+- Prices derive from the hash‑pinned `$STOR-1559` curve (BaseFee, β band, surge cap, `σ_sec_max`) with governance caps. `σ_sec_max` caps per‑epoch BaseFee movement (default ≤ 10%) to damp volatility. Defaults: `β_floor=0.70`, `β_ceiling=1.30`, `premium_max=0.5×BaseFee`, `price_cap_GiB=2×` the regional/class median BaseFee, `σ_sec_max ≤ 10%/epoch`. Clients/watchers MUST reject quotes outside caps. Deterministic assignment uses `{CID_DU, ClientSalt, shard_index}` plus price/QoS scores; one shard per SP per ring‑cell with min distance.
 
 ### 11.3 Redundancy Dial & Auto-Rebalance
 - Durability presets map to pinned profiles: `Standard`=RS(12,9), `Archive`=RS(16,12), `Mission-Critical`=RS‑2D‑Hex{rows=4, cols=7}. Deals record `durability_target` and resolved profile.
@@ -451,11 +451,11 @@ The cryptographic specification and the tokenomics parameters are hash-pinned an
 
 ### 11.4 Capacity-Aware Entry/Exit
 - Entry probation ramps rewards 50→100% over `N_probation = 7` epochs with a slashing multiplier `λ_entry = 1.25`.
-- Exit fee and unbonding window scale with capacity headroom: `headroom = clamp(0,1, free_capacity_ratio / target_headroom)` with default `target_headroom = 0.20` (optionally smoothed via 7‑day EMA). `F_exit = F_base × (1 + k_fee × (1 − headroom))` with defaults `F_base=0.5%`, `k_fee=2.0`, bounds `[0.5%,10%]`; `T_unbond = T_base + k_time × (1 − headroom)` with defaults `T_base=24h`, `k_time=72h`, bounds `[12h,7d]`. Surplus capacity → cheaper/faster exits; tight capacity → costlier/slower exits with mandatory handoff/repair before finalization.
+- Exit fee and unbonding window scale with capacity headroom: `headroom_raw = free_capacity_ratio / target_headroom` with default `target_headroom = 0.20` (pinned to preserve ~20% spare for repairs/unbonding). Optionally smooth `headroom_raw` via 7‑day EMA; use `headroom = clamp(0,1, headroom_raw_smoothed)`. `F_exit = F_base × (1 + k_fee × (1 − headroom))` with defaults `F_base=0.5%`, `k_fee=2.0`, bounds `[0.5%,10%]`; `T_unbond = T_base + k_time × (1 − headroom)` with defaults `T_base=24h`, `k_time=72h`, bounds `[12h,7d]`. Surplus capacity saturates to `headroom=1` → cheaper/faster exits; tight capacity → costlier/slower exits with mandatory handoff/repair before finalization.
 
 ### 11.5 Billing & Spend Guards
-- Single escrow per deal (storage + baseline egress) in $STOR; auto top‑up optional; grace mode reduces QoS weight when under‑funded. Defaults: `K_epoch=7` epochs funded; `K_low=3` epochs trigger grace. Retrieval billing is per epoch with bounded `β` and `PremiumPerByte` within `[0, premium_max]` and `price_cap_GiB`.
-- Events (DealCreated, RedundancyDegraded, RepairScheduled, ProofMissed, ExitRequested/Finalized, FreezeActivated/Cleared, SpendGuardHit) are emitted for UX and observability. Yellow‑flag freeze pauses withdrawals/new deals/exits but keeps proofs and billing running; auto top‑ups pause.
+- Single escrow per deal (storage + baseline egress) in $STOR; auto top‑up optional; grace mode reduces QoS weight and pauses new replicas when under‑funded. Defaults: `K_epoch=7` epochs funded; `K_low=3` epochs trigger grace. Retrieval billing is per epoch with bounded `β` and `PremiumPerByte` within `[0, premium_max]` and `price_cap_GiB`.
+- Events (DealCreated, RedundancyDegraded, RepairScheduled, RepairComplete, ProofMissed, ExitRequested/Finalized, FreezeActivated/Cleared, SpendGuardHit) are emitted for UX and observability. Yellow‑flag freeze pauses withdrawals/new deals/exits but keeps proofs and billing running; auto top‑ups pause.
 
 ### 11.6 Research Isolation
 - PoS²‑L RFCs are research‑only; production profiles remain PoUD+PoDE on canonical bytes unless a DAO‑ratified, auto‑sunset research activation is explicitly in force.
