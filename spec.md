@@ -401,10 +401,16 @@ NilStore uses a content‑addressed **file manifest** (Root CID) that enumerates
 
 ## § 6 Product‑Aligned Economics & Operations
 
-### 6.0 Pricing & Ask Book (normative)
-- The `$STOR-1559` Parameter Set (`PSet`) published on L2 MUST include a **price curve schema**: `{BaseFee[region/class], β bands, β_floor, β_ceiling, surge_multiplier_max, σ_sec_max, price_cap_GiB by region/class, premium_max, egress_cap_epoch}`. `σ_sec_max` caps per‑epoch BaseFee adjustments (default ≤ 10% change per epoch) to damp volatility; clients and watchers MUST reject price or payout calculations not derived from the current hash‑pinned `PSet`, including caps and premium bounds.
-- Providers MUST publish **standing asks** on L2: `{provider_id, capacity_free_GiB, qos_class, min_term_epochs, price_curve_id, latency_profile, region_cells[]}`. The DA chain maintains an **AskBook root** (Poseidon) updated each epoch; deals using providers absent from the AskBook are ineligible for PoUD/PoDE payouts.
-- **Canonical rate:** For a DU, the client MUST select providers from the AskBook whose `price_curve_id` is in the current `PSet`; the total quoted rate = `BaseFee × β_band × surge_multiplier` (bounded by `[β_floor, β_ceiling]`). Frontends MAY display “good rate” badges when `β_band ≤ median_band + 1`.
+### 6.0 Pricing & Canonical AskBook (normative)
+- The `$STOR-1559` Parameter Set (`PSet`) published on L2 MUST include a **price curve schema**: `{BaseFee[region/class], β bands, β_floor, β_ceiling, surge_multiplier_max, σ_sec_max, price_cap_GiB by region/class, premium_max, egress_cap_epoch, k_bounds, γ_bounds}`. `σ_sec_max` caps per‑epoch BaseFee adjustments (default ≤ 10% change per epoch) to damp volatility; clients and watchers MUST reject price or payout calculations not derived from the current hash‑pinned `PSet`, including caps and premium bounds.
+- Providers MUST publish **bounded price curves** on L2 (per `{region, qos_class}`): `{provider_id, region, qos_class, p0, k, γ, cap_free_GiB, min_term_epochs, price_curve_id, placement_cells?}` with constraints: `p0` mapped to a β band and bounded by `[β_floor, β_ceiling]`, `premium_max ≤ 0.5×BaseFee`, `price_cap_GiB = 2× median(BaseFee by region/class)` (defaults), and slope bounds `k ∈ k_bounds`, `γ ∈ γ_bounds`. Curves exceeding caps MUST be rejected at registration.
+- **Canonical AskBook root:** Each epoch the DA/L2 chain computes a single Merkle root `AskBookRoot` over all active curve entries, with an accompanying partition index for `{region, qos_class}` offsets. `AskBookRoot` and partition offsets MUST be published in the epoch transcript.
+- **Canonical selection (mandatory):** For every deal, the client MUST:
+  1) Select only entries proven against `AskBookRoot` within the target `{region, qos_class}` partition, supplying inclusion proofs.
+  2) Determine fill order deterministically: sort candidate slices by marginal price at current utilization, then `qos_class`, then `provider_id` (or a deterministic encoding). Use `{CID_DU, ClientSalt_32B, shard_index}` and the partition to seed any tie‑break; no SP‑controlled randomness is allowed.
+  3) Enforce placement constraints during fill (one shard per SP per cell; ring/slice distances per profile). If an entry violates placement, skip deterministically to the next.
+  4) Fill until redundancy target is met; compute the quoted rate from `BaseFee × β_band × surge_multiplier` bounded by `[β_floor, β_ceiling]` and `premium_max`/`price_cap_GiB`.
+- Deals using providers not proven against `AskBookRoot` or selected outside this deterministic process are ineligible for PoUD/PoDE payouts in production profiles.
 
 ### 6.1 Capacity Health Score, Entry & Exit (normative)
 - **Capacity Health Score (`H_score`)** is computed per epoch from `{free_capacity_ratio, proof_success_rate (30d), churn, RTT_outlier_rate}`. It is hash‑pinned in the epoch transcript and drives entry/exit parameters.

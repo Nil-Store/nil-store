@@ -443,8 +443,8 @@ The cryptographic specification and the tokenomics parameters are hash-pinned an
 - `get(file_id)` auto‑selects healthy SPs, shows a retrieval price quote, and enforces a user‑set `max_monthly_spend` unless overridden.
 
 ### 11.2 Pricing & SP Selection
-- Providers post **standing asks** (capacity, QoS, min term, price curve id, region cells). Deals pick SPs from the AskBook; off‑book SPs are not eligible for PoUD/PoDE payouts.
-- Prices derive from the hash‑pinned `$STOR-1559` curve (BaseFee, β band, surge cap, `σ_sec_max`, `price_cap_GiB` by region/class, `premium_max`, `egress_cap_epoch`). `σ_sec_max` caps per‑epoch BaseFee movement (default ≤ 10%) to damp volatility. Clients/watchers MUST reject price or payout calculations outside the pinned `PSet`, including caps and premium bounds. Defaults: `β_floor=0.70`, `β_ceiling=1.30`, `premium_max=0.5×BaseFee`, `price_cap_GiB=2×` the regional/class median BaseFee, `σ_sec_max ≤ 10%/epoch`. Deterministic assignment uses `{CID_DU, ClientSalt, shard_index}` plus price/QoS scores; one shard per SP per ring‑cell with min distance.
+- Providers post **bounded price curves** per `{region, QoS}` `{p0, k, γ, cap_free_GiB, min term, price curve id}` within caps/bounds (defaults: `β_floor=0.70`, `β_ceiling=1.30`, `premium_max=0.5×BaseFee`, `price_cap_GiB=2×` the regional/class median BaseFee, `σ_sec_max ≤ 10%/epoch`; `k, γ` bounded per PSet). The chain publishes a single `AskBookRoot` + partition offsets each epoch; off‑book SPs are not eligible for PoUD/PoDE payouts.
+- Deterministic assignment uses `{CID_DU, ClientSalt, shard_index, region, qos}` to sort candidate slices by marginal price (current util), then QoS, then `sp_id`, enforcing placement (one shard per SP per ring‑cell with min ring/slice distance). Quotes outside caps are rejected; deals must prove inclusion against `AskBookRoot`.
 
 ### 11.3 Redundancy Dial & Auto-Rebalance
 - Durability presets map to pinned profiles: `Standard`=RS(12,9), `Archive`=RS(16,12), `Mission-Critical`=RS‑2D‑Hex{rows=4, cols=7}. Deals record `durability_target` and resolved profile.
