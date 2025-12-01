@@ -5,14 +5,24 @@ set -euo pipefail
 
 SCRIPT_NAME=$(basename "$0")
 ROOT_DIR=$(cd -- "$(dirname -- "$0")" >/dev/null 2>&1 && pwd -P)
-INPUT_MD="${1:-whitepaper.md}"
+
+# Default input file
+DEFAULT_INPUT="whitepaper.md"
+
+# Parse arguments for optional --lite flag
+if [[ "${1:-}" == "--lite" ]]; then
+  DEFAULT_INPUT="litepaper.md"
+  shift
+fi
+
+INPUT_MD="${1:-$DEFAULT_INPUT}"
 
 if [[ ! -f "$INPUT_MD" ]]; then
-  if [[ -f "$ROOT_DIR/whitepaper.md" ]]; then
-    INPUT_MD="$ROOT_DIR/whitepaper.md"
+  if [[ -f "$ROOT_DIR/$INPUT_MD" ]]; then
+    INPUT_MD="$ROOT_DIR/$INPUT_MD"
   else
     echo "[$SCRIPT_NAME] Error: input Markdown file not found: $INPUT_MD" >&2
-    echo "Usage: $SCRIPT_NAME [path/to/whitepaper.md]" >&2
+    echo "Usage: $SCRIPT_NAME [--lite] [path/to/file.md]" >&2
     exit 1
   fi
 fi

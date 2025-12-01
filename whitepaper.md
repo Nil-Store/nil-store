@@ -1,8 +1,8 @@
 # NilStore Network: A Protocol for Decentralized, Verifiable, and Economically Efficient Storage
 
-**(White Paper v1.0)**
+**(White Paper v1.1)**
 
-**Date:** 2025-10-02
+**Date:** 2025-12-01
 **Authors:** NilStore Core Team
 
 ## Abstract
@@ -92,7 +92,10 @@ Shards are placed on a directed hex-ring lattice (Nil-Lattice) to maximize topol
 #### 3.2.2 Advanced Profiles (Optional)
 
   * **RS‑2D‑Hex Profile:** Couples two‑dimensional erasure coding with the Nil‑Lattice. It maps row redundancy to radial rings and column redundancy to angular slices, enabling O(|DU|/n) repair bandwidth under churn.
-  * **Durability Dial Abstraction:** Exposes a user‑visible `durability_target` (e.g., 11 nines) that deterministically resolves to a governance‑approved redundancy profile (RS‑Standard or RS‑2D‑Hex).
+  * **Mission-Critical (High Redundancy):** Profiles with high shard counts (e.g., RS(30,10)) provide two distinct benefits:
+    *   **Significant Durability:** The dataset can survive the simultaneous loss of 2/3rds of the storage nodes (e.g., 20 out of 30).
+    *   **CDN-Grade Throughput:** Retrievals automatically select the fastest subset of nodes (e.g., the fastest 10 out of 30), effectively acting as a high-performance, latency-optimized CDN.
+  * **Durability Dial Abstraction:** Exposes a user‑visible `durability_target` (e.g., 11 nines) that deterministically resolves to a governance‑approved redundancy profile (RS‑Standard, RS‑2D‑Hex, or Mission-Critical).
 
 ### 3.3 Autonomous Repair Protocol
 
@@ -359,10 +362,49 @@ Missed **PoUD + PoDE** proofs trigger a quadratic penalty on the bonded $STOR co
       * Governance bounds (time‑locked): $\alpha ∈ [0.5, 2.0]$, $\beta ∈ [2, 4]`, `cap_corr ∈ [3, 8]`. Parameters MUST stay within bounds.
       * If $F_{global} > F^{*}$ (default 15%), governance MAY cap network‑aggregate burn (e.g., 2%/epoch) but MUST NOT waive per‑SP penalties. Collocated identities MUST be merged before computing $F_{cluster}$ to prevent Sybil dilution.
 
-### 7.4 Advanced Mechanisms
+### 7.4 Multi‑Stage Epoch Reconfiguration
 
-  * **Bandwidth‑Driven Redundancy (Normative):** NilStore aligns replica count with observed demand (Heat Index). When demand crosses a threshold, a VRF committee assigns short-TTL "hot replicas" to additional providers chosen by weighted rendezvous hashing based on Provider Capability Vectors (PCV).
-  * **Multi‑Stage Epoch Reconfiguration:** Ensures uninterrupted availability during committee churn by directing writes to epoch e+1 immediately, while reads remain served by epoch e until the new committee reaches a readiness quorum (signaled on L1 and verified by watchers).
+#### 7.4.0 Objective
+Ensure uninterrupted availability during committee churn by directing writes to epoch e+1 immediately, while reads remain served by epoch e until the new committee reaches readiness quorum.
+
+#### 7.4.1 Metadata
+Each DU MUST carry `epoch_written`. During handover, gateways/clients route reads by `epoch_written`; if `epoch_written < current_epoch`, they MAY continue reading from the old committee until readiness is signaled.
+
+#### 7.4.2 Committee Readiness Signaling
+New‑epoch SPs MUST signal readiness once all assigned slivers are bootstrapped. A signed message: `{epoch_id, SP_ID, slivers_bootstrapped, timestamp, sig_SP}` is posted on L1. When ≥ 2f+1 SPs signal, the DA chain emits `CommitteeReady(epoch_id)`.
+
+**Readiness Audit (Normative).** Before counting an SP toward quorum, watchers MUST successfully retrieve and verify a random audit sample of that SP’s assigned slivers (sample size ≥ 1% or ≥ 1 sliver, whichever is larger). Failures cause the SP’s readiness flag to be cleared and a backoff timer `Δ_ready_backoff` (default 30 min) to apply before re‑signal.
+
+#### 7.4.3 Routing Rules
+- **Writes:** MUST target the current (newest) epoch.
+- **Reads:**
+  - If `epoch_written = current_epoch`, read from current.
+  - If `epoch_written < current_epoch`, prefer old committee until `CommitteeReady`, then switch to new.
+Gateways MUST NOT request slivers from SPs that have not signaled readiness.
+
+#### 7.4.4 Failure Modes
+- SPs failing to signal by the epoch deadline are slashed per policy.
+- If quorum is not reached by `Δ_ready_timeout`, the DAO MAY trigger emergency repair bounties.
+- False readiness is slashable and MAY cause temporary suspension from deal uptake.
+
+#### 7.4.5 Governance Dials
+DAO‑tunable: `Δ_ready_timeout` (default 24h), quorum (default 2f+1), slashing ratios, and the emergency bounty path.
+
+### 7.5 L2 Registries & Calls (Normative)
+
+- `register_pcv(provider_id, PCV, proof_bundle)` — Provider Capability Vector registry; watcher probes attached and aggregated via BATMAN.
+- `register_edge(edge_id, payer_id, max_miss_budget, bond_stor)` — Registers an edge authorized to emit edge‑settled receipts on behalf of `payer_id`. `bond_stor` MUST be ≥ f(max_miss_budget) (DAO‑tunable). Edges are slashable for forged receipts.
+- `submit_bw_root(provider_id, epoch, BW_root, served_bytes, med_latency, agg_sig)` — Aggregation of per‑chunk receipts into a per‑epoch bandwidth root.
+- `spawn_hot_replicas(du_id, epoch, Δr, TTL)` — VRF‑mediated hot‑replica assignment; requires capacity bonds and enforces TTL/hysteresis.
+
+### 7.6 Bandwidth Receipts & BW_root (Normative)
+
+- **Receipt schema ($STOR‑only):** `{ du_id, chunk_id, bytes, region, t_start, t_end, provider_id, payer_id, [edge_id?, EdgeSig?], [grant_id?], PremiumPerByte, sig_provider }` hashed under `"BW-RECEIPT-V1"`.
+- **Aggregation:** leaves → Poseidon Merkle → `"BW-ROOT-V1"`; providers submit `(provider_id, epoch, BW_root, served_bytes, agg_sig)`.
+- **Eligibility (payer‑only + A/B):**
+  (A) Edge‑settled: `edge_id` + `EdgeSig` from a payer‑registered edge; payable bytes = **origin→edge** only.
+  (B) Grant‑token: `grant_id` valid under the payer’s `"GRANT‑TOKEN‑V1"` Merkle root and unspent.
+  Receipts lacking `payer_id` are ineligible. Settlement MUST compute `Burn = β·BaseFee[region, epoch] × bytes` **before** Payout and MUST route `(1−β)` of `BaseFee × bytes` to the Security Treasury.
 
 ## 8\. Advanced Features: Spectral Risk Oracle (σ)
 
@@ -401,6 +443,10 @@ The DAO controls:
 **Controls.** All outflows require on‑chain proposals, a minimum 72 h timelock, and multi‑sig execution by distinct roles (Core, Independent Auditor, Community) matching § 9.2 role diversity. The DAO MUST maintain a 12‑month security runway before discretionary outflows.
 
 **Reporting.** A quarterly, hash‑pinned Treasury report (CSV ledger + SHA256SUMS) is mandatory.
+
+### 9.4 Bandwidth Quota, Auto‑Top‑Up & Sponsors (Normative)
+
+The protocol uses a **hybrid** bandwidth model: each file has an **included quota** (budget reserved per epoch from uploader deposits in **$STOR**; verified receipts **debit $STOR escrow**). On exhaustion, the file enters a **grace tier** with reduced placement weight until **auto‑top‑up** or **sponsor** budgets restore full weight. APIs: `set_quota`, `set_auto_top_up`, `sponsor`. Governance sets `w_grace`, roll‑over caps, region multipliers, price bands, sponsor caps, and ASN/geo abuse discounts.
 
 ### 9.2 Upgrade Process
 
