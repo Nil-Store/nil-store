@@ -10,8 +10,8 @@ export const ArgonDeepDive = () => {
 
   return (
     <div className="pt-24 pb-12 container mx-auto px-4 max-w-4xl">
-      <Link to="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8">
-        <ArrowLeft className="w-4 h-4" /> Back to Home
+      <Link to="/technology" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8">
+        <ArrowLeft className="w-4 h-4" /> Back to Technology
       </Link>
       
       <motion.div
@@ -118,7 +118,7 @@ export const ArgonDeepDive = () => {
         </div>
 
         <div className="mt-16 flex justify-start">
-          <Link to="/algo/kzg" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground">
+          <Link to="/technology/kzg" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground">
             <ArrowLeft className="w-4 h-4" /> Previous: KZG Commitments
           </Link>
         </div>

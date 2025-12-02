@@ -12,10 +12,12 @@ function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
-          <Route path="technology" element={<Technology />} />
-          <Route path="algo/kzg" element={<KZGDeepDive />} />
-          <Route path="algo/argon" element={<ArgonDeepDive />} />
-          <Route path="algo/sharding" element={<ShardingDeepDive />} />
+          <Route path="technology">
+            <Route index element={<Technology />} />
+            <Route path="sharding" element={<ShardingDeepDive />} />
+            <Route path="kzg" element={<KZGDeepDive />} />
+            <Route path="sealing" element={<ArgonDeepDive />} />
+          </Route>
         </Route>
       </Routes>
     </HashRouter>
