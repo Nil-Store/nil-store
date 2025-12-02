@@ -1,16 +1,14 @@
+import { AlgorithmWalkthrough } from "../components/AlgorithmWalkthrough";
 import { motion } from "framer-motion";
-import { ShardingDeepDive } from "./ShardingDeepDive";
-import { KZGDeepDive } from "./KZGDeepDive";
-import { ArgonDeepDive } from "./ArgonDeepDive";
 
 export const Technology = () => {
   return (
-    <div className="pt-24 pb-12 container mx-auto px-4 max-w-4xl">
-      <div className="mb-24 text-center">
+    <div>
+      <div className="mb-16 max-w-3xl">
         <motion.h1 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-4xl md:text-6xl font-bold mb-6"
+          className="text-4xl md:text-5xl font-bold mb-6"
         >
           Under the Hood
         </motion.h1>
@@ -18,29 +16,13 @@ export const Technology = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="text-xl text-muted-foreground max-w-2xl mx-auto"
+          className="text-xl text-muted-foreground"
         >
-          NilStore combines three cutting-edge cryptographic primitives to create a storage network that is secure, verifiable, and efficient. 
+          NilStore combines three cutting-edge cryptographic primitives to create a storage network that is secure, verifiable, and efficient. Explore the interactive demos below to understand the lifecycle of a file.
         </motion.p>
       </div>
 
-      <div className="space-y-32">
-        <section id="sharding" className="scroll-mt-32">
-          <ShardingDeepDive />
-        </section>
-
-        <div className="w-full border-t border-dashed border-muted-foreground/20" />
-
-        <section id="kzg" className="scroll-mt-32">
-          <KZGDeepDive />
-        </section>
-
-        <div className="w-full border-t border-dashed border-muted-foreground/20" />
-
-        <section id="sealing" className="scroll-mt-32">
-          <ArgonDeepDive />
-        </section>
-      </div>
+      <AlgorithmWalkthrough />
     </div>
   );
 };

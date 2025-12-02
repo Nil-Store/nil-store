@@ -11,9 +11,8 @@ export const Layout = () => {
           </Link>
           <div className="hidden md:flex gap-8 text-sm font-medium text-muted-foreground">
             <Link to="/technology" className="hover:text-foreground transition-colors">Technology</Link>
-            <Link to="/technology#sharding" className="hover:text-foreground transition-colors">Sharding</Link>
-            <Link to="/technology#kzg" className="hover:text-foreground transition-colors">KZG</Link>
-            <Link to="/technology#sealing" className="hover:text-foreground transition-colors">Sealing</Link>
+            <a href="#" className="hover:text-foreground transition-colors">Whitepaper</a>
+            <a href="#" className="hover:text-foreground transition-colors">GitHub</a>
           </div>
           <button className="bg-foreground text-background px-4 py-2 rounded-full text-sm font-medium hover:opacity-90">
             Launch App
@@ -31,9 +30,9 @@ export const Layout = () => {
             <div>
               <h4 className="font-bold mb-4 text-foreground">Core Tech</h4>
               <ul className="space-y-2">
-                <li><Link to="/technology#sharding">Data Sharding</Link></li>
-                <li><Link to="/technology#kzg">KZG Commitments</Link></li>
-                <li><Link to="/technology#sealing">Proof of Seal</Link></li>
+                <li><Link to="/technology/sharding">Data Sharding</Link></li>
+                <li><Link to="/technology/kzg">KZG Commitments</Link></li>
+                <li><Link to="/technology/sealing">Proof of Seal</Link></li>
               </ul>
             </div>
             <div>
