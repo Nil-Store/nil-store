@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { File, Lock, CheckCircle, Server, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "../lib/utils";
+import { useTechnology } from "../context/TechnologyContext";
 
 const steps = [
   {
@@ -81,10 +82,15 @@ const steps = [
 ];
 
 export const AlgorithmWalkthrough = () => {
+  const { setHighlightedPath } = useTechnology();
+
   return (
     <section className="py-12">
       <div className="container mx-auto">
-        <div className="space-y-24">
+        <div className="space-y-24 relative">
+          {/* Vertical Connector Line */}
+          <div className="absolute left-8 lg:left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-border to-transparent lg:-translate-x-1/2 hidden lg:block" />
+
           {steps.map((step, index) => (
             <motion.div
               key={step.id}
@@ -92,38 +98,46 @@ export const AlgorithmWalkthrough = () => {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-100px" }}
               transition={{ duration: 0.6 }}
-              className="flex flex-col lg:flex-row gap-12 items-center"
+              onMouseEnter={() => setHighlightedPath(step.link || null)}
+              onMouseLeave={() => setHighlightedPath(null)}
+              className="flex flex-col lg:flex-row gap-12 items-center relative group"
             >
               {/* Text Side */}
               <div className={cn("lg:w-1/2", index % 2 === 1 && "lg:order-2")}>
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="p-3 bg-primary/10 rounded-2xl text-primary">
-                    {step.icon}
+                <div className="bg-card p-8 rounded-3xl border shadow-sm group-hover:border-primary/50 transition-colors relative z-10">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="p-3 bg-secondary rounded-2xl text-foreground group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                      {step.icon}
+                    </div>
                   </div>
-                  <div className="text-sm font-bold text-primary uppercase tracking-wider">Step 0{step.id}</div>
-                </div>
-                
-                <h3 className="text-3xl font-bold mb-6">{step.title}</h3>
-                <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
-                  {step.description}
-                </p>
+                  
+                  <h3 className="text-2xl font-bold mb-4">{step.title}</h3>
+                  <p className="text-muted-foreground mb-8 leading-relaxed">
+                    {step.description}
+                  </p>
 
-                {step.link && (
-                  <Link 
-                    to={step.link}
-                    className="inline-flex items-center gap-2 text-primary font-medium hover:gap-3 transition-all"
-                  >
-                    {step.linkText} <ArrowRight className="w-4 h-4" />
-                  </Link>
-                )}
+                  {step.link && (
+                    <Link 
+                      to={step.link}
+                      className="inline-flex items-center gap-2 text-primary font-medium hover:gap-3 transition-all"
+                    >
+                      {step.linkText} <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  )}
+                </div>
               </div>
 
               {/* Visual Side */}
               <div className={cn(
-                "lg:w-1/2 w-full bg-secondary/30 rounded-3xl p-12 flex items-center justify-center min-h-[400px] border",
+                "lg:w-1/2 w-full flex justify-center",
                 index % 2 === 1 && "lg:order-1"
               )}>
-                {step.visual}
+                <div className="bg-secondary/30 rounded-3xl p-12 w-full max-w-md aspect-square flex items-center justify-center border relative overflow-hidden">
+                  <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25 opacity-50" />
+                  <div className="relative z-10">
+                    {step.visual}
+                  </div>
+                </div>
               </div>
             </motion.div>
           ))}
