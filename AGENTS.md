@@ -15,6 +15,10 @@ This document outlines a strategic "Go-to-Market" Engineering Roadmap for the Ni
     *   **Argon2id Timing:** Does the Argon2id timing actually prevent on-demand generation?
         *   [x] **Result:** ~191ms per 1KB block (15MB/2 passes).
         *   *Analysis:* For a 1GB file (1M blocks), total seal time would be ~191,000 seconds (53 hours) if serial. This is a significant "Seal" cost, preventing cheap on-demand generation, while verification (checking the seal) is just a hash check (fast) or implies the prover must have stored the sealed data. Wait, PoDE verification is usually just checking the proof on the *sealed* data. The "Seal" is the encoding cost. 191ms/KB is very slow (5KB/s). We might need to tune this for production (e.g. larger block size or lower cost if we want faster sealing, or this is intended). For "Localhost" phase, this confirms the mechanism works.
+*   **Market (Narrative):**
+    *   **"Building in Public":** Publish the `core-crypto` repo.
+    *   **Content:** Write a blog post: *"Why we chose PoDE over Filecoin's Seal"* (Comparatives sell well).
+    *   **Educational Website:** [x] Launch a landing page to demonstrate benchmarks and visually explain core algorithms (Sharding, KZG, Argon2id).
 
 ## Phase 2: The "Friendly" Devnet (Months 3-6)
 **Goal:** Connect 10-50 nodes controlled by you and "friendly" early backers.
