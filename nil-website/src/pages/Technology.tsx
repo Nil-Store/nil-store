@@ -18,7 +18,7 @@ export const Technology = () => {
           transition={{ delay: 0.1 }}
           className="text-xl text-muted-foreground"
         >
-          NilStore combines three cutting-edge cryptographic primitives to create a storage network that is secure, verifiable, and efficient. Explore the interactive demos below to understand the lifecycle of a file.
+          NilStore combines three cutting-edge cryptographic primitives to create a storage network that is secure, verifiable, and efficient. 
         </motion.p>
       </div>
 
