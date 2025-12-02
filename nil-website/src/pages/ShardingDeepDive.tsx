@@ -183,6 +183,12 @@ blob[offset..offset+32].copy_from_slice(&bytes);`}
             </div>
           </section>
         </div>
+
+        <div className="mt-16 flex justify-end">
+          <Link to="/algo/kzg" className="inline-flex items-center gap-2 px-6 py-3 bg-secondary hover:bg-secondary/80 rounded-full font-medium transition-colors">
+            Next: KZG Commitments <ArrowLeft className="w-4 h-4 rotate-180" />
+          </Link>
+        </div>
       </motion.div>
     </div>
   );
