@@ -21,11 +21,7 @@ export const ShardingDeepDive = () => {
   const currentOrder = isReversed ? reversedIndices : indices;
 
   return (
-    <div className="pt-24 pb-12 container mx-auto px-4 max-w-4xl">
-      <Link to="/technology" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8">
-        <ArrowLeft className="w-4 h-4" /> Back to Technology
-      </Link>
-      
+    <div className="max-w-4xl">      
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

@@ -9,15 +9,12 @@ export const ArgonDeepDive = () => {
   const sealTimeSeconds = (fileSizeMB * 1024 / 128) * (sealTimePerMB / 1000);
 
   return (
-    <div className="pt-24 pb-12 container mx-auto px-4 max-w-4xl">
-      <Link to="/technology" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8">
-        <ArrowLeft className="w-4 h-4" /> Back to Technology
-      </Link>
-      
+    <div className="max-w-4xl">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
+
         <div className="flex items-center gap-4 mb-6">
           <div className="p-3 bg-red-500/10 rounded-xl border border-red-500/20">
             <span className="text-2xl">🛡️</span>
