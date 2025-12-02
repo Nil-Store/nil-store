@@ -6,25 +6,29 @@ import { TechnologyProvider, useTechnology } from "../context/TechnologyContext"
 
 const sidebarItems = [
   {
-    title: "Overview",
+    title: "Protocol Overview",
     path: "/technology",
     exact: true,
     icon: <Layers className="w-4 h-4" />,
+    step: "Intro"
   },
   {
     title: "Data Sharding",
     path: "/technology/sharding",
     icon: <File className="w-4 h-4" />,
+    step: "Step 1"
   },
   {
     title: "KZG Commitments",
     path: "/technology/kzg",
     icon: <Lock className="w-4 h-4" />,
+    step: "Step 2"
   },
   {
     title: "Proof of Seal",
     path: "/technology/sealing",
     icon: <ShieldAlert className="w-4 h-4" />,
+    step: "Step 3"
   },
 ];
 
@@ -33,18 +37,17 @@ const Sidebar = () => {
   const { highlightedPath } = useTechnology();
 
   return (
-    <aside className="lg:w-64 flex-shrink-0">
-      <div className="sticky top-24">
-        <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4 px-4">
-          Core Concepts
+    <aside className="lg:w-72 flex-shrink-0">
+      <div className="sticky top-24 bg-card border rounded-2xl p-4 shadow-sm">
+        <h2 className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-4 px-2">
+          The NilStore Pipeline
         </h2>
-        <nav className="space-y-1">
+        <nav className="space-y-2">
           {sidebarItems.map((item) => {
             const isRouteActive = item.exact 
               ? location.pathname === item.path
               : location.pathname.startsWith(item.path);
             
-            // Highlight if either the route is active OR if it's being hovered in the walkthrough
             const isHighlighted = highlightedPath === item.path;
             const isActive = isRouteActive || isHighlighted;
 
@@ -53,31 +56,63 @@ const Sidebar = () => {
                 key={item.path}
                 to={item.path}
                 className={cn(
-                  "flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all relative group",
+                  "flex items-center gap-3 px-3 py-3 text-sm rounded-xl transition-all relative group overflow-hidden",
                   isActive 
-                    ? "text-primary bg-primary/10" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                    ? "bg-primary text-primary-foreground shadow-md" 
+                    : "hover:bg-secondary text-muted-foreground hover:text-foreground"
                 )}
               >
-                {item.icon}
-                {item.title}
                 {isActive && (
                   <motion.div
-                    layoutId="active-tech-nav"
-                    className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-full"
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    layoutId="active-tech-bg"
+                    className="absolute inset-0 bg-primary rounded-xl -z-10"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                   />
+                )}
+                
+                <div className={cn(
+                  "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                  isActive ? "bg-white/20" : "bg-secondary group-hover:bg-background"
+                )}>
+                  {item.icon}
+                </div>
+                
+                <div className="flex-1">
+                  <div className={cn("text-[10px] uppercase font-bold opacity-70", isActive ? "text-primary-foreground" : "text-muted-foreground")}>
+                    {item.step}
+                  </div>
+                  <div className="font-semibold">{item.title}</div>
+                </div>
+
+                {isActive && (
+                  <motion.div
+                    initial={{ opacity: 0, x: -5 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="mr-1"
+                  >
+                    <ChevronRight className="w-4 h-4 opacity-50" />
+                  </motion.div>
                 )}
               </Link>
             );
           })}
         </nav>
 
-        <div className="mt-8 p-4 bg-secondary/20 rounded-xl border text-xs text-muted-foreground">
-          <p className="mb-2 font-semibold text-foreground">Developer Resources</p>
+        <div className="mt-8 pt-6 border-t px-2">
+          <p className="mb-3 text-xs font-semibold text-foreground">Resources</p>
           <ul className="space-y-2">
-            <li><a href="#" className="hover:underline flex items-center gap-1">API Reference <ChevronRight className="w-3 h-3" /></a></li>
-            <li><a href="#" className="hover:underline flex items-center gap-1">Rust SDK <ChevronRight className="w-3 h-3" /></a></li>
+            <li>
+              <a href="#" className="text-xs text-muted-foreground hover:text-primary flex items-center gap-2 transition-colors group">
+                <div className="w-1 h-1 rounded-full bg-muted-foreground group-hover:bg-primary transition-colors" />
+                Full Whitepaper
+              </a>
+            </li>
+            <li>
+              <a href="#" className="text-xs text-muted-foreground hover:text-primary flex items-center gap-2 transition-colors group">
+                <div className="w-1 h-1 rounded-full bg-muted-foreground group-hover:bg-primary transition-colors" />
+                Rust SDK Docs
+              </a>
+            </li>
           </ul>
         </div>
       </div>
@@ -90,14 +125,14 @@ export const TechnologyLayout = () => {
 
   return (
     <TechnologyProvider>
-      <div className="container mx-auto px-4 pt-24 pb-12 flex flex-col lg:flex-row gap-12 min-h-screen">
+      <div className="container mx-auto px-4 pt-24 pb-12 flex flex-col lg:flex-row gap-8 lg:gap-12 min-h-screen">
         <Sidebar />
         <div className="flex-1 min-w-0">
           <motion.div
             key={location.pathname}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3 }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
           >
             <Outlet />
           </motion.div>
