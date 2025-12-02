@@ -2,23 +2,16 @@ import { HashRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { Home } from "./pages/Home";
 import { Technology } from "./pages/Technology";
-import { TechnologyLayout } from "./pages/TechnologyLayout";
-import { KZGDeepDive } from "./pages/KZGDeepDive";
-import { ArgonDeepDive } from "./pages/ArgonDeepDive";
-import { ShardingDeepDive } from "./pages/ShardingDeepDive";
+import { ScrollToAnchor } from "./components/ScrollToAnchor";
 
 function App() {
   return (
     <HashRouter>
+      <ScrollToAnchor />
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
-          <Route path="technology" element={<TechnologyLayout />}>
-            <Route index element={<Technology />} />
-            <Route path="sharding" element={<ShardingDeepDive />} />
-            <Route path="kzg" element={<KZGDeepDive />} />
-            <Route path="sealing" element={<ArgonDeepDive />} />
-          </Route>
+          <Route path="technology" element={<Technology />} />
         </Route>
       </Routes>
     </HashRouter>
