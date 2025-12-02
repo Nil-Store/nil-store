@@ -1,8 +1,10 @@
-import { motion } from "framer-motion";
-import { File, Lock, CheckCircle, Server, ArrowRight } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { File, Lock, CheckCircle, Server, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "../lib/utils";
-import { useTechnology } from "../context/TechnologyContext";
+import { ShardingDeepDive } from "../pages/ShardingDeepDive";
+import { KZGDeepDive } from "../pages/KZGDeepDive";
+import { ArgonDeepDive } from "../pages/ArgonDeepDive";
 
 const steps = [
   {
@@ -10,8 +12,7 @@ const steps = [
     title: "Sharding & Encoding",
     description: "The user's file is split into 1KB chunks. Each chunk is mapped to a field element (Fr) using SHA256.",
     icon: <File className="w-6 h-6" />,
-    link: "/technology/sharding",
-    linkText: "Deep Dive: Sharding",
+    DeepDiveComponent: ShardingDeepDive,
     visual: (
       <div className="grid grid-cols-4 gap-2">
         {[...Array(16)].map((_, i) => (
@@ -34,8 +35,7 @@ const steps = [
     title: "KZG Commitment",
     description: "Chunks are packed into a polynomial. A KZG commitment (48 bytes) is generated, representing the entire dataset compactly.",
     icon: <Lock className="w-6 h-6" />,
-    link: "/technology/kzg",
-    linkText: "Deep Dive: KZG",
+    DeepDiveComponent: KZGDeepDive,
     visual: (
       <div className="relative w-48 h-48 bg-purple-500/10 rounded-full flex items-center justify-center border-2 border-dashed border-purple-500 animate-spin-slow">
         <div className="absolute inset-0 flex items-center justify-center">
@@ -49,8 +49,7 @@ const steps = [
     title: "Argon2id Sealing",
     description: "Storage nodes must 'seal' the data using a memory-hard function (Argon2id). This takes time (~191ms/KB), proving they aren't generating it on the fly.",
     icon: <Server className="w-6 h-6" />,
-    link: "/technology/sealing",
-    linkText: "Deep Dive: Sealing",
+    DeepDiveComponent: ArgonDeepDive,
     visual: (
       <div className="flex gap-4 items-center">
         <div className="w-24 h-24 bg-blue-500 rounded-lg flex items-center justify-center text-white font-bold">Data</div>
@@ -82,62 +81,89 @@ const steps = [
 ];
 
 export const AlgorithmWalkthrough = () => {
-  const { setHighlightedPath } = useTechnology();
+  const [expandedStep, setExpandedStep] = useState<number | null>(null);
+
+  const toggleStep = (id: number) => {
+    setExpandedStep(expandedStep === id ? null : id);
+  };
 
   return (
     <section className="py-12">
       <div className="container mx-auto">
-        <div className="space-y-24 relative">
+        <div className="space-y-8 relative">
           {/* Vertical Connector Line */}
-          <div className="absolute left-8 lg:left-1/2 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-border to-transparent lg:-translate-x-1/2 hidden lg:block" />
+          <div className="absolute left-8 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-border to-transparent hidden lg:block" />
 
-          {steps.map((step, index) => (
+          {steps.map((step) => (
             <motion.div
               key={step.id}
-              initial={{ opacity: 0, y: 40 }}
+              initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              transition={{ duration: 0.6 }}
-              onMouseEnter={() => setHighlightedPath(step.link || null)}
-              onMouseLeave={() => setHighlightedPath(null)}
-              className="flex flex-col lg:flex-row gap-12 items-center relative group"
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5 }}
+              className="relative pl-0 lg:pl-24"
             >
-              {/* Text Side */}
-              <div className={cn("lg:w-1/2", index % 2 === 1 && "lg:order-2")}>
-                <div className="bg-card p-8 rounded-3xl border shadow-sm group-hover:border-primary/50 transition-colors relative z-10">
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="p-3 bg-secondary rounded-2xl text-foreground group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                      {step.icon}
-                    </div>
-                  </div>
-                  
-                  <h3 className="text-2xl font-bold mb-4">{step.title}</h3>
-                  <p className="text-muted-foreground mb-8 leading-relaxed">
-                    {step.description}
-                  </p>
+              {/* Step Marker */}
+              <div className="absolute left-8 top-8 w-3 h-3 rounded-full bg-primary -translate-x-1.5 hidden lg:block ring-4 ring-background" />
 
-                  {step.link && (
-                    <Link 
-                      to={step.link}
-                      className="inline-flex items-center gap-2 text-primary font-medium hover:gap-3 transition-all"
-                    >
-                      {step.linkText} <ArrowRight className="w-4 h-4" />
-                    </Link>
-                  )}
-                </div>
-              </div>
-
-              {/* Visual Side */}
               <div className={cn(
-                "lg:w-1/2 w-full flex justify-center",
-                index % 2 === 1 && "lg:order-1"
+                "bg-card rounded-3xl border shadow-sm overflow-hidden transition-all duration-500",
+                expandedStep === step.id ? "ring-2 ring-primary/20 border-primary/50 shadow-md" : "hover:border-primary/30"
               )}>
-                <div className="bg-secondary/30 rounded-3xl p-12 w-full max-w-md aspect-square flex items-center justify-center border relative overflow-hidden">
-                  <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] dark:bg-grid-slate-700/25 opacity-50" />
-                  <div className="relative z-10">
+                {/* Header / Summary Section */}
+                <div className="p-8 flex flex-col lg:flex-row gap-8 items-center cursor-pointer" onClick={() => step.DeepDiveComponent && toggleStep(step.id)}>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="p-3 bg-secondary rounded-2xl text-foreground">
+                        {step.icon}
+                      </div>
+                      <h3 className="text-2xl font-bold">{step.title}</h3>
+                    </div>
+                    <p className="text-lg text-muted-foreground leading-relaxed">
+                      {step.description}
+                    </p>
+                  </div>
+
+                  <div className="lg:w-1/3 w-full flex justify-center">
                     {step.visual}
                   </div>
+
+                  {step.DeepDiveComponent && (
+                    <div className="flex-shrink-0">
+                      <button 
+                        className={cn(
+                          "flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all",
+                          expandedStep === step.id 
+                            ? "bg-secondary text-foreground hover:bg-secondary/80" 
+                            : "bg-primary text-primary-foreground hover:opacity-90 hover:scale-105 shadow-lg shadow-primary/20"
+                        )}
+                      >
+                        {expandedStep === step.id ? (
+                          <>Close Deep Dive <ChevronUp className="w-4 h-4" /></>
+                        ) : (
+                          <>Explore Deep Dive <ChevronDown className="w-4 h-4" /></>
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
+
+                {/* Expandable Content */}
+                <AnimatePresence>
+                  {expandedStep === step.id && step.DeepDiveComponent && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.4, ease: "easeInOut" }}
+                      className="overflow-hidden bg-secondary/10 border-t"
+                    >
+                      <div className="p-8 lg:p-12">
+                        <step.DeepDiveComponent />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </motion.div>
           ))}
