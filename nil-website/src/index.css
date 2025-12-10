@@ -64,3 +64,62 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .markdown-content {
+    @apply prose prose-lg max-w-none text-muted-foreground leading-relaxed;
+  }
+
+  .markdown-content h1,
+  .markdown-content h2,
+  .markdown-content h3,
+  .markdown-content h4 {
+    @apply text-foreground font-bold tracking-tight;
+  }
+
+  .markdown-content p {
+    @apply text-base sm:text-lg;
+  }
+
+  .markdown-content a {
+    @apply text-primary font-semibold no-underline transition-colors;
+  }
+
+  .markdown-content a:hover {
+    @apply text-primary/80;
+  }
+
+  .markdown-content strong {
+    @apply text-foreground;
+  }
+
+  .markdown-content blockquote {
+    @apply border-l-4 border-primary/40 bg-primary/5 text-foreground py-2 pl-4 pr-6 rounded-r-lg;
+  }
+
+  .markdown-content code {
+    @apply bg-muted text-foreground px-1.5 py-0.5 rounded font-mono text-sm;
+  }
+
+  .markdown-content pre {
+    @apply bg-muted text-foreground border border-border rounded-xl p-4 overflow-x-auto;
+  }
+
+  .markdown-content table {
+    @apply w-full text-left border-collapse my-6;
+  }
+
+  .markdown-content th,
+  .markdown-content td {
+    @apply border border-border px-3 py-2 text-sm;
+  }
+
+  .markdown-content ul li::marker,
+  .markdown-content ol li::marker {
+    color: hsl(var(--primary));
+  }
+
+  .markdown-content hr {
+    @apply border-border my-8;
+  }
+}
