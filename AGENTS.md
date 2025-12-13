@@ -725,7 +725,7 @@ This is the **canonical execution checklist** for the next development sprint. E
     - **Pass gate:** `cargo test -p nil_core` + WASM unit/integration tests pass, and `Local MDU (WASM)` tab can expand a sample file without errors.
     - **Commit gate:** After pass, commit `fix(nil_core): WASM expand_mdu scalar mapping` and push.
 
-- [ ] **B2. (Back burner) Add native↔WASM parity tests for MDU expansion.**
+- [x] **B2. (Back burner) Add native↔WASM parity tests for MDU expansion.**
     - **Change:** For a fixed fixture file, assert:
         1. WASM `expand_file` MDUs/roots/commitments equal `nil_cli shard` output,
         2. resulting ManifestRoot equals canonical gateway ingest ManifestRoot.
