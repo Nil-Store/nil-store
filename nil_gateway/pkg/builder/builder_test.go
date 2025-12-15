@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"nil_s3/pkg/layout"
+	"nil_gateway/pkg/layout"
 )
 
 func TestInitEmptyMdu0(t *testing.T) {

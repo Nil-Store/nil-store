@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"math"
 
-	"nil_s3/pkg/layout"
+	"nil_gateway/pkg/layout"
 )
 
 const (

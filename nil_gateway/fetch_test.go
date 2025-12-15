@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/blake2s"
-	"nil_s3/pkg/builder"
-	"nil_s3/pkg/layout"
+	"nil_gateway/pkg/builder"
+	"nil_gateway/pkg/layout"
 	"nilchain/x/crypto_ffi"
 	niltypes "nilchain/x/nilchain/types"
 )

@@ -5,7 +5,7 @@
 
 ## 1. Overview
 
-This specification defines the architectural split of the legacy `nil_s3` service into two distinct logical roles:
+This specification defines the architectural split of the legacy combined gateway/provider service into two distinct logical roles:
 1.  **`nil_provider` (Storage Provider):** A passive, "dumb" storage server that holds raw data (MDUs) and submits proofs to the chain upon receiving valid receipts. It holds the **Provider Key**.
 2.  **`nil_gateway` (User Daemon):** An intelligent user agent (Thick Client helper) that performs cryptographic verification, packing, and serves the frontend. It does **not** hold user keys (for the main flow); it delegates signing to the Client (Browser/CLI).
 
@@ -167,7 +167,7 @@ This preserves “fair exchange” while reducing signatures from `O(chunks)` �
 
 ## 6. Migration Steps (Phase 2)
 
-1.  **Refactor `nil_s3`:**
+1.  **Refactor `nil_gateway`:**
     *   Add `--mode provider` and `--mode gateway` flags (default to "combined" for backward compat if needed, but prefer split).
     *   Implement `POST /sp/receipt` handler.
     *   Update `GatewayFetch` to stop auto-submitting and start setting headers.

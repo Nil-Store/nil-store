@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"nil_s3/pkg/builder"
-	"nil_s3/pkg/layout"
+	"nil_gateway/pkg/builder"
+	"nil_gateway/pkg/layout"
 )
 
 // IngestNewDealFast creates a simplified Deal Slab for testing.

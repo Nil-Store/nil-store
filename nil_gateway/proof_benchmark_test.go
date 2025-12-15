@@ -10,12 +10,12 @@ import (
 	"nilchain/x/crypto_ffi"
 	"nilchain/x/nilchain/types"
 
-	"nil_s3/pkg/builder"
-	"nil_s3/pkg/layout"
+	"nil_gateway/pkg/builder"
+	"nil_gateway/pkg/layout"
 )
 
 func TestBenchmarkProofGen(t *testing.T) {
-	// Locate trusted setup relative to nil_s3 directory
+	// Locate trusted setup relative to nil_gateway directory
 	setupPath := "../nilchain/trusted_setup.txt"
 	if _, err := os.Stat(setupPath); os.IsNotExist(err) {
 		t.Skipf("trusted setup not found at %s", setupPath)

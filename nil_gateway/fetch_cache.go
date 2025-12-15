@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"nil_s3/pkg/builder"
-	"nil_s3/pkg/layout"
+	"nil_gateway/pkg/builder"
+	"nil_gateway/pkg/layout"
 )
 
 type slabFileInfo struct {

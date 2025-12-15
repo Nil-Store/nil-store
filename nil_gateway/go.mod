@@ -1,4 +1,4 @@
-module nil_s3
+module nil_gateway
 
 go 1.25.5
 

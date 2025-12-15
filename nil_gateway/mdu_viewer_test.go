@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"nil_s3/pkg/builder"
-	"nil_s3/pkg/layout"
+	"nil_gateway/pkg/builder"
+	"nil_gateway/pkg/layout"
 )
 
 func TestGatewayManifestInfo_Basic(t *testing.T) {

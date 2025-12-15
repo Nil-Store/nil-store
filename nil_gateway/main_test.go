@@ -29,7 +29,7 @@ import (
 
 	"nilchain/x/nilchain/types"
 
-	"nil_s3/pkg/builder"
+	"nil_gateway/pkg/builder"
 )
 
 func useTempUploadDir(t *testing.T) string {
