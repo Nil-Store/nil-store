@@ -397,11 +397,13 @@ start_faucet() {
 start_sp_gateway() {
   banner "Starting SP gateway service (Port 8082)"
   ensure_nil_cli
+  local provider_addr
+  provider_addr=$("$NILCHAIND_BIN" keys show faucet -a --home "$CHAIN_HOME" --keyring-backend test 2>&1 | grep -Eo 'nil1[0-9a-z]+' | tail -n 1 || true)
   (
     cd "$ROOT_DIR/nil_gateway"
     # SP Mode (default), Listen on 8082, Uploads to uploads_sp
     nohup env NIL_CHAIN_ID="$CHAIN_ID" NIL_HOME="$CHAIN_HOME" NIL_UPLOAD_DIR="$LOG_DIR/uploads_sp" \
-      NIL_LISTEN_ADDR=":8082" NIL_GATEWAY_ROUTER_MODE="0" \
+      NIL_LISTEN_ADDR=":8082" NIL_GATEWAY_ROUTER_MODE="0" NIL_PROVIDER_ADDRESS="$provider_addr" \
       NIL_CLI_BIN="$ROOT_DIR/nil_cli/target/release/nil_cli" NIL_TRUSTED_SETUP="$ROOT_DIR/nilchain/trusted_setup.txt" \
       NILCHAIND_BIN="$NILCHAIND_BIN" NIL_CMD_TIMEOUT_SECONDS="240" \
       "$GO_BIN" run . \
