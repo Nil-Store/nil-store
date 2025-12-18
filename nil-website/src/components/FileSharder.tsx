@@ -451,7 +451,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
 
             const start = i * RawMduCapacity;
             const end = Math.min(start + RawMduCapacity, bytes.length);
-            const rawChunk = bytes.slice(start, end);
+            const rawChunk = bytes.subarray(start, end);
 
             const encodedMdu = encodeToMdu(rawChunk);
             userMdus.push({ index: i, data: encodedMdu });
@@ -459,7 +459,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
             const chunkCopy = new Uint8Array(encodedMdu);
             addLog(`> Sharding User MDU #${i}...`);
             const result = await workerClient.shardFileProgressive(chunkCopy, {
-              batchBlobs: 4,
+              batchBlobs: 16,
               onProgress: (progress) => {
                 const payload = progress as { kind?: string; done?: number; total?: number };
                 if (payload.kind !== 'blob') return;
@@ -545,14 +545,14 @@ export function FileSharder({ dealId }: FileSharderProps) {
 
             const start = i * RawMduCapacity;
             const end = Math.min(start + RawMduCapacity, fullWitnessData.length);
-            const rawChunk = fullWitnessData.slice(start, end);
+            const rawChunk = fullWitnessData.subarray(start, end);
             const witnessMduBytes = encodeToMdu(rawChunk);
 
             addLog(`> Sharding Witness MDU #${i}...`);
             console.log(`[Debug] Sharding Witness MDU #${i} size=${witnessMduBytes.length}`);
             const chunkCopy = new Uint8Array(witnessMduBytes);
             const result = await workerClient.shardFileProgressive(chunkCopy, {
-              batchBlobs: 4,
+              batchBlobs: 16,
               onProgress: (progress) => {
                 const payload = progress as { kind?: string; done?: number; total?: number };
                 if (payload.kind !== 'blob') return;
@@ -626,7 +626,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
         
         const mdu0Copy = new Uint8Array(mdu0Bytes);
         const mdu0Result = await workerClient.shardFileProgressive(mdu0Copy, {
-          batchBlobs: 4,
+          batchBlobs: 16,
           onProgress: (progress) => {
             const payload = progress as { kind?: string; done?: number; total?: number };
             if (payload.kind !== 'blob') return;
