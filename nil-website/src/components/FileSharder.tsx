@@ -232,7 +232,11 @@ export function FileSharder({ dealId }: FileSharderProps) {
     void remainingWork;
 
     const etaMs = etaDisplayMsRef.current;
-    const mibPerSec = rollingSpeedRef.current;
+    const BLOB_BYTES = 128 * 1024;
+    const seconds = elapsedMs / 1000;
+    const avgMibPerSec =
+      seconds > 0 ? (((shardProgress.blobsDone * BLOB_BYTES) / (1024 * 1024)) / seconds) : 0;
+    const mibPerSec = rollingSpeedRef.current > 0 ? rollingSpeedRef.current : avgMibPerSec;
 
     const phaseDetails = (() => {
       if (shardProgress.phase === 'shard_user') {
