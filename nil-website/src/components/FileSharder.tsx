@@ -90,8 +90,8 @@ export function FileSharder({ dealId }: FileSharderProps) {
   const [uiTick, setUiTick] = useState(0);
   const rollingSpeedRef = useRef<number>(0);
   const lastSpeedUpdateMsRef = useRef<number | null>(null);
-  const lastWorkDoneRef = useRef<number>(0);
-  const lastProgressSampleRef = useRef<{ tMs: number; workDone: number } | null>(null);
+  const lastBlobsDoneRef = useRef<number>(0);
+  const lastProgressSampleRef = useRef<{ tMs: number; blobsDone: number } | null>(null);
 
   const etaDisplayMsRef = useRef<number | null>(null);
   const etaLastTickMsRef = useRef<number | null>(null);
@@ -122,7 +122,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
     if (!processing) {
       rollingSpeedRef.current = 0;
       lastSpeedUpdateMsRef.current = null;
-      lastWorkDoneRef.current = 0;
+      lastBlobsDoneRef.current = 0;
       lastProgressSampleRef.current = null;
       etaDisplayMsRef.current = null;
       etaLastTickMsRef.current = null;
@@ -132,32 +132,31 @@ export function FileSharder({ dealId }: FileSharderProps) {
 
     // Reset per-run state when a new run starts.
     if (shardProgress.startTsMs == null) return;
-    if (lastSpeedUpdateMsRef.current == null && shardProgress.workDone === 0) {
-      lastWorkDoneRef.current = 0;
+    if (lastSpeedUpdateMsRef.current == null && shardProgress.blobsDone === 0) {
+      lastBlobsDoneRef.current = 0;
       lastProgressSampleRef.current = null;
       rollingSpeedRef.current = 0;
       etaDisplayMsRef.current = null;
       etaLastTickMsRef.current = null;
       etaLastRawMsRef.current = null;
     }
-  }, [processing, shardProgress.startTsMs, shardProgress.workDone]);
+  }, [processing, shardProgress.startTsMs, shardProgress.blobsDone]);
 
   useEffect(() => {
     if (!processing) return;
     void uiTick;
     const now = performance.now();
     const BLOB_BYTES = 128 * 1024;
-    const eps = 1e-6;
 
     // --- Rolling speed ---
-    if (shardProgress.workDone > lastWorkDoneRef.current + eps) {
+    if (shardProgress.blobsDone > lastBlobsDoneRef.current) {
       const prev = lastProgressSampleRef.current;
       if (prev) {
         const dtMs = now - prev.tMs;
-        const dw = shardProgress.workDone - prev.workDone;
-        if (dtMs > 0 && dw > 0) {
+        const db = shardProgress.blobsDone - prev.blobsDone;
+        if (dtMs > 0 && db > 0) {
           const instantaneous =
-            ((dw * BLOB_BYTES) / (1024 * 1024)) / (dtMs / 1000);
+            ((db * BLOB_BYTES) / (1024 * 1024)) / (dtMs / 1000);
           const alpha = 0.4;
           rollingSpeedRef.current =
             rollingSpeedRef.current > 0
@@ -166,8 +165,8 @@ export function FileSharder({ dealId }: FileSharderProps) {
           lastSpeedUpdateMsRef.current = now;
         }
       }
-      lastProgressSampleRef.current = { tMs: now, workDone: shardProgress.workDone };
-      lastWorkDoneRef.current = shardProgress.workDone;
+      lastProgressSampleRef.current = { tMs: now, blobsDone: shardProgress.blobsDone };
+      lastBlobsDoneRef.current = shardProgress.blobsDone;
     } else {
       const last = lastSpeedUpdateMsRef.current;
       if (last != null) {
@@ -208,7 +207,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
       return;
     }
 
-    if (Math.abs(etaRaw - lastRaw) >= 1000) {
+    if (Math.abs(etaRaw - lastRaw) >= 250) {
       etaDisplayMsRef.current = etaRaw;
       etaLastRawMsRef.current = etaRaw;
       return;
