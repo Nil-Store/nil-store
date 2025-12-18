@@ -88,7 +88,14 @@ export function FileSharder({ dealId }: FileSharderProps) {
     lastOpMs: null,
   });
   const [uiTick, setUiTick] = useState(0);
-  const speedSamplesRef = useRef<Array<{ tMs: number; workDone: number }>>([]);
+  const rollingSpeedRef = useRef<number>(0);
+  const lastSpeedUpdateMsRef = useRef<number | null>(null);
+  const lastWorkDoneRef = useRef<number>(0);
+  const lastProgressSampleRef = useRef<{ tMs: number; workDone: number } | null>(null);
+
+  const etaDisplayMsRef = useRef<number | null>(null);
+  const etaLastTickMsRef = useRef<number | null>(null);
+  const etaLastRawMsRef = useRef<number | null>(null);
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
@@ -113,31 +120,100 @@ export function FileSharder({ dealId }: FileSharderProps) {
 
   useEffect(() => {
     if (!processing) {
-      speedSamplesRef.current = [];
+      rollingSpeedRef.current = 0;
+      lastSpeedUpdateMsRef.current = null;
+      lastWorkDoneRef.current = 0;
+      lastProgressSampleRef.current = null;
+      etaDisplayMsRef.current = null;
+      etaLastTickMsRef.current = null;
+      etaLastRawMsRef.current = null;
       return;
     }
-    speedSamplesRef.current = [];
-  }, [processing, shardProgress.startTsMs]);
+
+    // Reset per-run state when a new run starts.
+    if (shardProgress.startTsMs == null) return;
+    if (lastSpeedUpdateMsRef.current == null && shardProgress.workDone === 0) {
+      lastWorkDoneRef.current = 0;
+      lastProgressSampleRef.current = null;
+      rollingSpeedRef.current = 0;
+      etaDisplayMsRef.current = null;
+      etaLastTickMsRef.current = null;
+      etaLastRawMsRef.current = null;
+    }
+  }, [processing, shardProgress.startTsMs, shardProgress.workDone]);
 
   useEffect(() => {
     if (!processing) return;
-    if (
-      shardProgress.phase !== 'shard_user' &&
-      shardProgress.phase !== 'shard_witness' &&
-      shardProgress.phase !== 'finalize_mdu0'
-    ) {
+    void uiTick;
+    const now = performance.now();
+    const BLOB_BYTES = 128 * 1024;
+    const eps = 1e-6;
+
+    // --- Rolling speed ---
+    if (shardProgress.workDone > lastWorkDoneRef.current + eps) {
+      const prev = lastProgressSampleRef.current;
+      if (prev) {
+        const dtMs = now - prev.tMs;
+        const dw = shardProgress.workDone - prev.workDone;
+        if (dtMs > 0 && dw > 0) {
+          const instantaneous =
+            ((dw * BLOB_BYTES) / (1024 * 1024)) / (dtMs / 1000);
+          const alpha = 0.4;
+          rollingSpeedRef.current =
+            rollingSpeedRef.current > 0
+              ? rollingSpeedRef.current * (1 - alpha) + instantaneous * alpha
+              : instantaneous;
+          lastSpeedUpdateMsRef.current = now;
+        }
+      }
+      lastProgressSampleRef.current = { tMs: now, workDone: shardProgress.workDone };
+      lastWorkDoneRef.current = shardProgress.workDone;
+    } else {
+      const last = lastSpeedUpdateMsRef.current;
+      if (last != null) {
+        const idleMs = now - last;
+        if (idleMs > 4000) {
+          const decay = Math.pow(0.85, (idleMs - 4000) / 1000);
+          rollingSpeedRef.current *= Math.max(0, Math.min(1, decay));
+        }
+      }
+    }
+
+    // --- ETA display (countdown) ---
+    const lastEtaTick = etaLastTickMsRef.current;
+    const dtEta = lastEtaTick == null ? 0 : Math.max(0, now - lastEtaTick);
+    etaLastTickMsRef.current = now;
+
+    if (etaDisplayMsRef.current != null && dtEta > 0) {
+      etaDisplayMsRef.current = Math.max(0, etaDisplayMsRef.current - dtEta);
+    }
+
+    const elapsedMs = shardProgress.startTsMs ? Math.max(0, now - shardProgress.startTsMs) : 0;
+    const avgWorkMs =
+      shardProgress.avgWorkMs ??
+      (shardProgress.workDone > 0 && shardProgress.startTsMs ? elapsedMs / shardProgress.workDone : null);
+    const remainingWork = Math.max(0, shardProgress.workTotal - shardProgress.workDone);
+    const etaRaw = avgWorkMs ? avgWorkMs * remainingWork : null;
+
+    if (etaRaw == null) {
+      etaDisplayMsRef.current = null;
+      etaLastRawMsRef.current = null;
       return;
     }
 
-    const now = performance.now();
-    const samples = speedSamplesRef.current;
-    samples.push({ tMs: now, workDone: shardProgress.workDone });
-
-    const cutoff = now - 5000;
-    while (samples.length > 0 && samples[0].tMs < cutoff) {
-      samples.shift();
+    const lastRaw = etaLastRawMsRef.current;
+    if (etaDisplayMsRef.current == null || lastRaw == null) {
+      etaDisplayMsRef.current = etaRaw;
+      etaLastRawMsRef.current = etaRaw;
+      return;
     }
-  }, [processing, shardProgress.phase, shardProgress.workDone]);
+
+    if (Math.abs(etaRaw - lastRaw) >= 1000) {
+      etaDisplayMsRef.current = etaRaw;
+      etaLastRawMsRef.current = etaRaw;
+      return;
+    }
+  }, [processing, uiTick, shardProgress]);
 
   const shardingUi = useMemo(() => {
     void uiTick;
@@ -149,22 +225,11 @@ export function FileSharder({ dealId }: FileSharderProps) {
       shardProgress.avgWorkMs ??
       (shardProgress.workDone > 0 && shardProgress.startTsMs ? elapsedMs / shardProgress.workDone : null);
     const remainingWork = Math.max(0, shardProgress.workTotal - shardProgress.workDone);
-    const etaMs = avgWorkMs ? avgWorkMs * remainingWork : null;
-    const BLOB_BYTES = 128 * 1024;
-    const sampleSet = speedSamplesRef.current;
-    const speedWindow = (() => {
-      if (sampleSet.length < 2) return null;
-      const first = sampleSet[0];
-      const last = sampleSet[sampleSet.length - 1];
-      const dtMs = last.tMs - first.tMs;
-      const dw = last.workDone - first.workDone;
-      if (dtMs <= 0 || dw <= 0) return null;
-      return { dtMs, dw };
-    })();
-    const mibPerSec =
-      speedWindow != null
-        ? ((speedWindow.dw * BLOB_BYTES) / (1024 * 1024)) / (speedWindow.dtMs / 1000)
-        : 0;
+    void avgWorkMs;
+    void remainingWork;
+
+    const etaMs = etaDisplayMsRef.current;
+    const mibPerSec = rollingSpeedRef.current;
 
     const phaseDetails = (() => {
       if (shardProgress.phase === 'shard_user') {
@@ -918,7 +983,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
                     </div>
                   </div>
                   <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                    <div className="opacity-70">Speed (5s)</div>
+                    <div className="opacity-70">Speed (recent)</div>
                     <div className="text-foreground">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
                   </div>
                   <div className="bg-secondary/40 border border-border rounded px-2 py-1">
