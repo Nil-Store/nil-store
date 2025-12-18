@@ -684,16 +684,29 @@ fn msm_pippenger_g1_projective(points: &[G1Projective], scalars: &[Scalar]) -> G
 }
 
 fn bytes_to_scalars(bytes: &[u8]) -> Result<Vec<Scalar>, KzgError> {
-    // Map arbitrary 32-byte chunks (stored big-endian in blobs) into Scalars.
-    // Using `from_bytes_wide` avoids BigUint/mod_floor overhead and is reliable on wasm.
+    // Map 32-byte chunks (stored big-endian in blobs) into Scalars.
+    //
+    // Fast path: most NilFS-encoded blobs (31-byte payload per scalar) are guaranteed
+    // to be < modulus, so we can parse via `from_repr` (no reduction).
+    //
+    // Fallback: for arbitrary bytes (e.g. metadata) that may exceed the modulus,
+    // reduce via `from_bytes_wide` (equivalent to BigUint mod r).
     let mut scalars = Vec::with_capacity(4096);
-    for chunk in bytes.chunks(32) {
-        let mut wide = [0u8; 64];
-        // Place chunk as the low limb in little-endian form.
+    for chunk in bytes.chunks_exact(32) {
+        let mut repr = [0u8; 32];
+        // Convert big-endian chunk to little-endian repr.
         for (i, b) in chunk.iter().enumerate() {
-            wide[i] = *b;
+            repr[31 - i] = *b;
         }
-        wide[..32].reverse();
+
+        let maybe = Scalar::from_repr(repr);
+        if bool::from(maybe.is_some()) {
+            scalars.push(maybe.unwrap());
+            continue;
+        }
+
+        let mut wide = [0u8; 64];
+        wide[..32].copy_from_slice(&repr);
         scalars.push(Scalar::from_bytes_wide(&wide));
     }
     Ok(scalars)
