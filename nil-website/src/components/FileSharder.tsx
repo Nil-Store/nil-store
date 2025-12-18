@@ -416,6 +416,19 @@ export function FileSharder({ dealId }: FileSharderProps) {
     }
 
     const startTs = performance.now();
+    const perf = {
+      readMs: 0,
+      witnessConcatMs: 0,
+      encodeUserMs: 0,
+      encodeWitnessMs: 0,
+      copyMs: 0,
+      wasmUserMs: 0,
+      wasmWitnessMs: 0,
+      mdu0FetchMs: 0,
+      mdu0CommitMs: 0,
+      manifestMs: 0,
+      totalMs: 0,
+    };
     setProcessing(true);
     setShards([]);
     setCollectedMdus([]);
@@ -444,7 +457,9 @@ export function FileSharder({ dealId }: FileSharderProps) {
       lastOpMs: null,
     });
 
+    const readStart = performance.now();
     const buffer = await file.arrayBuffer();
+    perf.readMs = performance.now() - readStart;
     console.log(`[Debug] Buffer byteLength: ${buffer.byteLength}`);
     const bytes = new Uint8Array(buffer);
     const RawMduCapacity = 8126464; // From gateway const (64 * 4096 * 31)
@@ -539,6 +554,16 @@ export function FileSharder({ dealId }: FileSharderProps) {
         const userMdus: { index: number, data: Uint8Array }[] = [];
         const witnessDataBlobs: Uint8Array[] = []; 
 
+        console.log('[perf] sharding start', {
+          file: file.name,
+          bytes: bytes.length,
+          userMdus: totalUserChunks,
+          witnessMdus: witnessMduCount,
+          blobsTotal: (1 + witnessMduCount + totalUserChunks) * BLOBS_PER_MDU,
+          rawMduCapacity: RawMduCapacity,
+          readMs: perf.readMs,
+        });
+
         for (let i = 0; i < totalUserChunks; i++) {
             const opStart = performance.now();
             const nonTrivialBlobs = nonTrivialBlobsForPayload(userPayloads[i] ?? 0);
@@ -562,11 +587,18 @@ export function FileSharder({ dealId }: FileSharderProps) {
             const end = Math.min(start + RawMduCapacity, bytes.length);
             const rawChunk = bytes.subarray(start, end);
 
+            const encodeStart = performance.now();
             const encodedMdu = encodeToMdu(rawChunk);
+            const encodeMs = performance.now() - encodeStart;
+            perf.encodeUserMs += encodeMs;
             userMdus.push({ index: i, data: encodedMdu });
 
+            const copyStart = performance.now();
             const chunkCopy = new Uint8Array(encodedMdu);
+            const copyMs = performance.now() - copyStart;
+            perf.copyMs += copyMs;
             addLog(`> Sharding User MDU #${i}...`);
+            const wasmStart = performance.now();
             const result = await workerClient.shardFileProgressive(chunkCopy, {
               batchBlobs: 16,
               onProgress: (progress) => {
@@ -590,10 +622,20 @@ export function FileSharder({ dealId }: FileSharderProps) {
                 });
               },
             });
+            const wasmMs = performance.now() - wasmStart;
+            perf.wasmUserMs += wasmMs;
 
             const rootBytes = toU8(result.mdu_root);
             userRoots.push(rootBytes);
             console.log(`[Debug] User MDU Root #${i}: 0x${Array.from(rootBytes).map((b) => b.toString(16).padStart(2, '0')).join('')}`);
+            console.log('[perf] user mdu', {
+              i,
+              rawBytes: rawChunk.length,
+              encodeMs: Number(encodeMs.toFixed(2)),
+              copyMs: Number(copyMs.toFixed(2)),
+              wasmMs: Number(wasmMs.toFixed(2)),
+              totalMs: Number((performance.now() - opStart).toFixed(2)),
+            });
 
             const witnessFlat = toU8(result.witness_flat);
             witnessDataBlobs.push(witnessFlat);
@@ -620,12 +662,14 @@ export function FileSharder({ dealId }: FileSharderProps) {
             await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         }
 
+        const witnessConcatStart = performance.now();
         const fullWitnessData = new Uint8Array(witnessDataBlobs.reduce((acc, b) => acc + b.length, 0));
         let offset = 0;
         for (const b of witnessDataBlobs) {
             fullWitnessData.set(b, offset);
             offset += b.length;
         }
+        perf.witnessConcatMs = performance.now() - witnessConcatStart;
 
         const witnessRoots: Uint8Array[] = [];
         const witnessMdus: { index: number, data: Uint8Array }[] = [];
@@ -655,11 +699,18 @@ export function FileSharder({ dealId }: FileSharderProps) {
             const start = i * RawMduCapacity;
             const end = Math.min(start + RawMduCapacity, fullWitnessData.length);
             const rawChunk = fullWitnessData.subarray(start, end);
+            const encodeStart = performance.now();
             const witnessMduBytes = encodeToMdu(rawChunk);
+            const encodeMs = performance.now() - encodeStart;
+            perf.encodeWitnessMs += encodeMs;
 
             addLog(`> Sharding Witness MDU #${i}...`);
             console.log(`[Debug] Sharding Witness MDU #${i} size=${witnessMduBytes.length}`);
+            const copyStart = performance.now();
             const chunkCopy = new Uint8Array(witnessMduBytes);
+            const copyMs = performance.now() - copyStart;
+            perf.copyMs += copyMs;
+            const wasmStart = performance.now();
             const result = await workerClient.shardFileProgressive(chunkCopy, {
               batchBlobs: 16,
               onProgress: (progress) => {
@@ -683,12 +734,22 @@ export function FileSharder({ dealId }: FileSharderProps) {
                 });
               },
             });
+            const wasmMs = performance.now() - wasmStart;
+            perf.wasmWitnessMs += wasmMs;
 
             const rootBytes = toU8(result.mdu_root);
             witnessRoots.push(rootBytes);
             witnessMdus.push({ index: 1 + i, data: witnessMduBytes }); 
             
             await workerClient.setMdu0Root(i, rootBytes);
+            console.log('[perf] witness mdu', {
+              i,
+              rawBytes: rawChunk.length,
+              encodeMs: Number(encodeMs.toFixed(2)),
+              copyMs: Number(copyMs.toFixed(2)),
+              wasmMs: Number(wasmMs.toFixed(2)),
+              totalMs: Number((performance.now() - opStart).toFixed(2)),
+            });
 
             const opMs = performance.now() - opStart;
             mdusCommitted += 1;
@@ -731,9 +792,15 @@ export function FileSharder({ dealId }: FileSharderProps) {
           workDone: workCommitted,
         }));
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'processing' } : s)));
+        const mdu0FetchStart = performance.now();
         const mdu0Bytes = await workerClient.getMdu0Bytes();
+        perf.mdu0FetchMs = performance.now() - mdu0FetchStart;
         
+        const copyStart = performance.now();
         const mdu0Copy = new Uint8Array(mdu0Bytes);
+        const copyMs = performance.now() - copyStart;
+        perf.copyMs += copyMs;
+        const wasmStart = performance.now();
         const mdu0Result = await workerClient.shardFileProgressive(mdu0Copy, {
           batchBlobs: 16,
           onProgress: (progress) => {
@@ -757,6 +824,8 @@ export function FileSharder({ dealId }: FileSharderProps) {
             });
           },
         });
+        const wasmMs = performance.now() - wasmStart;
+        perf.mdu0CommitMs = wasmMs;
         const mdu0Root = toU8(mdu0Result.mdu_root);
         setShards((prev) => prev.map((s) => (s.id === 0 ? { ...s, status: 'expanded' } : s)));
         const opMs = performance.now() - opStartMdu0;
@@ -797,7 +866,9 @@ export function FileSharder({ dealId }: FileSharderProps) {
           currentMduKind: null,
           currentMduIndex: null,
         }));
+        const manifestStart = performance.now();
         const manifest = await workerClient.computeManifest(allRoots);
+        perf.manifestMs = performance.now() - manifestStart;
         
         const finalMdus = [
             { index: 0, data: mdu0Bytes },
@@ -828,6 +899,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
         addLog(`> Total MDUs: ${finalMdus.length} (1 Meta + ${witnessMduCount} Witness + ${userMdus.length} User)`);
 
         const elapsedMs = performance.now() - startTs;
+        perf.totalMs = elapsedMs;
         const mib = file.size / (1024 * 1024);
         const seconds = elapsedMs / 1000;
         const mibPerSec = seconds > 0 ? mib / seconds : 0;
@@ -836,6 +908,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
             file.size,
           )}. Speed: ${mibPerSec.toFixed(2)} MiB/s.`,
         );
+        console.log('[perf] sharding totals', perf);
 
     } catch (e: unknown) {
         console.error(e);
