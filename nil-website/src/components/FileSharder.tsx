@@ -150,7 +150,11 @@ export function FileSharder({ dealId }: FileSharderProps) {
 
     // --- Rolling speed ---
     if (shardProgress.blobsDone > lastBlobsDoneRef.current) {
-      const prev = lastProgressSampleRef.current;
+      const prev =
+        lastProgressSampleRef.current ??
+        (shardProgress.currentOpStartedAtMs != null
+          ? { tMs: shardProgress.currentOpStartedAtMs, blobsDone: lastBlobsDoneRef.current }
+          : null);
       if (prev) {
         const dtMs = now - prev.tMs;
         const db = shardProgress.blobsDone - prev.blobsDone;
