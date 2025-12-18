@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useAccount, useConnect } from 'wagmi';
 import { injectedConnector } from '../lib/web3Config';
 import { FileJson, Cpu } from 'lucide-react';
@@ -88,6 +88,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
     lastOpMs: null,
   });
   const [uiTick, setUiTick] = useState(0);
+  const speedSamplesRef = useRef<Array<{ tMs: number; workDone: number }>>([]);
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
@@ -110,6 +111,34 @@ export function FileSharder({ dealId }: FileSharderProps) {
     return () => window.clearInterval(handle);
   }, [processing]);
 
+  useEffect(() => {
+    if (!processing) {
+      speedSamplesRef.current = [];
+      return;
+    }
+    speedSamplesRef.current = [];
+  }, [processing, shardProgress.startTsMs]);
+
+  useEffect(() => {
+    if (!processing) return;
+    if (
+      shardProgress.phase !== 'shard_user' &&
+      shardProgress.phase !== 'shard_witness' &&
+      shardProgress.phase !== 'finalize_mdu0'
+    ) {
+      return;
+    }
+
+    const now = performance.now();
+    const samples = speedSamplesRef.current;
+    samples.push({ tMs: now, workDone: shardProgress.workDone });
+
+    const cutoff = now - 5000;
+    while (samples.length > 0 && samples[0].tMs < cutoff) {
+      samples.shift();
+    }
+  }, [processing, shardProgress.phase, shardProgress.workDone]);
+
   const shardingUi = useMemo(() => {
     void uiTick;
     const now = performance.now();
@@ -121,9 +150,21 @@ export function FileSharder({ dealId }: FileSharderProps) {
       (shardProgress.workDone > 0 && shardProgress.startTsMs ? elapsedMs / shardProgress.workDone : null);
     const remainingWork = Math.max(0, shardProgress.workTotal - shardProgress.workDone);
     const etaMs = avgWorkMs ? avgWorkMs * remainingWork : null;
-    const mib = shardProgress.fileBytesTotal > 0 ? shardProgress.fileBytesTotal / (1024 * 1024) : 0;
-    const seconds = elapsedMs / 1000;
-    const mibPerSec = seconds > 0 ? mib / seconds : 0;
+    const BLOB_BYTES = 128 * 1024;
+    const sampleSet = speedSamplesRef.current;
+    const speedWindow = (() => {
+      if (sampleSet.length < 2) return null;
+      const first = sampleSet[0];
+      const last = sampleSet[sampleSet.length - 1];
+      const dtMs = last.tMs - first.tMs;
+      const dw = last.workDone - first.workDone;
+      if (dtMs <= 0 || dw <= 0) return null;
+      return { dtMs, dw };
+    })();
+    const mibPerSec =
+      speedWindow != null
+        ? ((speedWindow.dw * BLOB_BYTES) / (1024 * 1024)) / (speedWindow.dtMs / 1000)
+        : 0;
 
     const phaseDetails = (() => {
       if (shardProgress.phase === 'shard_user') {
@@ -877,7 +918,7 @@ export function FileSharder({ dealId }: FileSharderProps) {
                     </div>
                   </div>
                   <div className="bg-secondary/40 border border-border rounded px-2 py-1">
-                    <div className="opacity-70">Speed</div>
+                    <div className="opacity-70">Speed (5s)</div>
                     <div className="text-foreground">{shardingUi.mibPerSec.toFixed(2)} MiB/s</div>
                   </div>
                   <div className="bg-secondary/40 border border-border rounded px-2 py-1">
