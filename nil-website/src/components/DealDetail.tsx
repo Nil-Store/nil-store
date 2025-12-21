@@ -123,6 +123,14 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     const backend = lastTrace?.chosen?.backend
     return backend ? backend.replace('_', ' ') : ''
   }, [lastTrace])
+  const lastRouteSteps = useMemo(() => {
+    if (!lastTrace?.attempts?.length) return []
+    return lastTrace.attempts.map((attempt) => ({
+      backend: attempt.backend,
+      label: attempt.backend.replace('_', ' '),
+      ok: attempt.ok,
+    }))
+  }, [lastTrace])
   const lastAttemptSummary = useMemo(() => {
     if (!lastTrace?.attempts?.length) return ''
     return lastTrace.attempts
@@ -795,6 +803,24 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                           data-transport-failure={lastFailureSummary}
                         >
                           Route: {lastRouteLabel}
+                        </div>
+                      )}
+                      {lastRouteSteps.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
+                          {lastRouteSteps.map((step, idx) => (
+                            <div key={`${step.backend}-${idx}`} className="flex items-center gap-1">
+                              <span
+                                className={`px-2 py-0.5 rounded-full border ${
+                                  step.ok
+                                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                    : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
+                                } ${lastTrace?.chosen?.backend === step.backend ? 'ring-1 ring-primary/40' : ''}`}
+                              >
+                                {step.label}
+                              </span>
+                              {idx < lastRouteSteps.length - 1 && <span className="opacity-50">→</span>}
+                            </div>
+                          ))}
                         </div>
                       )}
 

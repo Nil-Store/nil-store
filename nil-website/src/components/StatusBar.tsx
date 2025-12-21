@@ -30,6 +30,7 @@ export function StatusBar() {
   const { preference, setPreference, lastTrace } = useTransportContext()
   const [height, setHeight] = useState<number | undefined>(undefined)
   const [chainName, setChainName] = useState<string | undefined>(undefined)
+  const [showOverrides, setShowOverrides] = useState(false)
   const [summary, setSummary] = useState({
     lcd: 'warn' as ServiceStatus,
     evm: 'warn' as ServiceStatus,
@@ -76,20 +77,29 @@ export function StatusBar() {
       {evmChainId !== undefined && (
         <span className="opacity-75">EVM Chain: {evmChainId}</span>
       )}
-      <span className="opacity-75">Route: {lastRoute}{lastReason}</span>
-      <label className="flex items-center gap-2">
-        <span className="opacity-75">Preference</span>
-        <select
-          value={preference ?? 'auto'}
-          onChange={(e) => setPreference((e.target.value as typeof preference) || 'auto')}
-          className="bg-background border border-border rounded px-2 py-1 text-xs"
-        >
-          <option value="auto">Auto</option>
-          <option value="prefer_gateway">Prefer gateway</option>
-          <option value="prefer_direct_sp">Prefer direct SP</option>
-          {appConfig.p2pEnabled && <option value="prefer_p2p">Prefer libp2p</option>}
-        </select>
-      </label>
+      <span className="opacity-75">Smart path: {lastRoute}{lastReason}</span>
+      <button
+        type="button"
+        onClick={() => setShowOverrides((prev) => !prev)}
+        className="text-[11px] uppercase tracking-wide text-muted-foreground hover:text-foreground"
+      >
+        {showOverrides ? 'Hide' : 'Route overrides'}
+      </button>
+      {showOverrides && (
+        <label className="flex items-center gap-2">
+          <span className="opacity-75">Preference</span>
+          <select
+            value={preference ?? 'prefer_gateway'}
+            onChange={(e) => setPreference((e.target.value as typeof preference) || 'prefer_gateway')}
+            className="bg-background border border-border rounded px-2 py-1 text-xs"
+          >
+            <option value="prefer_gateway">Prefer gateway</option>
+            <option value="auto">Auto</option>
+            <option value="prefer_direct_sp">Prefer direct SP</option>
+            {appConfig.p2pEnabled && <option value="prefer_p2p">Prefer libp2p</option>}
+          </select>
+        </label>
+      )}
     </div>
   )
 }

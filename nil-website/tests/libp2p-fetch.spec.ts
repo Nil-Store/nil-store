@@ -47,6 +47,8 @@ test.describe('libp2p fetch', () => {
       await expect(walletAddress).toBeVisible({ timeout: 60_000 })
     }
 
+    const overridesBtn = page.getByRole('button', { name: /route overrides/i })
+    await overridesBtn.click()
     const transportSelect = page.getByLabel('Preference')
     await expect(transportSelect).toBeVisible({ timeout: 60_000 })
     await expect(transportSelect.locator('option[value="prefer_p2p"]')).toHaveCount(1)
