@@ -19,7 +19,7 @@ function getInitialPreference(): RoutePreference {
   const raw = window.localStorage.getItem(PREF_KEY)
   if (raw === 'prefer_p2p') return appConfig.p2pEnabled ? raw : 'auto'
   if (raw === 'prefer_gateway' || raw === 'prefer_direct_sp' || raw === 'auto') return raw
-  return 'auto'
+  return 'prefer_gateway'
 }
 
 export function TransportProvider({ children }: { children: React.ReactNode }) {

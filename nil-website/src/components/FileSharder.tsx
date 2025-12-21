@@ -91,6 +91,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mode2Uploading, setMode2Uploading] = useState(false)
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
   const [mode2UploadError, setMode2UploadError] = useState<string | null>(null)
+  const [commitQueueStatus, setCommitQueueStatus] = useState<'idle' | 'queued' | 'pending' | 'error' | 'confirmed'>('idle')
+  const [commitQueueError, setCommitQueueError] = useState<string | null>(null)
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -187,6 +189,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     lastCommitRef.current = currentManifestRoot;
     onCommitSuccess?.(dealId, currentManifestRoot);
   }, [commitHash, currentManifestRoot, dealId, isCommitSuccess, onCommitSuccess]);
+
+  useEffect(() => {
+    setCommitQueueStatus('idle')
+    setCommitQueueError(null)
+  }, [currentManifestRoot, dealId])
 
   const uploadMode2 = useCallback(async () => {
     if (!currentManifestRoot || !currentManifestBlob) {
@@ -1336,7 +1343,42 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     }
   };
 
+  const commitSize = useMemo(() => {
+    if (isMode2) return shardProgress.fileBytesTotal
+    return collectedMdus.reduce((acc, m) => acc + m.data.length, 0)
+  }, [collectedMdus, isMode2, shardProgress.fileBytesTotal])
+
   const isAlreadyCommitted = isCommitSuccess && lastCommitRef.current === currentManifestRoot;
+
+  useEffect(() => {
+    if (!isUploadComplete || !currentManifestRoot || !dealId || isAlreadyCommitted) return
+    if (commitQueueStatus !== 'idle') return
+    setCommitQueueStatus('queued')
+    setCommitQueueError(null)
+  }, [commitQueueStatus, currentManifestRoot, dealId, isAlreadyCommitted, isUploadComplete])
+
+  useEffect(() => {
+    if (commitQueueStatus !== 'queued') return
+    if (!currentManifestRoot || !dealId || commitSize <= 0) return
+    if (isCommitPending || isCommitConfirming) return
+    setCommitQueueStatus('pending')
+    commitContent({
+      dealId,
+      manifestRoot: currentManifestRoot,
+      fileSize: commitSize,
+    })
+  }, [commitQueueStatus, commitContent, commitSize, currentManifestRoot, dealId, isCommitConfirming, isCommitPending])
+
+  useEffect(() => {
+    if (!commitError) return
+    setCommitQueueStatus('error')
+    setCommitQueueError(commitError.message)
+  }, [commitError])
+
+  useEffect(() => {
+    if (!isCommitSuccess || !currentManifestRoot) return
+    setCommitQueueStatus('confirmed')
+  }, [currentManifestRoot, isCommitSuccess])
 
   return (
     <div className="w-full space-y-6">
@@ -1580,22 +1622,31 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         <div className="flex flex-col gap-2">
             <button
               onClick={() => {
-                const totalSize = isMode2
-                  ? shardProgress.fileBytesTotal
-                  : collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
-                commitContent({
-                    dealId,
-                    manifestRoot: currentManifestRoot,
-                    fileSize: totalSize
-                });
+                setCommitQueueStatus('queued')
+                setCommitQueueError(null)
               }}
-              disabled={isCommitPending || isCommitConfirming || isAlreadyCommitted}
+              disabled={isCommitPending || isCommitConfirming || isAlreadyCommitted || commitQueueStatus === 'confirmed'}
               data-testid="mdu-commit"
               className="mt-2 inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-blue-500 disabled:opacity-50"
             >
-              {isCommitPending ? 'Check Wallet...' : isCommitConfirming ? 'Confirming...' : isAlreadyCommitted ? 'Committed!' : 'Commit to Chain'}
+              {commitQueueStatus === 'confirmed' || isAlreadyCommitted
+                ? 'Committed!'
+                : isCommitPending || isCommitConfirming || commitQueueStatus === 'pending'
+                  ? 'Check Wallet...'
+                  : 'Commit to Chain'}
             </button>
-            
+
+            {commitQueueStatus !== 'idle' && (
+              <div className="text-xs text-muted-foreground">
+                {commitQueueStatus === 'queued' && 'Commit queued — confirm in wallet.'}
+                {commitQueueStatus === 'pending' && 'Awaiting wallet confirmation...'}
+                {commitQueueStatus === 'confirmed' && 'Committed on-chain.'}
+                {commitQueueStatus === 'error' && (
+                  <span className="text-red-500">Commit failed: {commitQueueError || 'Retry to finish.'}</span>
+                )}
+              </div>
+            )}
+
             {commitHash && (
                 <div className="text-xs text-muted-foreground truncate">
                     Tx: {commitHash}
