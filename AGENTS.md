@@ -843,6 +843,39 @@ This section tracks the currently active TODOs for the AI agent working in this 
 - LibP2P browser.
 - UI/UX overhaul of dashboard.
 
+#### 11.5.1 LibP2P Browser (Productization Checklist)
+
+**Objective:** Make libp2p a first-class browser data-plane transport (primarily for retrieval), usable beyond localhost/devnet, with safe fallbacks and strong tests.
+
+**Non-goals (Phase A/B):**
+- Do not require Storage Providers to “know Mode 1 vs Mode 2” (still bytes-in/bytes-out).
+- Do not ship libp2p uploads yet (fetch-only first) unless explicitly re-scoped.
+
+**Phase A — Provider P2P publishing (beyond localhost):**
+- [ ] Enable libp2p server on **provider** daemons (not just local gateway), using unique listen ports per provider in devnet scripts.
+- [ ] Publish provider p2p multiaddrs on-chain (include `/ws/p2p/<peerId>` endpoints alongside existing `/http` endpoints).
+- [ ] Ensure `/status` reliably surfaces `p2p_addrs` for both gateway and provider modes (for debugging, not as the source of truth).
+- [ ] **Gate:** Browser can fetch a blob via libp2p from a provider with **no local gateway running** (direct dial to provider p2p multiaddr).
+
+**Phase B — Transport policy + fallback hardening:**
+- [ ] Update client transport “auto” policy to include libp2p as a candidate when provider p2p endpoints exist (keep manual override `prefer_p2p`).
+- [ ] Add robust libp2p error classification (dial/protocol/timeout/invalid response) and show traceable reasons in UI (stable selector).
+- [ ] Add retry rules (bounded) and deterministic fallback ordering (libp2p → direct HTTP → gateway or vice-versa, as configured).
+- [ ] Enforce strict request/response limits (`rangeLen <= BLOB_SIZE` for unsigned flows; hard caps as defense-in-depth).
+- [ ] **Gate:** When libp2p fails (bad addr / server down), download succeeds via fallback and UI shows a clear failure reason + chosen route.
+
+**Phase C — Mode 2 retrieval support:**
+- [ ] Confirm Mode 2 interactive retrieval works with libp2p fetchRange (slot-aware provider selection remains chain-enforced).
+- [ ] **Gate:** Mode 2 E2E (12 SPs) succeeds with libp2p enabled and preference `auto` (or `prefer_p2p`), including receipt submission/proof flow.
+
+**Phase D — Tests (fast + meaningful):**
+- [ ] **Unit (browser):** libp2p response parsing edge cases (truncated header/body, oversized, invalid JSON).
+- [ ] **Unit (gateway):** p2p server request validation (required fields, max sizes, range enforcement).
+- [ ] **E2E:** multi-chunk file retrieval over libp2p (requires multiple blob ranges) with byte equality.
+- [ ] **E2E:** failure/fallback behavior (p2p addr invalid → fallback succeeds; trace recorded).
+- [ ] **E2E:** Mode 2 retrieval path over libp2p (slot-aware) in multi-SP stack.
+- [ ] **CI gate:** Add/extend a one-command script that configures provider p2p ports + endpoints and runs the libp2p E2E suite.
+
 **P1 (Medium):**
 - Synchronize specs to code + TODOs.
   - Synchronize whitepaper and litepaper.
