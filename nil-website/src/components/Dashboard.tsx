@@ -1144,8 +1144,8 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="flex flex-col gap-6 lg:flex-row">
-        <div className="lg:flex-[1.6] lg:order-2">
+      <div className="flex flex-col gap-6">
+        <div className="w-full">
           <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col shadow-sm">
             <div className="px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
@@ -1153,7 +1153,7 @@ export function Dashboard() {
                 <h3 className="text-lg font-semibold text-foreground">Create or manage a deal</h3>
               </div>
               <div className="text-xs text-muted-foreground">
-                Mode 2 (local WASM) is the default. Gateway uploads remain available as legacy.
+                Mode 2 is the default. Gateway is preferred when available; browser/WASM is the fallback.
               </div>
             </div>
 
@@ -1183,7 +1183,7 @@ export function Dashboard() {
             >
               <span className="text-[10px] font-semibold text-muted-foreground">STEP 2</span>
               <Cpu className="w-4 h-4" />
-              Local MDU (Mode 2)
+              Mode 2 workflow
             </button>
             <button 
               onClick={() => setActiveTab('content')}
@@ -1323,7 +1323,7 @@ export function Dashboard() {
               ) : activeTab === 'content' ? (
                   <div className="space-y-4">
                       <p className="text-xs text-muted-foreground">
-                        Legacy gateway flow. Prefer the Local MDU tab for Mode 2 deals.
+                        Legacy gateway flow. Default Mode 2 uses gateway when available and falls back to local WASM/OPFS.
                       </p>
                       <div className="grid grid-cols-1 gap-3 text-sm">
                           <label className="space-y-1">
@@ -1355,12 +1355,12 @@ export function Dashboard() {
                           )}
                           {isTargetDealMode2 && (
                             <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300 flex items-center justify-between gap-2">
-                              <span>Mode 2 deals use Local MDU (WASM). Switch to the default Mode 2 workflow.</span>
+                              <span>Mode 2 deals use the default workflow. Gateway is preferred; local WASM/OPFS is the fallback.</span>
                               <button
                                 onClick={() => setActiveTab('mdu')}
                                 className="text-[11px] font-semibold underline"
                               >
-                                Open Local MDU
+                                Open Mode 2 workflow
                               </button>
                             </div>
                           )}
@@ -1667,7 +1667,7 @@ export function Dashboard() {
         </div>
       </div>
         </div>
-        <div className="lg:flex-[1] lg:order-1">
+        <div className="w-full">
           {loading && deals.length === 0 ? (
             <div className="text-center py-24">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
