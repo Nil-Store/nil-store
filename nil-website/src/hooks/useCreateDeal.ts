@@ -4,6 +4,7 @@ import { encodeFunctionData, decodeEventLog, numberToHex, type Hex } from 'viem'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { buildServiceHint } from '../lib/serviceHint'
+import { walletRequest } from '../lib/wallet'
 
 export interface CreateDealInput {
   creator: string
@@ -29,11 +30,6 @@ export function useCreateDeal() {
         ? input.serviceHint.trim()
         : buildServiceHint('General', { replicas })
 
-      const ethereum = window.ethereum
-      if (!ethereum || typeof ethereum.request !== 'function') {
-        throw new Error('Ethereum provider (MetaMask) not available')
-      }
-
       const data = encodeFunctionData({
         abi: NILSTORE_PRECOMPILE_ABI,
         functionName: 'createDeal',
@@ -45,10 +41,10 @@ export function useCreateDeal() {
         ],
       })
 
-      const txHash = (await ethereum.request({
+      const txHash = await walletRequest<Hex>({
         method: 'eth_sendTransaction',
         params: [{ from: evmAddress, to: appConfig.nilstorePrecompile, data, gas: numberToHex(5_000_000) }],
-      })) as Hex
+      })
       setLastTx(txHash)
 
       const receipt = await waitForTransactionReceipt(txHash)

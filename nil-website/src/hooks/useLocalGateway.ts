@@ -1,6 +1,7 @@
 // nil-website/src/hooks/useLocalGateway.ts
 import { useState, useEffect, useRef } from 'react';
 import { appConfig } from '../config';
+import { canAttempt, createBackoff, recordFailure, recordSuccess } from '../lib/backoff';
 
 type GatewayStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -29,6 +30,7 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
   const [error, setError] = useState<string | null>(null);
   const [details, setDetails] = useState<LocalGatewayDetails | null>(null);
   const pollIntervalRef = useRef<number>(pollInterval); // Use ref for stable poll interval
+  const backoffRef = useRef(createBackoff({ baseMs: Math.max(10000, pollInterval), maxMs: 60000 }));
 
   useEffect(() => {
     if (appConfig.gatewayDisabled) {
@@ -38,8 +40,11 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
       return;
     }
     const checkGatewayStatus = async () => {
-      setStatus('connecting');
-      setError(null); // Clear previous errors
+      if (!canAttempt(backoffRef.current)) {
+        return;
+      }
+      setStatus((prev) => (prev === 'connected' ? 'connected' : 'connecting'));
+      setError(null);
       try {
         const baseUrl = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '');
         const statusUrl = `${baseUrl}${GATEWAY_STATUS_ENDPOINT}`;
@@ -55,11 +60,13 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
           } else {
             setDetails(null);
           }
+          recordSuccess(backoffRef.current);
           setStatus('connected');
           return;
         }
 
         if (response.status !== 404) {
+          recordFailure(backoffRef.current);
           setStatus('disconnected');
           setError(`Gateway responded with status: ${response.status}`);
           setDetails(null);
@@ -71,14 +78,17 @@ export function useLocalGateway(pollInterval: number = 5000): LocalGatewayInfo {
           signal: AbortSignal.timeout(3000),
         });
         if (healthRes.ok) {
+          recordSuccess(backoffRef.current);
           setStatus('connected');
           setDetails(null);
         } else {
+          recordFailure(backoffRef.current);
           setStatus('disconnected');
           setError(`Gateway responded with status: ${healthRes.status}`);
           setDetails(null);
         }
       } catch (e: unknown) {
+        recordFailure(backoffRef.current);
         setStatus('disconnected');
         const err = e as Error;
         if (err.name === 'AbortError') {
