@@ -15,7 +15,8 @@ import { executeWithFallback, TransportTraceError } from '../lib/transport/route
 import type { DecisionTrace, TransportCandidate, TransportOutcome, RoutePreference } from '../lib/transport/types'
 import { classifyStatus, TransportError } from '../lib/transport/errors'
 import { libp2pFetchRange } from '../lib/transport/libp2pClient'
-import type { P2pTarget } from '../lib/multiaddr'
+import { multiaddrToP2pTarget, type P2pTarget } from '../lib/multiaddr'
+import { fetchGatewayP2pAddrs } from '../lib/gatewayStatus'
 
 type ListFilesRequest = {
   manifestRoot: string
@@ -464,7 +465,19 @@ export function useTransportRouter() {
     }
 
     const directBase = resolveDirectBase(req.directBase)
+    const resolvedPreference = resolvePreference(req.preference)
     const directP2p = req.p2pTarget?.multiaddr?.trim()
+    let resolvedP2p = directP2p
+    if (!resolvedP2p && appConfig.p2pEnabled && !appConfig.gatewayDisabled) {
+      const addrs = await fetchGatewayP2pAddrs(appConfig.gatewayBase)
+      for (const addr of addrs) {
+        const target = multiaddrToP2pTarget(addr)
+        if (target?.multiaddr) {
+          resolvedP2p = target.multiaddr
+          break
+        }
+      }
+    }
     const normalizeBase = (base: string) => base.replace(/\/$/, '')
     const rangeEnd = req.rangeStart + req.rangeLen - 1
 
@@ -522,12 +535,12 @@ export function useTransportRouter() {
         execute: async (signal) => executeFetch(directBase, signal),
       })
     }
-    if (directP2p && appConfig.p2pEnabled) {
+    if (resolvedP2p && appConfig.p2pEnabled) {
       candidates.push({
         backend: 'libp2p' as const,
-        endpoint: directP2p,
+        endpoint: resolvedP2p,
         execute: async (signal) => {
-          const result = await libp2pFetchRange(directP2p, {
+          const result = await libp2pFetchRange(resolvedP2p, {
             manifestRoot: req.manifestRoot,
             dealId: req.dealId,
             owner: req.owner,
@@ -566,7 +579,7 @@ export function useTransportRouter() {
 
     try {
       const result = await executeWithFallback('fetch', candidates, {
-        preference: resolvePreference(req.preference),
+        preference: resolvedPreference,
         timeoutMs: 30_000,
         maxAttemptsPerBackend: 2,
       })

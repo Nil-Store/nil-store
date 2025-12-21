@@ -14,6 +14,7 @@ import { workerClient } from '../lib/worker-client'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { parseServiceHint } from '../lib/serviceHint'
+import type { DecisionTrace } from '../lib/transport/types'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -104,6 +105,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [mduRootMerkle, setMduRootMerkle] = useState<string[][] | null>(null)
   const [merkleError, setMerkleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
+  const [lastFetchTrace, setLastFetchTrace] = useState<DecisionTrace | null>(null)
   const { proofs } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError, progress } = useFetch()
   const {
@@ -112,37 +114,45 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     manifestInfo: manifestInfoTransport,
     mduKzg: mduKzgTransport,
     lastTrace,
+    preference: transportPreference,
   } = useTransportRouter()
+
+  useEffect(() => {
+    if (lastTrace?.op === 'fetch') {
+      setLastFetchTrace(lastTrace)
+    }
+  }, [lastTrace])
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
   const dealProviders = deal.providers || []
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
+  const routeTrace = lastFetchTrace ?? lastTrace
   const lastRouteLabel = useMemo(() => {
-    const backend = lastTrace?.chosen?.backend
+    const backend = routeTrace?.chosen?.backend
     return backend ? backend.replace('_', ' ') : ''
-  }, [lastTrace])
+  }, [routeTrace])
   const lastRouteSteps = useMemo(() => {
-    if (!lastTrace?.attempts?.length) return []
-    return lastTrace.attempts.map((attempt) => ({
+    if (!routeTrace?.attempts?.length) return []
+    return routeTrace.attempts.map((attempt) => ({
       backend: attempt.backend,
       label: attempt.backend.replace('_', ' '),
       ok: attempt.ok,
     }))
-  }, [lastTrace])
+  }, [routeTrace])
   const lastAttemptSummary = useMemo(() => {
-    if (!lastTrace?.attempts?.length) return ''
-    return lastTrace.attempts
+    if (!routeTrace?.attempts?.length) return ''
+    return routeTrace.attempts
       .map((attempt) => `${attempt.backend}:${attempt.ok ? 'ok' : 'fail'}`)
       .join(',')
-  }, [lastTrace])
+  }, [routeTrace])
   const lastFailureSummary = useMemo(() => {
-    const failed = lastTrace?.attempts?.find((attempt) => !attempt.ok)
+    const failed = routeTrace?.attempts?.find((attempt) => !attempt.ok)
     if (!failed) return ''
     const msg = failed.errorMessage ? `:${failed.errorMessage}` : ''
     return `${failed.backend}${msg}`
-  }, [lastTrace])
+  }, [routeTrace])
 
   const resolveProviderHttpBase = useCallback((): string => {
     const endpoints = (primaryProvider && providersByAddr[primaryProvider]?.endpoints) || []
@@ -1030,6 +1040,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                               manifestRoot: deal.cid,
                                               owner: nilAddress,
                                               filePath: f.path,
+                                              preference: transportPreference,
                                               serviceBase: isMode2 ? undefined : resolveProviderHttpBase(),
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,
@@ -1140,6 +1151,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                               manifestRoot: deal.cid,
                                               owner: nilAddress,
                                               filePath: f.path,
+                                              preference: transportPreference,
                                               serviceBase: isMode2 ? undefined : resolveProviderHttpBase(),
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,

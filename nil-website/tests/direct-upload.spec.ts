@@ -267,15 +267,17 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   console.log('Upload complete.')
   await expect.poll(() => manifestUploadCalls, { timeout: 30_000 }).toBeGreaterThan(0)
 
-  // Check "Commit to Chain" button
-  const commitBtn = page.getByRole('button', { name: 'Commit to Chain' })
+  // Commit to chain (auto-queue may already be pending)
+  const commitBtn = page.getByTestId('mdu-commit')
   await expect(commitBtn).toBeVisible()
-  
-  console.log('Clicking Commit to Chain...')
-  await commitBtn.click()
+
+  console.log('Clicking Commit to Chain if needed...')
+  if (await commitBtn.isEnabled().catch(() => false)) {
+    await commitBtn.click()
+  }
 
   // Wait for "Committed!" (ensures OPFS persistence hook ran)
-  await expect(page.getByRole('button', { name: 'Committed!' })).toBeVisible({ timeout: 30000 })
+  await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 30000 })
   console.log('Commit confirmed.')
   await expect(page.getByText('Saved MDUs locally (OPFS)')).toBeVisible({ timeout: 30_000 })
 

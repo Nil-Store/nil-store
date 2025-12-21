@@ -224,9 +224,12 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   await expect(page.getByRole('button', { name: 'Upload Complete' })).toBeVisible({ timeout: 30_000 })
   await expect.poll(() => manifestUploadCalls, { timeout: 30_000 }).toBeGreaterThan(0)
 
-  const commitBtn = page.getByRole('button', { name: 'Commit to Chain' })
-  await commitBtn.click()
-  await expect(page.getByRole('button', { name: 'Committed!' })).toBeVisible({ timeout: 60_000 })
+  const commitBtn = page.getByTestId('mdu-commit')
+  await expect(commitBtn).toBeVisible()
+  if (await commitBtn.isEnabled().catch(() => false)) {
+    await commitBtn.click()
+  }
+  await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 60_000 })
   await expect(page.getByText('Saved MDUs locally (OPFS)')).toBeVisible({ timeout: 60_000 })
   await expect.poll(() => committedRoot, { timeout: 30_000 }).toMatch(/^0x[0-9a-f]{96}$/i)
 

@@ -24,6 +24,7 @@ export interface FetchInput {
   manifestRoot: string
   owner: string
   filePath: string
+  preference?: RoutePreference
   /**
    * Base URL for the service hosting `/gateway/*` retrieval endpoints.
    * Defaults to `appConfig.gatewayBase`.
@@ -166,10 +167,11 @@ export function useFetch() {
       }
 
       const serviceOverride = String(input.serviceBase ?? '').trim().replace(/\/$/, '')
+      const requestedPreference = input.preference ?? transport.preference
       const preferenceOverride: RoutePreference | undefined =
-        serviceOverride && serviceOverride !== appConfig.gatewayBase && transport.preference !== 'prefer_p2p'
+        serviceOverride && serviceOverride !== appConfig.gatewayBase && requestedPreference !== 'prefer_p2p'
           ? 'prefer_direct_sp'
-          : undefined
+          : requestedPreference
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const p2pEndpoint = await resolveProviderP2pEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
@@ -261,6 +263,17 @@ export function useFetch() {
         providerP2pEndpoint?.target ||
         (p2pEndpoint && p2pEndpoint.provider === provider ? p2pEndpoint.target : undefined) ||
         gatewayP2pTarget
+      let effectiveP2pTarget = fetchP2pTarget
+      if (!effectiveP2pTarget && appConfig.p2pEnabled && !appConfig.gatewayDisabled) {
+        const addrs = await fetchGatewayP2pAddrs(appConfig.gatewayBase)
+        for (const addr of addrs) {
+          const target = multiaddrToP2pTarget(addr)
+          if (target) {
+            effectiveP2pTarget = target
+            break
+          }
+        }
+      }
       const fetchDirectBase =
         providerEndpoint?.baseUrl ||
         (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||
@@ -284,7 +297,7 @@ export function useFetch() {
           sessionId,
           expectedProvider: provider,
           directBase: fetchDirectBase,
-          p2pTarget: fetchP2pTarget,
+          p2pTarget: effectiveP2pTarget,
           preference: preferenceOverride,
         })
 
