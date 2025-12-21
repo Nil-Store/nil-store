@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -18,12 +19,12 @@ import (
 )
 
 type mode2DealState struct {
-	mu         sync.RWMutex
-	owner      string
-	cid        string
+	mu          sync.RWMutex
+	owner       string
+	cid         string
 	serviceHint string
-	providers  []string
-	endpoints  map[string]string // providerAddr -> baseURL
+	providers   []string
+	endpoints   map[string]string // providerAddr -> baseURL
 }
 
 func (s *mode2DealState) getDeal() (owner, cid, hint string, providers []string) {
@@ -249,5 +250,130 @@ func TestGateway_Mode2_UploadThenFetch_WithMissingLocalShard(t *testing.T) {
 
 	if !bytes.Equal(fetchW.Body.Bytes(), payload) {
 		t.Fatalf("fetched bytes mismatch")
+	}
+}
+
+func TestGateway_Mode2_AppendThenFetch_BothFiles(t *testing.T) {
+	dealProviderCache = sync.Map{}
+	providerBaseCache = sync.Map{}
+
+	useTempUploadDir(t)
+	if err := crypto_ffi.Init(trustedSetup); err != nil {
+		t.Fatalf("crypto_ffi.Init failed: %v", err)
+	}
+
+	oldReqSig := requireRetrievalReqSig
+	requireRetrievalReqSig = false
+	t.Cleanup(func() { requireRetrievalReqSig = oldReqSig })
+
+	dealID := uint64(43)
+	owner := testDealOwner(t)
+
+	fileA := bytes.Repeat([]byte("A"), 32*1024)
+	fileB := bytes.Repeat([]byte("B"), 48*1024)
+
+	providers := make([]string, 0, 12)
+	endpoints := map[string]string{}
+	for i := 0; i < 12; i++ {
+		addr := "nil1provider" + strconv.Itoa(i)
+		providers = append(providers, addr)
+		srv, _ := newProviderServer(t)
+		endpoints[addr] = srv.URL
+	}
+
+	state := &mode2DealState{
+		owner:       owner,
+		cid:         "",
+		serviceHint: "General:replicas=12:rs=8+4",
+		providers:   providers,
+		endpoints:   endpoints,
+	}
+
+	lcdSrv := newMode2LCDServer(t, dealID, state)
+	defer lcdSrv.Close()
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	t.Setenv("NIL_PROVIDER_ADDRESS", providers[0])
+
+	upload := func(filename, filePath string, payload []byte) (string, error) {
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+		part, _ := writer.CreateFormFile("file", filename)
+		_, _ = part.Write(payload)
+		_ = writer.WriteField("deal_id", strconv.FormatUint(dealID, 10))
+		_ = writer.WriteField("file_path", filePath)
+		_ = writer.Close()
+
+		req := httptest.NewRequest(http.MethodPost, "/gateway/upload?deal_id="+strconv.FormatUint(dealID, 10), body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		w := httptest.NewRecorder()
+		testRouter().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			return "", fmt.Errorf("GatewayUpload failed: %d %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			ManifestRoot string `json:"manifest_root"`
+			CID          string `json:"cid"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		out := strings.TrimSpace(resp.ManifestRoot)
+		if out == "" {
+			out = strings.TrimSpace(resp.CID)
+		}
+		if out == "" {
+			return "", fmt.Errorf("missing manifest_root in upload response: %s", w.Body.String())
+		}
+		return out, nil
+	}
+
+	cid1, err := upload("a.bin", "a.bin", fileA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.setCID(cid1)
+
+	cid2, err := upload("b.bin", "b.bin", fileB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cid2 == cid1 {
+		t.Fatalf("expected append to produce new manifest_root, got same: %s", cid2)
+	}
+	state.setCID(cid2)
+
+	root2, err := parseManifestRoot(cid2)
+	if err != nil {
+		t.Fatalf("parseManifestRoot: %v", err)
+	}
+	dealDir := dealScopedDir(dealID, root2)
+
+	// Remove one local shard for the first user MDU to force remote fetch against the new manifest_root.
+	_ = os.Remove(filepath.Join(dealDir, "mdu_2_slot_0.bin"))
+
+	fetch := func(filePath string) ([]byte, error) {
+		req := httptest.NewRequest(http.MethodGet, "/gateway/fetch/"+root2.Canonical+"?deal_id="+strconv.FormatUint(dealID, 10)+"&owner="+owner+"&file_path="+filePath, nil)
+		w := httptest.NewRecorder()
+		testRouter().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			return nil, fmt.Errorf("GatewayFetch failed: %d %s", w.Code, w.Body.String())
+		}
+		return w.Body.Bytes(), nil
+	}
+
+	gotA, err := fetch("a.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(gotA, fileA) {
+		t.Fatalf("file A mismatch")
+	}
+	gotB, err := fetch("b.bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(gotB, fileB) {
+		t.Fatalf("file B mismatch")
 	}
 }
