@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { appConfig } from '../config'
+import { canAttempt, createBackoff, recordFailure, recordSuccess } from '../lib/backoff'
 
 export interface ProofRow {
   id: string
@@ -35,6 +36,7 @@ function parseCommitment(commitment: string): Pick<ProofRow, 'dealId' | 'epochId
 export function useProofs(pollMs: number = 10000) {
   const [proofs, setProofs] = useState<ProofRow[]>([])
   const [loading, setLoading] = useState(false)
+  const backoffRef = useRef(createBackoff({ baseMs: Math.max(10000, pollMs), maxMs: 60000 }))
 
   useEffect(() => {
     let cancelled = false
@@ -42,6 +44,7 @@ export function useProofs(pollMs: number = 10000) {
 
     async function load() {
       if (cancelled) return
+      if (!canAttempt(backoffRef.current)) return
       setLoading(true)
       try {
         // This endpoint is paginated; without an explicit limit most LCDs default
@@ -49,7 +52,10 @@ export function useProofs(pollMs: number = 10000) {
         // a full-file download is chunked into many blob-sized receipts).
         const url = `${appConfig.lcdBase}/nilchain/nilchain/v1/proofs?pagination.limit=1000&pagination.reverse=true`
         const res = await fetch(url)
-        if (!res.ok) return
+        if (!res.ok) {
+          recordFailure(backoffRef.current)
+          return
+        }
         const json = await res.json()
         const arr = (Array.isArray(json.proof) ? json.proof : []) as Record<string, unknown>[]
         const mapped: ProofRow[] = arr.map((p) => {
@@ -64,7 +70,9 @@ export function useProofs(pollMs: number = 10000) {
           return { ...base, ...parsed }
         })
         if (!cancelled) setProofs(mapped)
+        recordSuccess(backoffRef.current)
       } catch {
+        recordFailure(backoffRef.current)
         // ignore, UI will simply show no proofs
       } finally {
         if (!cancelled) setLoading(false)

@@ -1,6 +1,6 @@
 import { useAccount, useBalance, useConnect, useDisconnect, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, Upload, HardDrive, Database, Cpu, ArrowUpRight } from 'lucide-react'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
@@ -22,6 +22,8 @@ import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
+import { canAttempt, createBackoff, recordFailure, recordSuccess } from '../lib/backoff'
+import { normalizeWalletError } from '../lib/wallet'
 
 interface Provider {
   address: string
@@ -108,20 +110,36 @@ export function Dashboard() {
 
   // Check if the RPC node itself is on the right chain
   const [rpcChainId, setRpcChainId] = useState<number | null>(null)
+  const [rpcError, setRpcError] = useState<string | null>(null)
+  const [lcdError, setLcdError] = useState<string | null>(null)
+  const rpcBackoffRef = useRef(createBackoff({ baseMs: 10000, maxMs: 60000 }))
+  const lcdBackoffRef = useRef(createBackoff({ baseMs: 10000, maxMs: 60000 }))
+
   useEffect(() => {
     const checkRpc = async () => {
+      if (!canAttempt(rpcBackoffRef.current)) return
       try {
         const res = await fetch(appConfig.evmRpc, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1 }),
         })
+        if (!res.ok) {
+          recordFailure(rpcBackoffRef.current)
+          setRpcChainId(null)
+          setRpcError(`RPC responded with status ${res.status}`)
+          return
+        }
         const json = await res.json()
         const raw = typeof json?.result === 'string' ? json.result : ''
         const id = raw ? parseInt(raw, 16) : NaN
         setRpcChainId(Number.isFinite(id) ? id : null)
+        recordSuccess(rpcBackoffRef.current)
+        setRpcError(null)
       } catch (e) {
-        console.error('RPC Check failed', e)
+        recordFailure(rpcBackoffRef.current)
+        setRpcChainId(null)
+        setRpcError(e instanceof Error ? e.message : 'RPC unreachable')
       }
     }
     checkRpc()
@@ -137,6 +155,15 @@ export function Dashboard() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       alert(`Could not switch network. Please switch to Chain ID ${appConfig.chainId} manually.`)
+    }
+  }
+
+  const handleConnectWallet = async () => {
+    setConnectError(null)
+    try {
+      await connectAsync({ connector: injectedConnector })
+    } catch (e) {
+      setConnectError(normalizeWalletError(e))
     }
   }
 
@@ -162,6 +189,7 @@ export function Dashboard() {
 
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
+  const [connectError, setConnectError] = useState<string | null>(null)
   const { proofs, loading: proofsLoading } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
   const { listFiles, slab } = useTransportRouter()
@@ -173,6 +201,17 @@ export function Dashboard() {
   const [retrievalParams, setRetrievalParams] = useState<LcdParams | null>(null)
   const [retrievalParamsError, setRetrievalParamsError] = useState<string | null>(null)
 
+  const noteLcdFailure = useCallback((err: unknown, fallback: string) => {
+    recordFailure(lcdBackoffRef.current)
+    const msg = err instanceof Error ? err.message : fallback
+    setLcdError(msg)
+  }, [])
+
+  const noteLcdSuccess = useCallback(() => {
+    recordSuccess(lcdBackoffRef.current)
+    setLcdError(null)
+  }, [])
+
   useEffect(() => {
     if (allDeals.length === 0) {
       setDealHeatById({})
@@ -182,21 +221,30 @@ export function Dashboard() {
     let cancelled = false
 
     async function refreshHeat() {
+      if (!canAttempt(lcdBackoffRef.current)) return
       const next: Record<string, DealHeatState> = {}
+      let sawSuccess = false
+      let sawFailure = false
       await Promise.all(
         allDeals.map(async (deal) => {
           try {
             const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/deals/${encodeURIComponent(deal.id)}/heat`)
-            if (!res.ok) return
+            if (!res.ok) {
+              sawFailure = true
+              return
+            }
             const json = await res.json().catch(() => null)
             const heat = (json as { heat?: DealHeatState } | null)?.heat
             if (!heat) return
             next[deal.id] = heat
+            sawSuccess = true
           } catch {
-            // ignore
+            sawFailure = true
           }
         }),
       )
+      if (sawSuccess) noteLcdSuccess()
+      if (!sawSuccess && sawFailure) noteLcdFailure(new Error('Failed to fetch deal heat'), 'Failed to fetch deal heat')
       if (!cancelled) setDealHeatById(next)
     }
 
@@ -206,7 +254,7 @@ export function Dashboard() {
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [allDeals])
+  }, [allDeals, noteLcdFailure, noteLcdSuccess])
 
   useEffect(() => {
     if (!nilAddress) {
@@ -220,6 +268,7 @@ export function Dashboard() {
 
     async function refreshSessions() {
       if (cancelled) return
+      if (!canAttempt(lcdBackoffRef.current)) return
       setRetrievalSessionsLoading(true)
       try {
         const url = `${appConfig.lcdBase}/nilchain/nilchain/v1/retrieval-sessions/by-owner/${encodeURIComponent(
@@ -234,8 +283,12 @@ export function Dashboard() {
         const sessions = Array.isArray(json?.sessions) ? json!.sessions : []
         if (!cancelled) setRetrievalSessions(sessions as Record<string, unknown>[])
         if (!cancelled) setRetrievalSessionsError(null)
+        noteLcdSuccess()
       } catch (e) {
-        if (!cancelled) setRetrievalSessionsError(e instanceof Error ? e.message : 'Failed to fetch retrieval sessions')
+        noteLcdFailure(e, 'Failed to fetch retrieval sessions')
+        if (!cancelled) {
+          setRetrievalSessionsError(e instanceof Error ? e.message : 'Failed to fetch retrieval sessions')
+        }
       } finally {
         if (!cancelled) setRetrievalSessionsLoading(false)
       }
@@ -247,7 +300,7 @@ export function Dashboard() {
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [nilAddress])
+  }, [nilAddress, noteLcdFailure, noteLcdSuccess])
 
   useEffect(() => {
     setCommitQueue({ status: 'idle' })
@@ -257,13 +310,16 @@ export function Dashboard() {
     let cancelled = false
 
     async function refreshParams() {
+      if (!canAttempt(lcdBackoffRef.current)) return
       try {
         const params = await lcdFetchParams(appConfig.lcdBase)
         if (!cancelled) {
           setRetrievalParams(params)
           setRetrievalParamsError(null)
         }
+        noteLcdSuccess()
       } catch (e) {
+        noteLcdFailure(e, 'Failed to fetch retrieval params')
         if (!cancelled) {
           setRetrievalParams(null)
           setRetrievalParamsError(e instanceof Error ? e.message : 'Failed to fetch retrieval params')
@@ -277,7 +333,7 @@ export function Dashboard() {
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [])
+  }, [noteLcdFailure, noteLcdSuccess])
 
   const retrievalCountsByDeal = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -461,21 +517,8 @@ export function Dashboard() {
     }
   }, [nilAddress, resolveProviderBase, resolveProviderP2pTarget, targetDeal, targetDeal?.cid, targetDealId, listFiles, slab])
 
-  useEffect(() => {
-    if (address) {
-      const cosmosAddress = ethToNil(address)
-      setNilAddress(cosmosAddress)
-      fetchDeals(cosmosAddress)
-      fetchBalances(cosmosAddress)
-      fetchProviders()
-    } else {
-        setDeals([])
-        setAllDeals([])
-        setProviders([])
-    }
-  }, [address])
-
-  async function fetchDeals(owner?: string): Promise<Deal[]> {
+  const fetchDeals = useCallback(async (owner?: string): Promise<Deal[]> => {
+    if (!canAttempt(lcdBackoffRef.current)) return deals
     setLoading(true)
     try {
         const all = await lcdFetchDeals(appConfig.lcdBase)
@@ -485,15 +528,15 @@ export function Dashboard() {
           filtered = all
         }
         setDeals(filtered)
+        noteLcdSuccess()
         return filtered
     } catch (e) {
-        console.error("Failed to fetch deals", e)
-        setAllDeals([])
+        noteLcdFailure(e, 'Failed to fetch deals')
     } finally {
         setLoading(false)
     }
-    return []
-  }
+    return deals
+  }, [deals, noteLcdFailure, noteLcdSuccess])
 
   const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
   const { data: evmBalance, refetch: refetchEvm } = useBalance({
@@ -501,9 +544,13 @@ export function Dashboard() {
     chainId: appConfig.chainId,
   })
 
-  async function fetchBalances(owner: string): Promise<{ atom?: string; stake?: string } | null> {
+  const fetchBalances = useCallback(async (owner: string): Promise<{ atom?: string; stake?: string } | null> => {
+    if (!canAttempt(lcdBackoffRef.current)) return null
     try {
       const res = await fetch(`${appConfig.lcdBase}/cosmos/bank/v1beta1/balances/${owner}`)
+      if (!res.ok) {
+        throw new Error(`balances returned ${res.status}`)
+      }
       const json = await res.json()
       const bal = Array.isArray(json?.balances) ? json.balances : []
       const getAmt = (denom: string) => {
@@ -515,24 +562,44 @@ export function Dashboard() {
         stake: getAmt('stake'),
       }
       setBankBalances(next)
+      noteLcdSuccess()
       return next
     } catch (e) {
-      console.error('fetchBalances failed', e)
+      noteLcdFailure(e, 'Failed to fetch balances')
     }
     return null
-  }
+  }, [noteLcdFailure, noteLcdSuccess])
 
-  async function fetchProviders() {
+  const fetchProviders = useCallback(async () => {
+    if (!canAttempt(lcdBackoffRef.current)) return
     try {
       const res = await fetch(`${appConfig.lcdBase}/nilchain/nilchain/v1/providers`)
+      if (!res.ok) {
+        throw new Error(`providers returned ${res.status}`)
+      }
       const json = await res.json()
       if (json.providers) {
         setProviders(json.providers as Provider[])
       }
+      noteLcdSuccess()
     } catch (e) {
-      console.error('Failed to fetch providers', e)
+      noteLcdFailure(e, 'Failed to fetch providers')
     }
-  }
+  }, [noteLcdFailure, noteLcdSuccess])
+
+  useEffect(() => {
+    if (address) {
+      const cosmosAddress = ethToNil(address)
+      setNilAddress(cosmosAddress)
+      fetchDeals(cosmosAddress)
+      fetchBalances(cosmosAddress)
+      fetchProviders()
+    } else {
+      setDeals([])
+      setAllDeals([])
+      setProviders([])
+    }
+  }, [address, fetchBalances, fetchDeals, fetchProviders])
 
   function formatBytes(bytes: number): string {
     if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
@@ -846,26 +913,41 @@ export function Dashboard() {
       setStatusTone('error')
       setStatusMsg(`Faucet tx ${faucetTx} failed.`)
     }
-  }, [faucetTxStatus, faucetTx, nilAddress, refetchEvm])
+  }, [faucetTxStatus, faucetTx, nilAddress, refetchEvm, fetchBalances])
 
   if (!isConnected) return (
     <div className="p-12 text-center">
         <h2 className="text-xl font-semibold text-foreground mb-2">Connect Your Wallet</h2>
         <p className="text-muted-foreground mb-4">Access your storage deals and manage your files.</p>
         <button
-          onClick={() => connectAsync({ connector: injectedConnector })}
+          onClick={handleConnectWallet}
           data-testid="connect-wallet"
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md shadow transition-colors"
         >
           <Wallet className="w-4 h-4" />
           Connect MetaMask
         </button>
+        {connectError && (
+          <div className="mt-4 text-sm text-destructive">
+            {connectError}
+          </div>
+        )}
     </div>
   )
 
   return (
     <div className="space-y-6 w-full max-w-6xl mx-auto px-4 pt-8">
       <StatusBar />
+
+      {(rpcError || lcdError) && (
+        <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-200">
+          <strong>Chain offline.</strong> Start the local stack to enable deals and retrievals.
+          <span className="block text-xs text-yellow-700/80 dark:text-yellow-200/80">
+            {rpcError ? `RPC: ${rpcError}. ` : ''}
+            {lcdError ? `LCD: ${lcdError}.` : ''}
+          </span>
+        </div>
+      )}
       
       {rpcMismatch && (
         <div className="bg-destructive/10 border border-destructive/50 rounded-xl p-4 flex items-center justify-between animate-pulse">

@@ -17,6 +17,7 @@ import { fetchGatewayP2pAddrs } from '../lib/gatewayStatus'
 import { multiaddrToP2pTarget, type P2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from './useTransportRouter'
 import type { RoutePreference } from '../lib/transport/types'
+import { walletRequest } from '../lib/wallet'
 
 export interface FetchInput {
   dealId: string
@@ -121,11 +122,6 @@ export function useFetch() {
 
     try {
       if (!address) throw new Error('Connect a wallet to submit retrieval proofs')
-      const ethereum = window.ethereum
-      if (!ethereum || typeof ethereum.request !== 'function') {
-        throw new Error('Ethereum provider (MetaMask) not available')
-      }
-
       const dealId = normalizeDealId(input.dealId)
       const owner = String(input.owner ?? '').trim()
       if (!owner) throw new Error('owner is required')
@@ -219,10 +215,10 @@ export function useFetch() {
         functionName: 'openRetrievalSession',
         args: [BigInt(dealId), provider, manifestRoot, startMduIndex, startBlobIndex, blobCount, openNonce, openExpiresAt],
       })
-      const openTxHash = (await ethereum.request({
+      const openTxHash = await walletRequest<Hex>({
         method: 'eth_sendTransaction',
         params: [{ from: address, to: appConfig.nilstorePrecompile, data: openTxData, gas: numberToHex(5_000_000) }],
-      })) as Hex
+      })
 
       const openReceipt = await waitForTransactionReceipt(openTxHash)
       let sessionId: Hex | null = null
@@ -322,10 +318,10 @@ export function useFetch() {
           functionName: 'confirmRetrievalSession',
           args: [sessionId],
         })
-        const confirmTxHash = (await ethereum.request({
+        const confirmTxHash = await walletRequest<Hex>({
           method: 'eth_sendTransaction',
           params: [{ from: address, to: appConfig.nilstorePrecompile, data: confirmTxData, gas: numberToHex(2_000_000) }],
-        })) as Hex
+        })
         await waitForTransactionReceipt(confirmTxHash)
 
         setProgress((p) => ({ ...p, phase: 'submitting_proof_request', receiptsSubmitted: 1, receiptsTotal: 2 }))
