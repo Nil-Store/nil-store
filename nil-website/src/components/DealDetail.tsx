@@ -784,6 +784,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                 {(deal.cid || loadingFiles || (files && files.length > 0)) && (
                     <div className="sm:col-span-2 mt-2 space-y-2">
                       <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Files (NilFS)</div>
+                      <div className="text-[11px] text-muted-foreground">Uploads are managed from the Dashboard.</div>
                       {!deal.cid && (
                         <div className="text-[11px] text-muted-foreground">
                           Showing local OPFS slab (not yet committed on-chain).

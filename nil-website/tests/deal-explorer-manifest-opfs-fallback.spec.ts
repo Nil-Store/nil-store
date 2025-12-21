@@ -202,7 +202,7 @@ test('Deal Explorer: manifest + mdu commitments fall back to OPFS when gateway m
     await writeFile('mdu_2.bin', new Uint8Array(MDU_SIZE_BYTES))
   }, { dealId, manifestRoot, filePath, fileSize })
 
-  await page.getByTestId(`deal-row-${dealId}`).click()
+  await page.getByTestId(`deal-explore-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
 
   await page.getByTestId('deal-detail-tab-manifest').click()

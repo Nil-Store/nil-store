@@ -298,7 +298,7 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     await expect(page.getByTestId('wallet-address')).toBeVisible()
   }
 
-  await page.getByTestId(`deal-row-${dealId}`).click()
+  await page.getByTestId(`deal-explore-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
 
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)

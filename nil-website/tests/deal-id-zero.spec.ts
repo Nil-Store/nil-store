@@ -370,7 +370,13 @@ test('repro bug: download from commit content widget', async ({
   console.log('Faucet received.')
 
   console.log('Creating deal...')
+  await page.getByTestId('create-deal-open').click()
   await page.getByTestId('alloc-submit').click()
+  await page
+    .locator('[data-testid="create-deal-drawer"] button[aria-label="Close drawer"]')
+    .first()
+    .click({ timeout: 2000 })
+    .catch(() => {})
   
   // Check for any visible error message
   const errorToast = page.locator('.text-destructive').first()
@@ -378,25 +384,17 @@ test('repro bug: download from commit content widget', async ({
       console.log('Error visible on UI:', await errorToast.textContent())
   }
 
-  await page.getByTestId('tab-content').click()
   console.log('Deal created (click sent).')
+  await expect(page.getByTestId('deal-row-0')).toBeVisible({ timeout: 60_000 })
+  await page.getByTestId('deal-row-0').click()
+  await expect(page.getByTestId('selected-deal-id')).toHaveText('#0', { timeout: 60_000 })
+  const selectedLabel = await page.getByTestId('selected-deal-id').innerText()
+  const dealId = selectedLabel.replace('#', '').trim()
+  console.log(`Deal ID selected in UI: ${dealId}`)
 
-  const dealSelect = page.getByTestId('content-deal-select')
-  
-  // Wait for our intercepted deal (ID 0) to appear in the options
-  // The label should contain "Deal #0"
-  await expect(dealSelect.locator('option', { hasText: 'Deal #0' })).toBeAttached({ timeout: 60_000 })
-  
-  // Select it
-  await dealSelect.selectOption('0')
-  
-  const dealId = await dealSelect.inputValue()
-  console.log(`Deal ID in UI: ${dealId}`)
-  
-  // If interception worked, dealId should be "0"
-  if (dealId !== '0') {
-      console.warn('WARNING: Deal ID is not 0. Interception might have failed or race condition.')
-  }
+  await page.getByTestId('upload-open').click()
+  await page.getByTestId('upload-path-gateway').click()
+  await page.getByTestId('upload-continue').click()
 
   const filePath = 'repro.txt'
   const fileBytes = Buffer.from('repro bug content')
@@ -425,19 +423,14 @@ test('repro bug: download from commit content widget', async ({
   await commitBtn.click()
   console.log('Commit button clicked.')
   
-  // Wait for "Files In Slab" to appear
-  const filesInSlab = page.getByText('Files In Slab')
-  await expect(filesInSlab).toBeVisible({ timeout: 60_000 })
-  
-  // Find the container for "Files In Slab"
-  // The text "Files In Slab" is in a header div. We want the parent container.
-  const slabHeader = page.getByText('Files In Slab')
-  const slabSection = slabHeader.locator('xpath=..')
-  
-  const fileRow = page.locator('div.flex.items-center.justify-between', { hasText: filePath })
+  await page.getByRole('button', { name: 'Close drawer' }).click()
+  await page.getByTestId(`deal-explore-${dealId}`).click()
+  await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
+
+  const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
-  
-  const specificDownloadBtn = fileRow.locator('button', { hasText: 'Download' })
+
+  const specificDownloadBtn = page.locator(`[data-testid="deal-detail-download"][data-file-path="${filePath}"]`)
   
   const downloadPromise = page.waitForEvent('download', { timeout: 10_000 }) // Short timeout as we expect failure
   
@@ -451,6 +444,6 @@ test('repro bug: download from commit content widget', async ({
   }
 
   // Ensure we did not surface any dealId normalization errors in the receipt status UI.
-  const errMsg = slabSection.locator('text=/dealId must be/')
+  const errMsg = page.locator('text=/dealId must be/')
   await expect(errMsg).toHaveCount(0)
 })

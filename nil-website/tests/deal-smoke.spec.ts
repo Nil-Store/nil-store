@@ -248,22 +248,22 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   await page.getByTestId('faucet-request').click()
   await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText('—', { timeout: 90_000 })
 
+  await page.getByTestId('create-deal-open').click()
   await page.getByTestId('alloc-submit').click()
-  await page.getByTestId('tab-content').click()
+  await page
+    .locator('[data-testid="create-deal-drawer"] button[aria-label="Close drawer"]')
+    .first()
+    .click({ timeout: 2000 })
+    .catch(() => {})
 
-  const dealSelect = page.getByTestId('content-deal-select')
-  await expect
-    .poll(async () => {
-      const count = await dealSelect.locator(`option[value="${dealId}"]`).count()
-      if (count < 1) return ''
-      try {
-        await dealSelect.selectOption(dealId)
-      } catch {
-        // Ignore transient select failures while options are still populating.
-      }
-      return await dealSelect.inputValue()
-    }, { timeout: 60_000 })
-    .toBe(dealId)
+  // In mocked CI runs, the deals list is authoritative; ensure the deal row is selected.
+  await expect(page.getByTestId(`deal-row-${dealId}`)).toBeVisible({ timeout: 60_000 })
+  await page.getByTestId(`deal-row-${dealId}`).click()
+  await expect(page.getByTestId('selected-deal-id')).toHaveText(`#${dealId}`, { timeout: 60_000 })
+
+  await page.getByTestId('upload-open').click()
+  await page.getByTestId('upload-path-gateway').click()
+  await page.getByTestId('upload-continue').click()
 
   await page.getByTestId('content-file-input').setInputFiles({
     name: filePath,
@@ -278,7 +278,8 @@ test('deal lifecycle smoke (connect → fund → create → upload → commit �
   const dealManifestCell = page.getByTestId(`deal-manifest-${dealId}`)
   await expect(dealManifestCell).toHaveAttribute('title', manifestRoot, { timeout: 120_000 })
 
-  await page.getByTestId(`deal-row-${dealId}`).click()
+  await page.getByRole('button', { name: 'Close drawer' }).click()
+  await page.getByTestId(`deal-explore-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible()
 
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)

@@ -207,8 +207,11 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
   }
 
   // Local MDU flow: shard -> upload -> commit.
-  await page.getByTestId('tab-mdu').click()
-  await page.getByTestId('mdu-deal-select').selectOption(dealId)
+  await expect(page.getByTestId(`deal-row-${dealId}`)).toBeVisible({ timeout: 60_000 })
+  await page.getByTestId(`deal-row-${dealId}`).click()
+  await page.getByTestId('upload-open').click()
+  await page.getByTestId('upload-path-mode2').click()
+  await page.getByTestId('upload-continue').click()
   await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 30_000 })
 
   await page.locator('input[type="file"]').setInputFiles({
@@ -372,7 +375,7 @@ test('Thick Client: committed slab is visible and downloadable across tabs (no g
     await expect(page2.getByTestId('wallet-address')).toBeVisible()
   }
 
-  await page2.getByTestId(`deal-row-${dealId}`).click()
+  await page2.getByTestId(`deal-explore-${dealId}`).click()
   await expect(page2.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
   const fileRow = page2.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
   await expect(fileRow).toBeVisible({ timeout: 60_000 })

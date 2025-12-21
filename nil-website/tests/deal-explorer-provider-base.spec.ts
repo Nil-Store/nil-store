@@ -280,7 +280,7 @@ test('Deal Explorer: SP download uses SP base when gateway slab missing', async 
     await expect(page.getByTestId('wallet-address')).toBeVisible()
   }
 
-  await page.getByTestId(`deal-row-${dealId}`).click()
+  await page.getByTestId(`deal-explore-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
 
   // Trigger SP download (wallet interactive).

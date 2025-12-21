@@ -57,25 +57,19 @@ test.describe('libp2p fetch', () => {
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
+    await page.getByTestId('create-deal-open').click()
     await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
+    await expect(page.getByTestId('selected-deal-id')).not.toHaveText('—', { timeout: 180_000 })
 
-    await page.getByTestId('tab-content').click()
-    await page.waitForFunction(() => {
-      const select = document.querySelector('[data-testid="content-deal-select"]') as HTMLSelectElement | null
-      return Boolean(select && select.options.length > 1)
-    }, null, { timeout: 180_000 })
-
-    const dealSelect = page.getByTestId('content-deal-select')
-    const options = dealSelect.locator('option')
-    const optionCount = await options.count()
-    const lastValue = await options.nth(optionCount - 1).getAttribute('value')
-    if (lastValue) {
-      await dealSelect.selectOption(lastValue)
-    }
-    const dealId = await dealSelect.inputValue()
+    const label = await page.getByTestId('selected-deal-id').innerText()
+    const dealId = label.replace('#', '').trim()
     expect(dealId).not.toBe('')
+
+    await page.getByTestId('upload-open').click()
+    await page.getByTestId('upload-path-gateway').click()
+    await page.getByTestId('upload-continue').click()
 
     const fileInput = page.getByTestId('content-file-input')
     await expect(fileInput).toBeEnabled({ timeout: 120_000 })
@@ -93,9 +87,7 @@ test.describe('libp2p fetch', () => {
     }
     await expect(commitBtn).toHaveText(/Committed/i, { timeout: 180_000 })
 
-    const dealRow = page.getByTestId(`deal-row-${dealId}`)
-    await expect(dealRow).toBeVisible({ timeout: 180_000 })
-    await dealRow.click()
+    await page.getByTestId(`deal-explore-${dealId}`).click()
 
     const downloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
