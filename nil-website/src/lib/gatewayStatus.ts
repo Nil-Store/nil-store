@@ -32,7 +32,9 @@ export async function fetchGatewayP2pAddrs(baseUrl: string): Promise<string[]> {
     if (!res.ok) return []
     const payload = (await res.json().catch(() => null)) as GatewayStatusPayload | null
     const addrs = readP2pAddrs(payload)
-    cachedP2PAddrs = { expiresAt: Date.now() + 15_000, addrs }
+    if (addrs.length > 0) {
+      cachedP2PAddrs = { expiresAt: Date.now() + 15_000, addrs }
+    }
     return addrs
   } catch (e) {
     return []

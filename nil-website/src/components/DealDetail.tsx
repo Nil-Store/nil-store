@@ -14,6 +14,7 @@ import { workerClient } from '../lib/worker-client'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { parseServiceHint } from '../lib/serviceHint'
+import type { DecisionTrace } from '../lib/transport/types'
 
 let wasmReadyPromise: Promise<void> | null = null
 
@@ -104,6 +105,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
   const [mduRootMerkle, setMduRootMerkle] = useState<string[][] | null>(null)
   const [merkleError, setMerkleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'info' | 'manifest' | 'heat'>('info')
+  const [lastFetchTrace, setLastFetchTrace] = useState<DecisionTrace | null>(null)
   const { proofs } = useProofs()
   const { fetchFile, loading: downloading, receiptStatus, receiptError, progress } = useFetch()
   const {
@@ -112,29 +114,45 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
     manifestInfo: manifestInfoTransport,
     mduKzg: mduKzgTransport,
     lastTrace,
+    preference: transportPreference,
   } = useTransportRouter()
+
+  useEffect(() => {
+    if (lastTrace?.op === 'fetch') {
+      setLastFetchTrace(lastTrace)
+    }
+  }, [lastTrace])
 
   // Filter proofs for this deal
   const dealProofs = proofs.filter(p => p.dealId === String(deal.id))
   const dealProviders = deal.providers || []
   const dealProvidersKey = dealProviders.join(',')
   const primaryProvider = dealProviders[0] || ''
+  const routeTrace = lastFetchTrace ?? lastTrace
   const lastRouteLabel = useMemo(() => {
-    const backend = lastTrace?.chosen?.backend
+    const backend = routeTrace?.chosen?.backend
     return backend ? backend.replace('_', ' ') : ''
-  }, [lastTrace])
+  }, [routeTrace])
+  const lastRouteSteps = useMemo(() => {
+    if (!routeTrace?.attempts?.length) return []
+    return routeTrace.attempts.map((attempt) => ({
+      backend: attempt.backend,
+      label: attempt.backend.replace('_', ' '),
+      ok: attempt.ok,
+    }))
+  }, [routeTrace])
   const lastAttemptSummary = useMemo(() => {
-    if (!lastTrace?.attempts?.length) return ''
-    return lastTrace.attempts
+    if (!routeTrace?.attempts?.length) return ''
+    return routeTrace.attempts
       .map((attempt) => `${attempt.backend}:${attempt.ok ? 'ok' : 'fail'}`)
       .join(',')
-  }, [lastTrace])
+  }, [routeTrace])
   const lastFailureSummary = useMemo(() => {
-    const failed = lastTrace?.attempts?.find((attempt) => !attempt.ok)
+    const failed = routeTrace?.attempts?.find((attempt) => !attempt.ok)
     if (!failed) return ''
     const msg = failed.errorMessage ? `:${failed.errorMessage}` : ''
     return `${failed.backend}${msg}`
-  }, [lastTrace])
+  }, [routeTrace])
 
   const resolveProviderHttpBase = useCallback((): string => {
     const endpoints = (primaryProvider && providersByAddr[primaryProvider]?.endpoints) || []
@@ -766,6 +784,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                 {(deal.cid || loadingFiles || (files && files.length > 0)) && (
                     <div className="sm:col-span-2 mt-2 space-y-2">
                       <div className="text-xs uppercase tracking-wide font-semibold text-muted-foreground">Files (NilFS)</div>
+                      <div className="text-[11px] text-muted-foreground">Uploads are managed from the Dashboard.</div>
                       {!deal.cid && (
                         <div className="text-[11px] text-muted-foreground">
                           Showing local OPFS slab (not yet committed on-chain).
@@ -795,6 +814,24 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                           data-transport-failure={lastFailureSummary}
                         >
                           Route: {lastRouteLabel}
+                        </div>
+                      )}
+                      {lastRouteSteps.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
+                          {lastRouteSteps.map((step, idx) => (
+                            <div key={`${step.backend}-${idx}`} className="flex items-center gap-1">
+                              <span
+                                className={`px-2 py-0.5 rounded-full border ${
+                                  step.ok
+                                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                    : 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
+                                } ${lastTrace?.chosen?.backend === step.backend ? 'ring-1 ring-primary/40' : ''}`}
+                              >
+                                {step.label}
+                              </span>
+                              {idx < lastRouteSteps.length - 1 && <span className="opacity-50">→</span>}
+                            </div>
+                          ))}
                         </div>
                       )}
 
@@ -1004,6 +1041,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                               manifestRoot: deal.cid,
                                               owner: nilAddress,
                                               filePath: f.path,
+                                              preference: transportPreference,
                                               serviceBase: isMode2 ? undefined : resolveProviderHttpBase(),
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,
@@ -1114,6 +1152,7 @@ export function DealDetail({ deal, onClose, nilAddress }: DealDetailProps) {
                                               manifestRoot: deal.cid,
                                               owner: nilAddress,
                                               filePath: f.path,
+                                              preference: transportPreference,
                                               serviceBase: isMode2 ? undefined : resolveProviderHttpBase(),
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,

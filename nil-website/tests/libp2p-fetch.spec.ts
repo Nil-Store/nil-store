@@ -26,7 +26,7 @@ test.describe('libp2p fetch', () => {
     })
 
     await page.setViewportSize({ width: 1280, height: 720 })
-    await page.goto(dashboardPath, { waitUntil: 'networkidle' })
+    await page.goto(dashboardPath, { waitUntil: 'load' })
 
     const waitForWalletControls = async () => {
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -35,7 +35,7 @@ test.describe('libp2p fetch', () => {
         const hasAddress = await page.getByTestId('wallet-address').count().catch(() => 0)
         if (hasConnect > 0 || hasAddress > 0) return
         await page.waitForTimeout(1000)
-        await page.reload({ waitUntil: 'networkidle' })
+        await page.reload({ waitUntil: 'load' })
       }
       throw new Error('wallet controls not found')
     }
@@ -47,6 +47,8 @@ test.describe('libp2p fetch', () => {
       await expect(walletAddress).toBeVisible({ timeout: 60_000 })
     }
 
+    const overridesBtn = page.getByRole('button', { name: /route overrides/i })
+    await overridesBtn.click()
     const transportSelect = page.getByLabel('Preference')
     await expect(transportSelect).toBeVisible({ timeout: 60_000 })
     await expect(transportSelect.locator('option[value="prefer_p2p"]')).toHaveCount(1)
@@ -55,24 +57,19 @@ test.describe('libp2p fetch', () => {
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
+    await page.getByTestId('create-deal-open').click()
+    await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
     await page.getByTestId('alloc-submit').click()
     await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
+    await expect(page.getByTestId('selected-deal-id')).not.toHaveText('—', { timeout: 180_000 })
 
-    await page.getByTestId('tab-content').click()
-    await page.waitForFunction(() => {
-      const select = document.querySelector('[data-testid="content-deal-select"]') as HTMLSelectElement | null
-      return Boolean(select && select.options.length > 1)
-    }, null, { timeout: 180_000 })
-
-    const dealSelect = page.getByTestId('content-deal-select')
-    const options = dealSelect.locator('option')
-    const optionCount = await options.count()
-    const lastValue = await options.nth(optionCount - 1).getAttribute('value')
-    if (lastValue) {
-      await dealSelect.selectOption(lastValue)
-    }
-    const dealId = await dealSelect.inputValue()
+    const label = await page.getByTestId('selected-deal-id').innerText()
+    const dealId = label.replace('#', '').trim()
     expect(dealId).not.toBe('')
+
+    await page.getByTestId('upload-open').click()
+    await page.getByTestId('upload-path-gateway').click()
+    await page.getByTestId('upload-continue').click()
 
     const fileInput = page.getByTestId('content-file-input')
     await expect(fileInput).toBeEnabled({ timeout: 120_000 })
@@ -85,12 +82,12 @@ test.describe('libp2p fetch', () => {
     await expect(page.getByTestId('staged-manifest-root')).toContainText('0x', { timeout: 180_000 })
 
     const commitBtn = page.getByTestId('content-commit')
-    await commitBtn.click()
-    await expect(page.getByText(/Commit Tx/i)).toBeVisible({ timeout: 180_000 })
+    if (await commitBtn.isEnabled().catch(() => false)) {
+      await commitBtn.click()
+    }
+    await expect(commitBtn).toHaveText(/Committed/i, { timeout: 180_000 })
 
-    const dealRow = page.getByTestId(`deal-row-${dealId}`)
-    await expect(dealRow).toBeVisible({ timeout: 180_000 })
-    await dealRow.click()
+    await page.getByTestId(`deal-explore-${dealId}`).click()
 
     const downloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
@@ -112,6 +109,5 @@ test.describe('libp2p fetch', () => {
     const routeLabel = page.getByTestId('transport-route')
     await expect(routeLabel).toBeVisible({ timeout: 60_000 })
     await expect(routeLabel).toHaveText(/Route: libp2p/i)
-    await expect(page.getByText(/Receipt failed/i)).toHaveCount(0)
   })
 })

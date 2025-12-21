@@ -3,6 +3,7 @@ import { appConfig } from '../config'
 import { encodeFunctionData, numberToHex, type Hex } from 'viem'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
+import { walletRequest } from '../lib/wallet'
 
 export interface UpdateDealContentInput {
   creator: string
@@ -21,10 +22,6 @@ export function useUpdateDealContent() {
     try {
       const evmAddress = String(input.creator || '')
       if (!evmAddress.startsWith('0x')) throw new Error('EVM address required')
-      const ethereum = window.ethereum
-      if (!ethereum || typeof ethereum.request !== 'function') {
-        throw new Error('Ethereum provider (MetaMask) not available')
-      }
       const manifestRoot = String(input.cid || '').trim() as Hex
       const data = encodeFunctionData({
         abi: NILSTORE_PRECOMPILE_ABI,
@@ -32,10 +29,10 @@ export function useUpdateDealContent() {
         args: [BigInt(input.dealId), manifestRoot, BigInt(input.sizeBytes)],
       })
 
-      const txHash = (await ethereum.request({
+      const txHash = await walletRequest<Hex>({
         method: 'eth_sendTransaction',
         params: [{ from: evmAddress, to: appConfig.nilstorePrecompile, data, gas: numberToHex(3_000_000) }],
-      })) as Hex
+      })
       setLastTx(txHash)
       await waitForTransactionReceipt(txHash)
       return { status: 'success', tx_hash: txHash }

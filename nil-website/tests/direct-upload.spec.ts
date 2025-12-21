@@ -231,11 +231,12 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     await expect(page.getByTestId('wallet-address')).toBeVisible()
   }
 
-  console.log('Switching to Local MDU tab...')
-  await page.getByTestId('tab-mdu').click()
-
   console.log('Selecting Deal #1...')
-  await page.getByTestId('mdu-deal-select').selectOption('1')
+  await expect(page.getByTestId('deal-row-1')).toBeVisible({ timeout: 60_000 })
+  await page.getByTestId('deal-row-1').click()
+  await page.getByTestId('upload-open').click()
+  await page.getByTestId('upload-path-mode2').click()
+  await page.getByTestId('upload-continue').click()
 
   await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 30000 })
 
@@ -267,20 +268,23 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   console.log('Upload complete.')
   await expect.poll(() => manifestUploadCalls, { timeout: 30_000 }).toBeGreaterThan(0)
 
-  // Check "Commit to Chain" button
-  const commitBtn = page.getByRole('button', { name: 'Commit to Chain' })
+  // Commit to chain (auto-queue may already be pending)
+  const commitBtn = page.getByTestId('mdu-commit')
   await expect(commitBtn).toBeVisible()
-  
-  console.log('Clicking Commit to Chain...')
-  await commitBtn.click()
+
+  console.log('Clicking Commit to Chain if needed...')
+  if (await commitBtn.isEnabled().catch(() => false)) {
+    await commitBtn.click()
+  }
 
   // Wait for "Committed!" (ensures OPFS persistence hook ran)
-  await expect(page.getByRole('button', { name: 'Committed!' })).toBeVisible({ timeout: 30000 })
+  await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 30000 })
   console.log('Commit confirmed.')
   await expect(page.getByText('Saved MDUs locally (OPFS)')).toBeVisible({ timeout: 30_000 })
 
   // Regression: after commit, Deal Explorer should show the NilFS file list (from local OPFS fallback).
-  await page.getByTestId('deal-row-1').click()
+  await page.getByRole('button', { name: 'Close drawer' }).click()
+  await page.getByTestId('deal-explore-1').click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
   await expect(fileRow).toBeVisible({ timeout: 60_000 })

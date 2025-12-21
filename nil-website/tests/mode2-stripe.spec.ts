@@ -3,6 +3,52 @@ import { test, expect } from '@playwright/test'
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
 
+async function clickDealRow(page: import('@playwright/test').Page, dealId: string) {
+  await page.waitForSelector('[data-testid="deals-table"]', { timeout: 180_000 })
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const clicked = await page.evaluate((id) => {
+      const row = document.querySelector(`[data-testid="deal-row-${id}"]`)
+      if (!row) return false
+      ;(row as HTMLElement).click()
+      return true
+    }, dealId)
+    if (clicked) return
+    await page.waitForTimeout(1000)
+  }
+  throw new Error(`Failed to open deal row ${dealId}`)
+}
+
+async function createDealAndSelect(page: import('@playwright/test').Page) {
+  await page.getByTestId('create-deal-open').click()
+  await page.getByTestId('alloc-redundancy-mode').selectOption('mode2')
+  await page.getByTestId('alloc-rs-k').fill('8')
+  await page.getByTestId('alloc-rs-m').fill('4')
+  await page.getByTestId('alloc-submit').click()
+  await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
+  await expect(page.getByTestId('selected-deal-id')).not.toHaveText('—', { timeout: 180_000 })
+  const label = await page.getByTestId('selected-deal-id').innerText()
+  const dealId = label.replace('#', '').trim()
+  expect(dealId).not.toBe('')
+  return dealId
+}
+
+async function openMode2Upload(page: import('@playwright/test').Page) {
+  const uploadDrawer = page.getByTestId('upload-drawer')
+  if (!(await uploadDrawer.isVisible().catch(() => false))) {
+    await page.getByTestId('upload-open').click()
+    await expect(uploadDrawer).toBeVisible({ timeout: 60_000 })
+  }
+  await page.getByTestId('upload-path-mode2').click()
+  await page.getByTestId('upload-continue').click()
+}
+
+async function closeUploadDrawer(page: import('@playwright/test').Page) {
+  const uploadDrawer = page.getByTestId('upload-drawer')
+  if (!(await uploadDrawer.isVisible().catch(() => false))) return
+  await uploadDrawer.getByRole('button', { name: 'Close drawer' }).click()
+  await expect(uploadDrawer).toHaveCount(0)
+}
+
 test.describe('mode2 stripe', () => {
   test.skip(!hasLocalStack, 'requires local stack')
 
@@ -13,7 +59,7 @@ test.describe('mode2 stripe', () => {
     const fileBytes = Buffer.alloc(64 * 1024, 'M') // <= one blob (128 KiB)
 
     await page.setViewportSize({ width: 1280, height: 720 })
-    await page.goto(dashboardPath, { waitUntil: 'networkidle' })
+    await page.goto(dashboardPath, { waitUntil: 'load' })
 
     await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"]', {
       timeout: 60_000,
@@ -24,32 +70,21 @@ test.describe('mode2 stripe', () => {
       await page.getByTestId('connect-wallet').first().click()
       await expect(walletAddress).toBeVisible({ timeout: 60_000 })
     }
+    await page.waitForFunction(() => {
+      const eth = (window as unknown as { ethereum?: { isNilStoreE2E?: boolean } }).ethereum
+      return Boolean(eth?.isNilStoreE2E)
+    }, null, { timeout: 60_000 })
+    await page.waitForFunction(() => {
+      const cfg = (window as unknown as { __nilstoreE2e?: { rpcUrl?: string } }).__nilstoreE2e
+      return typeof cfg?.rpcUrl === 'string' && cfg.rpcUrl.length > 0
+    }, null, { timeout: 60_000 })
 
+    await expect(page.getByTestId('cosmos-identity')).not.toHaveText(/^\\s*$/, { timeout: 60_000 })
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
-    await page.getByTestId('alloc-redundancy-mode').selectOption('mode2')
-    await page.getByTestId('alloc-rs-k').fill('8')
-    await page.getByTestId('alloc-rs-m').fill('4')
-
-    await page.getByTestId('alloc-submit').click()
-    await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
-
-    await page.getByTestId('tab-mdu').click()
-    await page.waitForFunction(() => {
-      const select = document.querySelector('[data-testid="mdu-deal-select"]') as HTMLSelectElement | null
-      return Boolean(select && select.options.length > 1)
-    }, null, { timeout: 180_000 })
-
-    const dealSelect = page.getByTestId('mdu-deal-select')
-    const options = dealSelect.locator('option')
-    const optionCount = await options.count()
-    const lastValue = await options.nth(optionCount - 1).getAttribute('value')
-    if (lastValue) {
-      await dealSelect.selectOption(lastValue)
-    }
-    const dealId = await dealSelect.inputValue()
-    expect(dealId).not.toBe('')
+    const dealId = await createDealAndSelect(page)
+    await openMode2Upload(page)
 
     await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 60_000 })
 
@@ -65,11 +100,14 @@ test.describe('mode2 stripe', () => {
     await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
 
     const commitBtn = page.getByTestId('mdu-commit')
-    await commitBtn.click()
-    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    if (await commitBtn.isEnabled().catch(() => false)) {
+      await commitBtn.click()
+    }
+    await expect(page.getByText(/Content committed/i)).toBeVisible({ timeout: 180_000 })
 
-    const dealRow = page.getByTestId(`deal-row-${dealId}`)
-    await dealRow.click()
+    await closeUploadDrawer(page)
+    await clickDealRow(page, dealId)
+    await page.getByTestId(`deal-explore-${dealId}`).click()
 
     const downloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
@@ -100,7 +138,7 @@ test.describe('mode2 stripe', () => {
     const fileB = { name: 'mode2-b.txt', buffer: Buffer.alloc(32 * 1024, 'B') }
 
     await page.setViewportSize({ width: 1280, height: 720 })
-    await page.goto(dashboardPath, { waitUntil: 'networkidle' })
+    await page.goto(dashboardPath, { waitUntil: 'load' })
 
     await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"]', {
       timeout: 60_000,
@@ -111,31 +149,21 @@ test.describe('mode2 stripe', () => {
       await page.getByTestId('connect-wallet').first().click()
       await expect(walletAddress).toBeVisible({ timeout: 60_000 })
     }
+    await page.waitForFunction(() => {
+      const eth = (window as unknown as { ethereum?: { isNilStoreE2E?: boolean } }).ethereum
+      return Boolean(eth?.isNilStoreE2E)
+    }, null, { timeout: 60_000 })
+    await page.waitForFunction(() => {
+      const cfg = (window as unknown as { __nilstoreE2e?: { rpcUrl?: string } }).__nilstoreE2e
+      return typeof cfg?.rpcUrl === 'string' && cfg.rpcUrl.length > 0
+    }, null, { timeout: 60_000 })
 
+    await expect(page.getByTestId('cosmos-identity')).not.toHaveText(/^\\s*$/, { timeout: 60_000 })
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
-    await page.getByTestId('alloc-redundancy-mode').selectOption('mode2')
-    await page.getByTestId('alloc-rs-k').fill('8')
-    await page.getByTestId('alloc-rs-m').fill('4')
-    await page.getByTestId('alloc-submit').click()
-    await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
-
-    await page.getByTestId('tab-mdu').click()
-    await page.waitForFunction(() => {
-      const select = document.querySelector('[data-testid="mdu-deal-select"]') as HTMLSelectElement | null
-      return Boolean(select && select.options.length > 1)
-    }, null, { timeout: 180_000 })
-
-    const dealSelect = page.getByTestId('mdu-deal-select')
-    const options = dealSelect.locator('option')
-    const optionCount = await options.count()
-    const lastValue = await options.nth(optionCount - 1).getAttribute('value')
-    if (lastValue) {
-      await dealSelect.selectOption(lastValue)
-    }
-    const dealId = await dealSelect.inputValue()
-    expect(dealId).not.toBe('')
+    const dealId = await createDealAndSelect(page)
+    await openMode2Upload(page)
 
     await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 60_000 })
 
@@ -149,23 +177,39 @@ test.describe('mode2 stripe', () => {
     await uploadBtn.click()
     await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
     const commitBtn = page.getByTestId('mdu-commit')
-    await commitBtn.click()
-    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    if (await commitBtn.isEnabled().catch(() => false)) {
+      await commitBtn.click()
+    }
+    await expect(page.getByText(/Content committed/i)).toBeVisible({ timeout: 180_000 })
+    const manifestAfterA = page.getByTestId(`deal-manifest-${dealId}`)
+    await expect(manifestAfterA).not.toHaveText(/Empty|—/i, { timeout: 180_000 })
+    const manifestRootA = await manifestAfterA.getAttribute('title')
+    expect(manifestRootA).toBeTruthy()
+
+    await openMode2Upload(page)
+    await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 60_000 })
 
     await page.getByTestId('mdu-file-input').setInputFiles({
       name: fileB.name,
       mimeType: 'text/plain',
       buffer: fileB.buffer,
     })
+    await expect(uploadBtn).not.toHaveText(/Upload Complete/i, { timeout: 120_000 })
     await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
     await uploadBtn.click()
     await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
-    await expect(commitBtn).toBeEnabled({ timeout: 15_000 })
-    await commitBtn.click()
-    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    const commitBtnAfter = page.getByTestId('mdu-commit')
+    if (await commitBtnAfter.isEnabled().catch(() => false)) {
+      await commitBtnAfter.click()
+    }
+    if (manifestRootA) {
+      await expect(page.getByTestId(`deal-manifest-${dealId}`)).not.toHaveAttribute('title', manifestRootA, { timeout: 180_000 })
+    }
+    await expect(page.getByText(/Content committed/i)).toBeVisible({ timeout: 180_000 })
 
-    const dealRow = page.getByTestId(`deal-row-${dealId}`)
-    await dealRow.click()
+    await closeUploadDrawer(page)
+    await clickDealRow(page, dealId)
+    await page.getByTestId(`deal-explore-${dealId}`).click()
     await expect(page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${fileA.name}"]`)).toBeVisible({
       timeout: 60_000,
     })

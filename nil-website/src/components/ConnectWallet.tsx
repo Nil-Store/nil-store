@@ -5,6 +5,7 @@ import { appConfig } from '../config'
 import { injectedConnector } from '../lib/web3Config'
 import { useNetwork } from '../hooks/useNetwork'
 import { formatUnits } from 'viem'
+import { normalizeWalletError } from '../lib/wallet'
 
 export function ConnectWallet({ className = '' }: { className?: string }) {
   const { address, isConnected } = useAccount()
@@ -43,7 +44,7 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
       await connectAsync({ connector: injectedConnector })
       await switchNetwork().catch(() => undefined)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e) || 'Failed to connect wallet')
+      setError(normalizeWalletError(e))
     }
   }
 
@@ -52,7 +53,7 @@ export function ConnectWallet({ className = '' }: { className?: string }) {
     try {
       await switchNetwork()
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e) || 'Failed to switch network')
+      setError(normalizeWalletError(e))
     }
   }
 

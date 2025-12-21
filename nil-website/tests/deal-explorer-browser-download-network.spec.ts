@@ -310,7 +310,7 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
     await w.close()
   }, { dealId, manifestRoot })
 
-  await page.getByTestId(`deal-row-${dealId}`).click()
+  await page.getByTestId(`deal-explore-${dealId}`).click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
   await expect.poll(() => listFilesCalls, { timeout: 60_000 }).toBeGreaterThan(0)
 

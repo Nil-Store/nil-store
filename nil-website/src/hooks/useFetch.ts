@@ -17,12 +17,14 @@ import { fetchGatewayP2pAddrs } from '../lib/gatewayStatus'
 import { multiaddrToP2pTarget, type P2pTarget } from '../lib/multiaddr'
 import { useTransportRouter } from './useTransportRouter'
 import type { RoutePreference } from '../lib/transport/types'
+import { walletRequest } from '../lib/wallet'
 
 export interface FetchInput {
   dealId: string
   manifestRoot: string
   owner: string
   filePath: string
+  preference?: RoutePreference
   /**
    * Base URL for the service hosting `/gateway/*` retrieval endpoints.
    * Defaults to `appConfig.gatewayBase`.
@@ -121,11 +123,6 @@ export function useFetch() {
 
     try {
       if (!address) throw new Error('Connect a wallet to submit retrieval proofs')
-      const ethereum = window.ethereum
-      if (!ethereum || typeof ethereum.request !== 'function') {
-        throw new Error('Ethereum provider (MetaMask) not available')
-      }
-
       const dealId = normalizeDealId(input.dealId)
       const owner = String(input.owner ?? '').trim()
       if (!owner) throw new Error('owner is required')
@@ -170,10 +167,11 @@ export function useFetch() {
       }
 
       const serviceOverride = String(input.serviceBase ?? '').trim().replace(/\/$/, '')
+      const requestedPreference = input.preference ?? transport.preference
       const preferenceOverride: RoutePreference | undefined =
-        serviceOverride && serviceOverride !== appConfig.gatewayBase && transport.preference !== 'prefer_p2p'
+        serviceOverride && serviceOverride !== appConfig.gatewayBase && requestedPreference !== 'prefer_p2p'
           ? 'prefer_direct_sp'
-          : undefined
+          : requestedPreference
       const directEndpoint = await resolveProviderEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const p2pEndpoint = await resolveProviderP2pEndpoint(appConfig.lcdBase, dealId).catch(() => null)
       const directBase = serviceOverride || directEndpoint?.baseUrl || appConfig.spBase
@@ -219,10 +217,10 @@ export function useFetch() {
         functionName: 'openRetrievalSession',
         args: [BigInt(dealId), provider, manifestRoot, startMduIndex, startBlobIndex, blobCount, openNonce, openExpiresAt],
       })
-      const openTxHash = (await ethereum.request({
+      const openTxHash = await walletRequest<Hex>({
         method: 'eth_sendTransaction',
         params: [{ from: address, to: appConfig.nilstorePrecompile, data: openTxData, gas: numberToHex(5_000_000) }],
-      })) as Hex
+      })
 
       const openReceipt = await waitForTransactionReceipt(openTxHash)
       let sessionId: Hex | null = null
@@ -265,6 +263,17 @@ export function useFetch() {
         providerP2pEndpoint?.target ||
         (p2pEndpoint && p2pEndpoint.provider === provider ? p2pEndpoint.target : undefined) ||
         gatewayP2pTarget
+      let effectiveP2pTarget = fetchP2pTarget
+      if (!effectiveP2pTarget && appConfig.p2pEnabled && !appConfig.gatewayDisabled) {
+        const addrs = await fetchGatewayP2pAddrs(appConfig.gatewayBase)
+        for (const addr of addrs) {
+          const target = multiaddrToP2pTarget(addr)
+          if (target) {
+            effectiveP2pTarget = target
+            break
+          }
+        }
+      }
       const fetchDirectBase =
         providerEndpoint?.baseUrl ||
         (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||
@@ -288,7 +297,7 @@ export function useFetch() {
           sessionId,
           expectedProvider: provider,
           directBase: fetchDirectBase,
-          p2pTarget: fetchP2pTarget,
+          p2pTarget: effectiveP2pTarget,
           preference: preferenceOverride,
         })
 
@@ -322,10 +331,10 @@ export function useFetch() {
           functionName: 'confirmRetrievalSession',
           args: [sessionId],
         })
-        const confirmTxHash = (await ethereum.request({
+        const confirmTxHash = await walletRequest<Hex>({
           method: 'eth_sendTransaction',
           params: [{ from: address, to: appConfig.nilstorePrecompile, data: confirmTxData, gas: numberToHex(2_000_000) }],
-        })) as Hex
+        })
         await waitForTransactionReceipt(confirmTxHash)
 
         setProgress((p) => ({ ...p, phase: 'submitting_proof_request', receiptsSubmitted: 1, receiptsTotal: 2 }))

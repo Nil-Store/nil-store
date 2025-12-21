@@ -52,6 +52,17 @@ wait_for_http "gateway router" "http://localhost:8080/gateway/upload" "200,405" 
 wait_for_http "provider #1" "http://localhost:8091/gateway/upload" "200,405" 60 1
 wait_for_http "web" "http://localhost:5173/" "200" 90 1
 
+echo "==> Waiting for EVM RPC at http://localhost:8545 ..."
+for attempt in $(seq 1 60); do
+  if curl -s --max-time 2 -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' \
+    http://localhost:8545 >/dev/null; then
+    echo "    evm rpc reachable after $attempt attempt(s)."
+    break
+  fi
+  sleep 1
+done
+
 echo "==> Running Playwright (Mode 2 StripeReplica)..."
 if [ "${PLAYWRIGHT_SKIP_INSTALL:-0}" != "1" ]; then
   (cd "$ROOT_DIR/nil-website" && npx playwright install --with-deps chromium)

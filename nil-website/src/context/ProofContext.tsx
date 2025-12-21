@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import { appConfig } from '../config';
 
 interface Proof {
   id: string;
@@ -23,7 +24,7 @@ export const ProofProvider = ({ children }: { children: ReactNode }) => {
 
   // Fetch real proofs from chain
   useEffect(() => {
-    const API_URL = "http://localhost:1317/nilchain/nilchain/v1/proofs";
+    const API_URL = `${appConfig.lcdBase}/nilchain/nilchain/v1/proofs`;
     fetch(API_URL)
       .then(res => res.json())
       .then(data => {
@@ -37,8 +38,7 @@ export const ProofProvider = ({ children }: { children: ReactNode }) => {
         }
         setLoading(false);
       })
-      .catch(err => {
-        console.error("Failed to fetch proofs", err);
+      .catch(() => {
         setLoading(false);
       });
   }, []);
