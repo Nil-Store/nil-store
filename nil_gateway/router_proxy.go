@@ -355,5 +355,8 @@ func RouterGatewaySubmitRetrievalSessionProof(w http.ResponseWriter, r *http.Req
 }
 
 func isGatewayRouterMode() bool {
-	return strings.TrimSpace(os.Getenv("NIL_GATEWAY_ROUTER")) == "1"
+	if strings.TrimSpace(os.Getenv("NIL_GATEWAY_ROUTER")) == "1" {
+		return true
+	}
+	return strings.TrimSpace(os.Getenv("NIL_GATEWAY_ROUTER_MODE")) == "1"
 }

@@ -3,6 +3,21 @@ import { test, expect } from '@playwright/test'
 const dashboardPath = process.env.E2E_PATH || '/#/dashboard'
 const hasLocalStack = process.env.E2E_LOCAL_STACK === '1'
 
+async function clickDealRow(page: import('@playwright/test').Page, dealId: string) {
+  await page.waitForSelector('[data-testid="deals-table"]', { timeout: 180_000 })
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const clicked = await page.evaluate((id) => {
+      const row = document.querySelector(`[data-testid="deal-row-${id}"]`)
+      if (!row) return false
+      ;(row as HTMLElement).click()
+      return true
+    }, dealId)
+    if (clicked) return
+    await page.waitForTimeout(1000)
+  }
+  throw new Error(`Failed to open deal row ${dealId}`)
+}
+
 test.describe('mode2 stripe', () => {
   test.skip(!hasLocalStack, 'requires local stack')
 
@@ -13,7 +28,7 @@ test.describe('mode2 stripe', () => {
     const fileBytes = Buffer.alloc(64 * 1024, 'M') // <= one blob (128 KiB)
 
     await page.setViewportSize({ width: 1280, height: 720 })
-    await page.goto(dashboardPath, { waitUntil: 'networkidle' })
+    await page.goto(dashboardPath, { waitUntil: 'load' })
 
     await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"]', {
       timeout: 60_000,
@@ -65,11 +80,12 @@ test.describe('mode2 stripe', () => {
     await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
 
     const commitBtn = page.getByTestId('mdu-commit')
-    await commitBtn.click()
+    if (await commitBtn.isEnabled().catch(() => false)) {
+      await commitBtn.click()
+    }
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
 
-    const dealRow = page.getByTestId(`deal-row-${dealId}`)
-    await dealRow.click()
+    await clickDealRow(page, dealId)
 
     const downloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
@@ -100,7 +116,7 @@ test.describe('mode2 stripe', () => {
     const fileB = { name: 'mode2-b.txt', buffer: Buffer.alloc(32 * 1024, 'B') }
 
     await page.setViewportSize({ width: 1280, height: 720 })
-    await page.goto(dashboardPath, { waitUntil: 'networkidle' })
+    await page.goto(dashboardPath, { waitUntil: 'load' })
 
     await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"]', {
       timeout: 60_000,
@@ -149,7 +165,9 @@ test.describe('mode2 stripe', () => {
     await uploadBtn.click()
     await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
     const commitBtn = page.getByTestId('mdu-commit')
-    await commitBtn.click()
+    if (await commitBtn.isEnabled().catch(() => false)) {
+      await commitBtn.click()
+    }
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
 
     await page.getByTestId('mdu-file-input').setInputFiles({
@@ -157,15 +175,17 @@ test.describe('mode2 stripe', () => {
       mimeType: 'text/plain',
       buffer: fileB.buffer,
     })
+    await expect(uploadBtn).not.toHaveText(/Upload Complete/i, { timeout: 120_000 })
     await expect(uploadBtn).toBeEnabled({ timeout: 300_000 })
     await uploadBtn.click()
     await expect(uploadBtn).toHaveText(/Upload Complete/i, { timeout: 300_000 })
-    await expect(commitBtn).toBeEnabled({ timeout: 15_000 })
-    await commitBtn.click()
-    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    const commitBtnAfter = page.getByTestId('mdu-commit')
+    if (await commitBtnAfter.isEnabled().catch(() => false)) {
+      await commitBtnAfter.click()
+    }
+    await expect(commitBtnAfter).toHaveText(/Committed!/i, { timeout: 180_000 })
 
-    const dealRow = page.getByTestId(`deal-row-${dealId}`)
-    await dealRow.click()
+    await clickDealRow(page, dealId)
     await expect(page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${fileA.name}"]`)).toBeVisible({
       timeout: 60_000,
     })

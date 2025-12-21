@@ -187,6 +187,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     if (lastCommitTxRef.current === commitHash) return;
     lastCommitTxRef.current = commitHash;
     lastCommitRef.current = currentManifestRoot;
+    setCommitQueueStatus('confirmed')
     onCommitSuccess?.(dealId, currentManifestRoot);
   }, [commitHash, currentManifestRoot, dealId, isCommitSuccess, onCommitSuccess]);
 
@@ -1375,10 +1376,6 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     setCommitQueueError(commitError.message)
   }, [commitError])
 
-  useEffect(() => {
-    if (!isCommitSuccess || !currentManifestRoot) return
-    setCommitQueueStatus('confirmed')
-  }, [currentManifestRoot, isCommitSuccess])
 
   return (
     <div className="w-full space-y-6">

@@ -19,7 +19,7 @@ test.describe('gateway absent', () => {
   })
 
   await page.setViewportSize({ width: 1280, height: 720 })
-  await page.goto(dashboardPath, { waitUntil: 'networkidle' })
+  await page.goto(dashboardPath, { waitUntil: 'load' })
 
   await page.waitForSelector('#root', { timeout: 60_000 })
   await page.waitForSelector('[data-testid="connect-wallet"], [data-testid="wallet-address"]', {
@@ -44,6 +44,7 @@ test.describe('gateway absent', () => {
   const stakeBalance = page.getByTestId('cosmos-stake-balance')
   await expect(stakeBalance).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 120_000 })
 
+  await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
   await page.getByTestId('alloc-submit').click()
 
   await page.getByTestId('tab-content').click()
@@ -70,6 +71,6 @@ test.describe('gateway absent', () => {
   })
 
   await expect(page.getByTestId('staged-manifest-root')).toContainText('0x', { timeout: 120_000 })
-    await expect(page.getByText(/Route: direct sp/i)).toBeVisible({ timeout: 120_000 })
+  await expect(page.getByText(/Smart path: direct sp/i)).toBeVisible({ timeout: 120_000 })
   })
 })

@@ -373,20 +373,22 @@ export function Dashboard() {
   )
   const isTargetDealMode2 = targetDealService.mode === 'mode2'
   const mode2Config = useMemo(() => {
-    if (redundancyMode !== 'mode2') return { slots: null as number | null, error: null as string | null }
+    if (redundancyMode !== 'mode2') {
+      return { slots: null as number | null, error: null as string | null, warning: null as string | null }
+    }
     const k = Number(rsK)
     const m = Number(rsM)
     if (!Number.isFinite(k) || !Number.isFinite(m) || k <= 0 || m <= 0) {
-      return { slots: null, error: 'Enter numeric K and M values.' }
+      return { slots: null, error: 'Enter numeric K and M values.', warning: null }
     }
     const slots = k + m
     if (64 % k !== 0) {
-      return { slots, error: 'K must divide 64.' }
+      return { slots, error: 'K must divide 64.', warning: null }
     }
     if (providerCount > 0 && slots > providerCount) {
-      return { slots, error: `Need ${slots} providers (K+M); only ${providerCount} available.` }
+      return { slots, error: null, warning: `Need ${slots} providers (K+M); only ${providerCount} available.` }
     }
-    return { slots, error: null }
+    return { slots, error: null, warning: null }
   }, [providerCount, redundancyMode, rsK, rsM])
 
   const providerEndpointsByAddr = useMemo(() => {
@@ -518,7 +520,7 @@ export function Dashboard() {
   }, [nilAddress, resolveProviderBase, resolveProviderP2pTarget, targetDeal, targetDeal?.cid, targetDealId, listFiles, slab])
 
   const fetchDeals = useCallback(async (owner?: string): Promise<Deal[]> => {
-    if (!canAttempt(lcdBackoffRef.current)) return deals
+    if (!canAttempt(lcdBackoffRef.current)) return []
     setLoading(true)
     try {
         const all = await lcdFetchDeals(appConfig.lcdBase)
@@ -535,8 +537,8 @@ export function Dashboard() {
     } finally {
         setLoading(false)
     }
-    return deals
-  }, [deals, noteLcdFailure, noteLcdSuccess])
+    return []
+  }, [noteLcdFailure, noteLcdSuccess])
 
   const [bankBalances, setBankBalances] = useState<{ atom?: string; stake?: string }>({})
   const { data: evmBalance, refetch: refetchEvm } = useBalance({
@@ -872,10 +874,21 @@ export function Dashboard() {
   async function refreshDealsAfterContentCommit(owner: string, dealId: string, expectedCid: string) {
     const maxAttempts = 20
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const list = await fetchDeals(owner)
-      const found = list.find((d) => d.id === dealId)
-      if (found && String(found.cid || '').trim() === expectedCid) {
-        return
+      try {
+        const all = await lcdFetchDeals(appConfig.lcdBase)
+        let filtered = owner ? all.filter((d) => d.owner === owner) : all
+        if (owner && filtered.length === 0 && all.length > 0) {
+          filtered = all
+        }
+        noteLcdSuccess()
+        const found = filtered.find((d) => String(d.id) === String(dealId))
+        if (found && String(found.cid || '').trim() === expectedCid) {
+          setAllDeals(all)
+          setDeals(filtered)
+          return
+        }
+      } catch (e) {
+        noteLcdFailure(e, 'Failed to refresh deals after commit')
       }
       await new Promise((resolve) => setTimeout(resolve, 1000))
     }
@@ -900,7 +913,21 @@ export function Dashboard() {
 
   const handleMduCommitSuccess = (dealId: string, manifestRoot: string) => {
     if (!nilAddress) return
-    refreshDealsAfterContentCommit(nilAddress, dealId, manifestRoot)
+    const normalized = manifestRoot.trim()
+    setDeals((prev) =>
+      prev.map((deal) =>
+        String(deal.id) === String(dealId) ? { ...deal, cid: normalized } : deal,
+      ),
+    )
+    setAllDeals((prev) =>
+      prev.map((deal) =>
+        String(deal.id) === String(dealId) ? { ...deal, cid: normalized } : deal,
+      ),
+    )
+    setSelectedDeal((prev) =>
+      prev && String(prev.id) === String(dealId) ? { ...prev, cid: normalized } : prev,
+    )
+    refreshDealsAfterContentCommit(nilAddress, dealId, normalized)
   }
 
   useEffect(() => {
@@ -1053,7 +1080,9 @@ export function Dashboard() {
           )}
 
           <div className="text-sm text-muted-foreground space-y-3">
-            <div className="font-mono text-primary break-all">Address: {address || nilAddress}</div>
+            <div className="font-mono text-primary break-all">
+              Address: {address || nilAddress}
+            </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="bg-secondary/50 border border-border rounded p-2">
                 <div className="text-muted-foreground uppercase tracking-wide">EVM (NIL)</div>
@@ -1268,6 +1297,11 @@ export function Dashboard() {
                             <span className="font-mono text-foreground">{providerCount || '—'}</span>
                             {mode2Config.error && (
                               <div className="text-[11px] text-red-500 mt-1">{mode2Config.error}</div>
+                            )}
+                            {mode2Config.warning && (
+                              <div className="text-[11px] text-yellow-600 dark:text-yellow-400 mt-1">
+                                {mode2Config.warning}
+                              </div>
                             )}
                           </div>
                         )}
@@ -1634,10 +1668,10 @@ export function Dashboard() {
       </div>
         </div>
         <div className="lg:flex-[1] lg:order-1">
-          {loading ? (
+          {loading && deals.length === 0 ? (
             <div className="text-center py-24">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-muted-foreground">Syncing with NilChain...</p>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Syncing with NilChain...</p>
             </div>
           ) : deals.length === 0 ? (
             <div className="bg-card rounded-xl p-10 text-center border border-border border-dashed shadow-sm">
@@ -1730,6 +1764,9 @@ export function Dashboard() {
                   </tbody>
               </table>
             </div>
+          )}
+          {loading && deals.length > 0 && (
+            <div className="mt-3 text-center text-xs text-muted-foreground">Syncing with NilChain...</div>
           )}
         </div>
       </div>
