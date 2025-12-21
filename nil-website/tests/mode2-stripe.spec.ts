@@ -33,9 +33,20 @@ async function createDealAndSelect(page: import('@playwright/test').Page) {
 }
 
 async function openMode2Upload(page: import('@playwright/test').Page) {
-  await page.getByTestId('upload-open').click()
+  const uploadDrawer = page.getByTestId('upload-drawer')
+  if (!(await uploadDrawer.isVisible().catch(() => false))) {
+    await page.getByTestId('upload-open').click()
+    await expect(uploadDrawer).toBeVisible({ timeout: 60_000 })
+  }
   await page.getByTestId('upload-path-mode2').click()
   await page.getByTestId('upload-continue').click()
+}
+
+async function closeUploadDrawer(page: import('@playwright/test').Page) {
+  const uploadDrawer = page.getByTestId('upload-drawer')
+  if (!(await uploadDrawer.isVisible().catch(() => false))) return
+  await uploadDrawer.getByRole('button', { name: 'Close drawer' }).click()
+  await expect(uploadDrawer).toHaveCount(0)
 }
 
 test.describe('mode2 stripe', () => {
@@ -59,7 +70,16 @@ test.describe('mode2 stripe', () => {
       await page.getByTestId('connect-wallet').first().click()
       await expect(walletAddress).toBeVisible({ timeout: 60_000 })
     }
+    await page.waitForFunction(() => {
+      const eth = (window as unknown as { ethereum?: { isNilStoreE2E?: boolean } }).ethereum
+      return Boolean(eth?.isNilStoreE2E)
+    }, null, { timeout: 60_000 })
+    await page.waitForFunction(() => {
+      const cfg = (window as unknown as { __nilstoreE2e?: { rpcUrl?: string } }).__nilstoreE2e
+      return typeof cfg?.rpcUrl === 'string' && cfg.rpcUrl.length > 0
+    }, null, { timeout: 60_000 })
 
+    await expect(page.getByTestId('cosmos-identity')).not.toHaveText(/^\\s*$/, { timeout: 60_000 })
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
@@ -83,8 +103,9 @@ test.describe('mode2 stripe', () => {
     if (await commitBtn.isEnabled().catch(() => false)) {
       await commitBtn.click()
     }
-    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    await expect(page.getByText(/Content committed/i)).toBeVisible({ timeout: 180_000 })
 
+    await closeUploadDrawer(page)
     await clickDealRow(page, dealId)
     await page.getByTestId(`deal-explore-${dealId}`).click()
 
@@ -128,7 +149,16 @@ test.describe('mode2 stripe', () => {
       await page.getByTestId('connect-wallet').first().click()
       await expect(walletAddress).toBeVisible({ timeout: 60_000 })
     }
+    await page.waitForFunction(() => {
+      const eth = (window as unknown as { ethereum?: { isNilStoreE2E?: boolean } }).ethereum
+      return Boolean(eth?.isNilStoreE2E)
+    }, null, { timeout: 60_000 })
+    await page.waitForFunction(() => {
+      const cfg = (window as unknown as { __nilstoreE2e?: { rpcUrl?: string } }).__nilstoreE2e
+      return typeof cfg?.rpcUrl === 'string' && cfg.rpcUrl.length > 0
+    }, null, { timeout: 60_000 })
 
+    await expect(page.getByTestId('cosmos-identity')).not.toHaveText(/^\\s*$/, { timeout: 60_000 })
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
@@ -150,7 +180,14 @@ test.describe('mode2 stripe', () => {
     if (await commitBtn.isEnabled().catch(() => false)) {
       await commitBtn.click()
     }
-    await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
+    await expect(page.getByText(/Content committed/i)).toBeVisible({ timeout: 180_000 })
+    const manifestAfterA = page.getByTestId(`deal-manifest-${dealId}`)
+    await expect(manifestAfterA).not.toHaveText(/Empty|—/i, { timeout: 180_000 })
+    const manifestRootA = await manifestAfterA.getAttribute('title')
+    expect(manifestRootA).toBeTruthy()
+
+    await openMode2Upload(page)
+    await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 60_000 })
 
     await page.getByTestId('mdu-file-input').setInputFiles({
       name: fileB.name,
@@ -165,8 +202,12 @@ test.describe('mode2 stripe', () => {
     if (await commitBtnAfter.isEnabled().catch(() => false)) {
       await commitBtnAfter.click()
     }
-    await expect(commitBtnAfter).toHaveText(/Committed!/i, { timeout: 180_000 })
+    if (manifestRootA) {
+      await expect(page.getByTestId(`deal-manifest-${dealId}`)).not.toHaveAttribute('title', manifestRootA, { timeout: 180_000 })
+    }
+    await expect(page.getByText(/Content committed/i)).toBeVisible({ timeout: 180_000 })
 
+    await closeUploadDrawer(page)
     await clickDealRow(page, dealId)
     await page.getByTestId(`deal-explore-${dealId}`).click()
     await expect(page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${fileA.name}"]`)).toBeVisible({

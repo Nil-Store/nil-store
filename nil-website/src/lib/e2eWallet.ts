@@ -17,8 +17,9 @@ export function installE2eWallet() {
   if (typeof window === 'undefined') return
   if (import.meta.env.VITE_E2E !== '1') return
 
-  if (window.ethereum) return
+  if (window.ethereum && typeof window.ethereum.request === 'function') return
 
+  const rpcUrl = (import.meta.env.VITE_EVM_RPC || appConfig.evmRpc) as string
   const privKey = (import.meta.env.VITE_E2E_PK || DEFAULT_E2E_PK) as Hex
   const account = privateKeyToAccount(privKey)
   const chainIdHex = numberToHex(appConfig.chainId)
@@ -26,9 +27,17 @@ export function installE2eWallet() {
     id: appConfig.chainId,
     name: 'NilChain E2E',
     nativeCurrency: { name: 'atom', symbol: 'atom', decimals: 18 },
-    rpcUrls: { default: { http: [appConfig.evmRpc] } },
+    rpcUrls: { default: { http: [rpcUrl] } },
   }
-  const walletClient = createWalletClient({ account, chain, transport: http(appConfig.evmRpc) })
+  const walletClient = createWalletClient({
+    account,
+    chain,
+    transport: http(rpcUrl, {
+      timeout: 15_000,
+      retryCount: 1,
+      retryDelay: 200,
+    }),
+  })
 
   const listeners = new Map<string, Set<Listener>>()
   const on = (event: string, listener: Listener) => {
@@ -118,6 +127,8 @@ export function installE2eWallet() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any // Cast to any to bypass exact shape check if needed, or better, match interface.
   // I'll cast to any for assignment to allow extra props like isNilStoreE2E without modifying vite-env again.
+
+  ;(window as unknown as { __nilstoreE2e?: { rpcUrl: string } }).__nilstoreE2e = { rpcUrl }
 
   const announceProvider = () => {
     window.dispatchEvent(
