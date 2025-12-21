@@ -80,7 +80,7 @@ func TestMode2ArtifactsV1_FixtureHashes(t *testing.T) {
 	const dealID = uint64(7)
 	serviceHint := "General:replicas=12:rs=8+4"
 
-	res, finalDir, err := mode2BuildArtifacts(t.Context(), tmp, dealID, serviceHint, "fixture.bin")
+	res, finalDir, err := mode2BuildArtifacts(t.Context(), tmp, dealID, serviceHint, "fixture.bin", 1)
 	if err != nil {
 		t.Fatalf("mode2BuildArtifacts failed: %v", err)
 	}
@@ -105,4 +105,3 @@ func TestMode2ArtifactsV1_FixtureHashes(t *testing.T) {
 		}
 	}
 }
-
