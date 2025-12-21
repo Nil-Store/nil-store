@@ -125,6 +125,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const etaLastRawMsRef = useRef<number | null>(null);
   const lastCommitRef = useRef<string | null>(null);
   const lastCommitTxRef = useRef<string | null>(null);
+  const lastCommitNotifyTxRef = useRef<string | null>(null);
 
   // Use the direct upload hook
   const { uploadProgress, isUploading, uploadMdus, reset: resetUpload } = useDirectUpload({
@@ -188,13 +189,168 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     lastCommitTxRef.current = commitHash;
     lastCommitRef.current = currentManifestRoot;
     setCommitQueueStatus('confirmed')
-    onCommitSuccess?.(dealId, currentManifestRoot);
   }, [commitHash, currentManifestRoot, dealId, isCommitSuccess, onCommitSuccess]);
 
   useEffect(() => {
     setCommitQueueStatus('idle')
     setCommitQueueError(null)
   }, [currentManifestRoot, dealId])
+
+  const mirrorSlabToGateway = useCallback(
+    async (opts: { requireRouter?: boolean } = {}): Promise<boolean> => {
+      const manifestRoot = String(currentManifestRoot || '').trim()
+      if (!manifestRoot) return false
+      if (!currentManifestBlob || currentManifestBlob.byteLength === 0) return false
+      if (!collectedMdus || collectedMdus.length === 0) return false
+
+      const gatewayBase = appConfig.gatewayBase.replace(/\/$/, '')
+      const spBase = appConfig.spBase.replace(/\/$/, '')
+      if (!gatewayBase || gatewayBase === spBase) return false
+      if (appConfig.gatewayDisabled) {
+        setMirrorStatus('skipped')
+        setMirrorError('Gateway disabled')
+        addLog('> Gateway mirror skipped (disabled).')
+        return false
+      }
+
+      setMirrorStatus('running')
+      setMirrorError(null)
+      addLog(`> Mirroring slab to local gateway (${gatewayBase})...`)
+
+      try {
+        let mirrorMduPath = '/sp/upload_mdu'
+        let mirrorShardPath = '/sp/upload_shard'
+        let mirrorManifestPath = '/sp/upload_manifest'
+
+        const statusRes = await fetch(`${gatewayBase}/status`, { method: 'GET', signal: AbortSignal.timeout(2500) })
+        if (statusRes.ok) {
+          const payload = await statusRes.json().catch(() => null)
+          if (payload && typeof payload === 'object' && payload.mode === 'router') {
+            mirrorMduPath = '/gateway/mirror_mdu'
+            mirrorShardPath = '/gateway/mirror_shard'
+            mirrorManifestPath = '/gateway/mirror_manifest'
+            addLog('> Gateway router detected; using mirror endpoints.')
+          } else if (opts.requireRouter) {
+            setMirrorStatus('skipped')
+            setMirrorError('Gateway is not in router mode')
+            addLog('> Gateway mirror skipped (not router mode).')
+            return false
+          }
+        } else if (statusRes.status !== 404) {
+          setMirrorStatus('skipped')
+          setMirrorError(`Gateway unavailable (${statusRes.status})`)
+          addLog('> Gateway not reachable; mirror skipped.')
+          return false
+        } else {
+          const health = await fetch(`${gatewayBase}/health`, { method: 'GET', signal: AbortSignal.timeout(2500) })
+          if (!health.ok) {
+            setMirrorStatus('skipped')
+            setMirrorError(`Gateway unavailable (${health.status})`)
+            addLog('> Gateway not reachable; mirror skipped.')
+            return false
+          }
+          if (opts.requireRouter) {
+            setMirrorStatus('skipped')
+            setMirrorError('Gateway router endpoint missing')
+            addLog('> Gateway mirror skipped (router endpoint missing).')
+            return false
+          }
+        }
+
+        const witnessCount = shardProgress.totalWitnessMdus
+        const metadataMdus = isMode2 ? collectedMdus.filter((mdu) => mdu.index <= witnessCount) : collectedMdus
+
+        for (const mdu of metadataMdus) {
+          const res = await fetch(`${gatewayBase}${mirrorMduPath}`, {
+            method: 'POST',
+            headers: {
+              'X-Nil-Deal-ID': dealId,
+              'X-Nil-Mdu-Index': String(mdu.index),
+              'X-Nil-Manifest-Root': manifestRoot,
+              'Content-Type': 'application/octet-stream',
+            },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            body: new Blob([mdu.data as any]),
+          })
+          if (!res.ok) {
+            const txt = await res.text().catch(() => '')
+            throw new Error(txt || `gateway upload_mdu failed (${res.status})`)
+          }
+        }
+
+        const manifestRes = await fetch(`${gatewayBase}${mirrorManifestPath}`, {
+          method: 'POST',
+          headers: {
+            'X-Nil-Deal-ID': dealId,
+            'X-Nil-Manifest-Root': manifestRoot,
+            'Content-Type': 'application/octet-stream',
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          body: new Blob([currentManifestBlob as any]),
+        })
+        if (!manifestRes.ok) {
+          const txt = await manifestRes.text().catch(() => '')
+          throw new Error(txt || `gateway upload_manifest failed (${manifestRes.status})`)
+        }
+
+        if (isMode2 && mode2Shards.length > 0) {
+          for (const mdu of mode2Shards) {
+            const slabIndex = 1 + witnessCount + mdu.index
+            for (let slot = 0; slot < mdu.shards.length; slot++) {
+              const shard = mdu.shards[slot]
+              if (!shard) {
+                throw new Error(`missing shard for slot ${slot}`)
+              }
+              const res = await fetch(`${gatewayBase}${mirrorShardPath}`, {
+                method: 'POST',
+                headers: {
+                  'X-Nil-Deal-ID': dealId,
+                  'X-Nil-Mdu-Index': String(slabIndex),
+                  'X-Nil-Slot': String(slot),
+                  'X-Nil-Manifest-Root': manifestRoot,
+                  'Content-Type': 'application/octet-stream',
+                },
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                body: new Blob([shard as any]),
+              })
+              if (!res.ok) {
+                const txt = await res.text().catch(() => '')
+                throw new Error(txt || `gateway upload_shard failed (${res.status})`)
+              }
+            }
+          }
+        }
+
+        setMirrorStatus('success')
+        setMirrorError(null)
+        addLog('> Mirrored slab to local gateway.')
+        return true
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e)
+        const isNetwork = /Failed to fetch|NetworkError|fetch failed/i.test(msg)
+        if (isNetwork) {
+          setMirrorStatus('skipped')
+          setMirrorError('Gateway not reachable')
+          addLog('> Gateway not reachable; mirror skipped.')
+          return false
+        }
+        setMirrorStatus('error')
+        setMirrorError(msg)
+        addLog(`> Gateway mirror failed: ${msg}`)
+        return false
+      }
+    },
+    [
+      addLog,
+      collectedMdus,
+      currentManifestBlob,
+      currentManifestRoot,
+      dealId,
+      isMode2,
+      mode2Shards,
+      shardProgress.totalWitnessMdus,
+    ],
+  )
 
   const uploadMode2 = useCallback(async () => {
     if (!currentManifestRoot || !currentManifestBlob) {
@@ -221,6 +377,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     setMode2UploadComplete(false)
 
     try {
+      // Prefer the local gateway if it is running in router mode; it will persist the slab
+      // and forward Mode 2 stripes to the right providers.
+      const mirrored = await mirrorSlabToGateway({ requireRouter: true })
+      if (mirrored) {
+        setMode2UploadComplete(true)
+        return true
+      }
+
       for (const base of bases) {
         for (const mdu of metadataMdus) {
           const res = await fetch(`${base}/sp/upload_mdu`, {
@@ -283,6 +447,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         }
       }
 
+      // Best-effort cache the slab on the local gateway (for faster retrievals and proofs).
+      void mirrorSlabToGateway()
+
       setMode2UploadComplete(true)
       return true
     } catch (e: unknown) {
@@ -292,7 +459,17 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     } finally {
       setMode2Uploading(false)
     }
-  }, [collectedMdus, currentManifestBlob, currentManifestRoot, dealId, mode2Shards, shardProgress.totalWitnessMdus, slotBases, stripeParams])
+  }, [
+    collectedMdus,
+    currentManifestBlob,
+    currentManifestRoot,
+    dealId,
+    mirrorSlabToGateway,
+    mode2Shards,
+    shardProgress.totalWitnessMdus,
+    slotBases,
+    stripeParams,
+  ])
 
   useEffect(() => {
     if (!processing) return;
@@ -432,154 +609,16 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     };
   }, [shardProgress, uiTick]);
 
-  const mirrorSlabToGateway = useCallback(async () => {
-    const manifestRoot = String(currentManifestRoot || '').trim()
-    if (!manifestRoot) return
-    if (!currentManifestBlob || currentManifestBlob.byteLength === 0) return
-    if (!collectedMdus || collectedMdus.length === 0) return
-
-    const gatewayBase = appConfig.gatewayBase.replace(/\/$/, '')
-    const spBase = appConfig.spBase.replace(/\/$/, '')
-    if (!gatewayBase || gatewayBase === spBase) return
-    if (appConfig.gatewayDisabled) {
-      setMirrorStatus('skipped')
-      setMirrorError('Gateway disabled')
-      addLog('> Gateway mirror skipped (disabled).')
-      return
-    }
-
-    setMirrorStatus('running')
-    setMirrorError(null)
-    addLog(`> Mirroring slab to local gateway (${gatewayBase})...`)
-
-    try {
-      let mirrorMduPath = '/sp/upload_mdu'
-      let mirrorShardPath = '/sp/upload_shard'
-      let mirrorManifestPath = '/sp/upload_manifest'
-
-      const statusRes = await fetch(`${gatewayBase}/status`, { method: 'GET', signal: AbortSignal.timeout(2500) })
-      if (statusRes.ok) {
-        const payload = await statusRes.json().catch(() => null)
-        if (payload && typeof payload === 'object' && payload.mode === 'router') {
-          mirrorMduPath = '/gateway/mirror_mdu'
-          mirrorShardPath = '/gateway/mirror_shard'
-          mirrorManifestPath = '/gateway/mirror_manifest'
-          addLog('> Gateway router detected; using mirror endpoints.')
-        }
-      } else if (statusRes.status !== 404) {
-        setMirrorStatus('skipped')
-        setMirrorError(`Gateway unavailable (${statusRes.status})`)
-        addLog('> Gateway not reachable; mirror skipped.')
-        return
-      } else {
-        const health = await fetch(`${gatewayBase}/health`, { method: 'GET', signal: AbortSignal.timeout(2500) })
-        if (!health.ok) {
-          setMirrorStatus('skipped')
-          setMirrorError(`Gateway unavailable (${health.status})`)
-          addLog('> Gateway not reachable; mirror skipped.')
-          return
-        }
-      }
-
-      const witnessCount = shardProgress.totalWitnessMdus
-      const metadataMdus = isMode2
-        ? collectedMdus.filter((mdu) => mdu.index <= witnessCount)
-        : collectedMdus
-
-      for (const mdu of metadataMdus) {
-        const res = await fetch(`${gatewayBase}${mirrorMduPath}`, {
-          method: 'POST',
-          headers: {
-            'X-Nil-Deal-ID': dealId,
-            'X-Nil-Mdu-Index': String(mdu.index),
-            'X-Nil-Manifest-Root': manifestRoot,
-            'Content-Type': 'application/octet-stream',
-          },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          body: new Blob([mdu.data as any]),
-        })
-        if (!res.ok) {
-          const txt = await res.text().catch(() => '')
-          throw new Error(txt || `gateway upload_mdu failed (${res.status})`)
-        }
-      }
-
-      const manifestRes = await fetch(`${gatewayBase}${mirrorManifestPath}`, {
-        method: 'POST',
-        headers: {
-          'X-Nil-Deal-ID': dealId,
-          'X-Nil-Manifest-Root': manifestRoot,
-          'Content-Type': 'application/octet-stream',
-        },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        body: new Blob([currentManifestBlob as any]),
-      })
-      if (!manifestRes.ok) {
-        const txt = await manifestRes.text().catch(() => '')
-        throw new Error(txt || `gateway upload_manifest failed (${manifestRes.status})`)
-      }
-
-      if (isMode2 && mode2Shards.length > 0) {
-        for (const mdu of mode2Shards) {
-          const slabIndex = 1 + witnessCount + mdu.index
-          for (let slot = 0; slot < mdu.shards.length; slot++) {
-            const shard = mdu.shards[slot]
-            if (!shard) {
-              throw new Error(`missing shard for slot ${slot}`)
-            }
-            const res = await fetch(`${gatewayBase}${mirrorShardPath}`, {
-              method: 'POST',
-              headers: {
-                'X-Nil-Deal-ID': dealId,
-                'X-Nil-Mdu-Index': String(slabIndex),
-                'X-Nil-Slot': String(slot),
-                'X-Nil-Manifest-Root': manifestRoot,
-                'Content-Type': 'application/octet-stream',
-              },
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              body: new Blob([shard as any]),
-            })
-            if (!res.ok) {
-              const txt = await res.text().catch(() => '')
-              throw new Error(txt || `gateway upload_shard failed (${res.status})`)
-            }
-          }
-        }
-      }
-
-      setMirrorStatus('success')
-      setMirrorError(null)
-      addLog('> Mirrored slab to local gateway.')
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      const isNetwork = /Failed to fetch|NetworkError|fetch failed/i.test(msg)
-      if (isNetwork) {
-        setMirrorStatus('skipped')
-        setMirrorError('Gateway not reachable')
-        addLog('> Gateway not reachable; mirror skipped.')
-      } else {
-        setMirrorStatus('error')
-        setMirrorError(msg)
-        addLog(`> Gateway mirror failed: ${msg}`)
-      }
-    }
-  }, [
-    addLog,
-    collectedMdus,
-    currentManifestBlob,
-    currentManifestRoot,
-    dealId,
-    isMode2,
-    mode2Shards,
-    shardProgress.totalWitnessMdus,
-  ]);
+  // mirrorSlabToGateway moved above uploadMode2 to support gateway-assisted Mode 2 uploads.
 
   useEffect(() => {
     let cancelled = false;
     const persist = async () => {
       if (!isCommitSuccess) return;
+      if (!commitHash) return;
       if (!currentManifestRoot) return;
       if (collectedMdus.length === 0) return;
+      if (lastCommitNotifyTxRef.current === commitHash) return;
 
       try {
         addLog('> Saving committed slab to OPFS...');
@@ -589,6 +628,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           await writeMdu(dealId, mdu.index, mdu.data);
         }
         addLog('> Saved MDUs locally (OPFS). Deal Explorer should show files now.');
+        lastCommitNotifyTxRef.current = commitHash;
+        onCommitSuccess?.(dealId, currentManifestRoot);
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         addLog(`> Failed to save MDUs locally: ${msg}`);
@@ -598,7 +639,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     return () => {
       cancelled = true;
     };
-  }, [addLog, collectedMdus, currentManifestRoot, dealId, isCommitSuccess]);
+  }, [addLog, collectedMdus, commitHash, currentManifestRoot, dealId, isCommitSuccess, onCommitSuccess]);
 
   useEffect(() => {
     // Initialize WASM in the worker
@@ -1565,7 +1606,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         <div className="flex flex-col gap-2">
             <button
               onClick={async () => {
-                const ok = isMode2 ? await uploadMode2() : await uploadMdus(collectedMdus)
+                if (isMode2) {
+                  await uploadMode2()
+                  return
+                }
+                const ok = await uploadMdus(collectedMdus)
                 if (ok) void mirrorSlabToGateway()
               }}
               disabled={activeUploading || processing || isUploadComplete}

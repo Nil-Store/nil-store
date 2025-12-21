@@ -5,6 +5,16 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    proxy: {
+      '/evm': {
+        target: 'http://127.0.0.1:8545',
+        changeOrigin: true,
+        rewrite: (path) => {
+          const next = path.replace(/^\/evm/, '')
+          return next || '/'
+        },
+      },
+    },
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',

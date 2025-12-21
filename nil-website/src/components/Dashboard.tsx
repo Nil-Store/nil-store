@@ -249,7 +249,17 @@ export function Dashboard() {
       await requestFunds(address)
       if (nilAddress) {
         setStatusMsg('Faucet requested. Waiting for balance...')
-        await fetchBalances(nilAddress)
+        const startedAt = Date.now()
+        const timeoutMs = 120_000
+        while (Date.now() - startedAt < timeoutMs) {
+          const next = await fetchBalances(nilAddress)
+          const stake = Number(next?.stake ?? 0)
+          const atom = Number(next?.atom ?? 0)
+          if ((Number.isFinite(stake) && stake > 0) || (Number.isFinite(atom) && atom > 0)) {
+            break
+          }
+          await new Promise((resolve) => setTimeout(resolve, 3000))
+        }
       }
       refetchEvm?.()
     } catch {
@@ -308,6 +318,23 @@ export function Dashboard() {
       setStatusMsg(e instanceof Error ? e.message : 'Deal allocation failed.')
     }
   }
+
+  const handleMode2CommitSuccess = useCallback(
+    async (committedDealId: string) => {
+      if (!nilAddress) return
+      try {
+        await fetchDeals(nilAddress)
+        setStatusTone('success')
+        setStatusMsg(`Content committed (Deal #${committedDealId}).`)
+      } catch {
+        // Best effort; DealDetail can still fall back to OPFS.
+      } finally {
+        setUploadDrawerOpen(false)
+        setUploadStep(1)
+      }
+    },
+    [fetchDeals, nilAddress],
+  )
 
   const handleLegacyGatewayFileChange = async (file: File | null) => {
     if (!file) return
@@ -808,7 +835,7 @@ export function Dashboard() {
             <div className="text-xs text-muted-foreground">
               Deal selected: <span className="font-mono text-foreground">{selectedDealLabel}</span>
             </div>
-            <FileSharder dealId={selectedDealId} />
+            <FileSharder dealId={selectedDealId} onCommitSuccess={(dealId) => void handleMode2CommitSuccess(dealId)} />
           </div>
         ) : (
           <div className="space-y-4">

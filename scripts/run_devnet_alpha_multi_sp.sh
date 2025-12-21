@@ -380,6 +380,7 @@ start_web() {
     if [ ! -d node_modules ]; then npm install >/dev/null; fi
     VITE_COSMOS_CHAIN_ID="$CHAIN_ID" \
     VITE_CHAIN_ID="$EVM_CHAIN_ID" \
+    VITE_EVM_RPC="${VITE_EVM_RPC:-/evm}" \
     VITE_NILSTORE_PRECOMPILE="${VITE_NILSTORE_PRECOMPILE:-0x0000000000000000000000000000000000000900}" \
     nohup npm run dev -- --host 0.0.0.0 --port 5173 >"$LOG_DIR/website.log" 2>&1 &
     echo $! >"$PID_DIR/website.pid"
