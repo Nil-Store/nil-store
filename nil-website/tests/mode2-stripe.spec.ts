@@ -18,6 +18,26 @@ async function clickDealRow(page: import('@playwright/test').Page, dealId: strin
   throw new Error(`Failed to open deal row ${dealId}`)
 }
 
+async function createDealAndSelect(page: import('@playwright/test').Page) {
+  await page.getByTestId('create-deal-open').click()
+  await page.getByTestId('alloc-redundancy-mode').selectOption('mode2')
+  await page.getByTestId('alloc-rs-k').fill('8')
+  await page.getByTestId('alloc-rs-m').fill('4')
+  await page.getByTestId('alloc-submit').click()
+  await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
+  await expect(page.getByTestId('selected-deal-id')).not.toHaveText('—', { timeout: 180_000 })
+  const label = await page.getByTestId('selected-deal-id').innerText()
+  const dealId = label.replace('#', '').trim()
+  expect(dealId).not.toBe('')
+  return dealId
+}
+
+async function openMode2Upload(page: import('@playwright/test').Page) {
+  await page.getByTestId('upload-open').click()
+  await page.getByTestId('upload-path-mode2').click()
+  await page.getByTestId('upload-continue').click()
+}
+
 test.describe('mode2 stripe', () => {
   test.skip(!hasLocalStack, 'requires local stack')
 
@@ -43,28 +63,8 @@ test.describe('mode2 stripe', () => {
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
-    await page.getByTestId('alloc-redundancy-mode').selectOption('mode2')
-    await page.getByTestId('alloc-rs-k').fill('8')
-    await page.getByTestId('alloc-rs-m').fill('4')
-
-    await page.getByTestId('alloc-submit').click()
-    await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
-
-    await page.getByTestId('tab-mdu').click()
-    await page.waitForFunction(() => {
-      const select = document.querySelector('[data-testid="mdu-deal-select"]') as HTMLSelectElement | null
-      return Boolean(select && select.options.length > 1)
-    }, null, { timeout: 180_000 })
-
-    const dealSelect = page.getByTestId('mdu-deal-select')
-    const options = dealSelect.locator('option')
-    const optionCount = await options.count()
-    const lastValue = await options.nth(optionCount - 1).getAttribute('value')
-    if (lastValue) {
-      await dealSelect.selectOption(lastValue)
-    }
-    const dealId = await dealSelect.inputValue()
-    expect(dealId).not.toBe('')
+    const dealId = await createDealAndSelect(page)
+    await openMode2Upload(page)
 
     await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 60_000 })
 
@@ -86,6 +86,7 @@ test.describe('mode2 stripe', () => {
     await expect(commitBtn).toHaveText(/Committed!/i, { timeout: 180_000 })
 
     await clickDealRow(page, dealId)
+    await page.getByTestId(`deal-explore-${dealId}`).click()
 
     const downloadBtn = page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${filePath}"]`)
     await expect(downloadBtn).toBeEnabled({ timeout: 180_000 })
@@ -131,27 +132,8 @@ test.describe('mode2 stripe', () => {
     await page.getByTestId('faucet-request').click()
     await expect(page.getByTestId('cosmos-stake-balance')).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 180_000 })
 
-    await page.getByTestId('alloc-redundancy-mode').selectOption('mode2')
-    await page.getByTestId('alloc-rs-k').fill('8')
-    await page.getByTestId('alloc-rs-m').fill('4')
-    await page.getByTestId('alloc-submit').click()
-    await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
-
-    await page.getByTestId('tab-mdu').click()
-    await page.waitForFunction(() => {
-      const select = document.querySelector('[data-testid="mdu-deal-select"]') as HTMLSelectElement | null
-      return Boolean(select && select.options.length > 1)
-    }, null, { timeout: 180_000 })
-
-    const dealSelect = page.getByTestId('mdu-deal-select')
-    const options = dealSelect.locator('option')
-    const optionCount = await options.count()
-    const lastValue = await options.nth(optionCount - 1).getAttribute('value')
-    if (lastValue) {
-      await dealSelect.selectOption(lastValue)
-    }
-    const dealId = await dealSelect.inputValue()
-    expect(dealId).not.toBe('')
+    const dealId = await createDealAndSelect(page)
+    await openMode2Upload(page)
 
     await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 60_000 })
 
@@ -186,6 +168,7 @@ test.describe('mode2 stripe', () => {
     await expect(commitBtnAfter).toHaveText(/Committed!/i, { timeout: 180_000 })
 
     await clickDealRow(page, dealId)
+    await page.getByTestId(`deal-explore-${dealId}`).click()
     await expect(page.locator(`[data-testid="deal-detail-download-sp"][data-file-path="${fileA.name}"]`)).toBeVisible({
       timeout: 60_000,
     })

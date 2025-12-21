@@ -44,23 +44,18 @@ test.describe('gateway absent', () => {
   const stakeBalance = page.getByTestId('cosmos-stake-balance')
   await expect(stakeBalance).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 120_000 })
 
+  await page.getByTestId('create-deal-open').click()
   await page.getByTestId('alloc-redundancy-mode').selectOption('mode1')
   await page.getByTestId('alloc-submit').click()
+  await expect(page.getByText(/Capacity Allocated/i)).toBeVisible({ timeout: 180_000 })
+  await expect(page.getByTestId('selected-deal-id')).not.toHaveText('—', { timeout: 180_000 })
 
-  await page.getByTestId('tab-content').click()
-  await page.waitForFunction(() => {
-    const select = document.querySelector('[data-testid="content-deal-select"]') as HTMLSelectElement | null
-    return Boolean(select && select.options.length > 1)
-  }, null, { timeout: 120_000 })
-
-  const dealSelect = page.getByTestId('content-deal-select')
-  const currentDeal = await dealSelect.inputValue()
-  if (!currentDeal) {
-    const optionValue = await dealSelect.locator('option').nth(1).getAttribute('value')
-    if (optionValue) {
-      await dealSelect.selectOption(optionValue)
-    }
+  const uploadDrawer = page.getByTestId('upload-drawer')
+  if (!(await uploadDrawer.isVisible().catch(() => false))) {
+    await page.getByTestId('upload-open').click()
   }
+  await page.getByTestId('upload-path-gateway').click()
+  await page.getByTestId('upload-continue').click()
 
   const fileInput = page.getByTestId('content-file-input')
   await expect(fileInput).toBeEnabled({ timeout: 120_000 })

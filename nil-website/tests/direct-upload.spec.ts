@@ -231,11 +231,12 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
     await expect(page.getByTestId('wallet-address')).toBeVisible()
   }
 
-  console.log('Switching to Local MDU tab...')
-  await page.getByTestId('tab-mdu').click()
-
   console.log('Selecting Deal #1...')
-  await page.getByTestId('mdu-deal-select').selectOption('1')
+  await expect(page.getByTestId('deal-row-1')).toBeVisible({ timeout: 60_000 })
+  await page.getByTestId('deal-row-1').click()
+  await page.getByTestId('upload-open').click()
+  await page.getByTestId('upload-path-mode2').click()
+  await page.getByTestId('upload-continue').click()
 
   await expect(page.getByText('WASM: ready')).toBeVisible({ timeout: 30000 })
 
@@ -282,7 +283,8 @@ test('Thick Client: Direct Upload and Commit', async ({ page }) => {
   await expect(page.getByText('Saved MDUs locally (OPFS)')).toBeVisible({ timeout: 30_000 })
 
   // Regression: after commit, Deal Explorer should show the NilFS file list (from local OPFS fallback).
-  await page.getByTestId('deal-row-1').click()
+  await page.getByRole('button', { name: 'Close drawer' }).click()
+  await page.getByTestId('deal-explore-1').click()
   await expect(page.getByTestId('deal-detail')).toBeVisible({ timeout: 60_000 })
   const fileRow = page.locator(`[data-testid="deal-detail-file-row"][data-file-path="${filePath}"]`)
   await expect(fileRow).toBeVisible({ timeout: 60_000 })
