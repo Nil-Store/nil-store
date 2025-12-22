@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,27 @@ import (
 )
 
 var routerHTTPClient = &http.Client{}
+
+func forwardBytesToProvider(ctx context.Context, providerBaseURL string, path string, headers http.Header, body []byte) (*http.Response, []byte, error) {
+	base := strings.TrimRight(strings.TrimSpace(providerBaseURL), "/")
+	if base == "" {
+		return nil, nil, fmt.Errorf("provider base url is empty")
+	}
+	target := base + path
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header = headers.Clone()
+	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
+	resp, err := routerHTTPClient.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	out, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	return resp, out, nil
+}
 
 func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBaseURL string) {
 	setCORS(w)
@@ -84,6 +106,206 @@ func parseDealID(raw string) (uint64, error) {
 		return 0, fmt.Errorf("empty")
 	}
 	return strconv.ParseUint(raw, 10, 64)
+}
+
+func readLimitedBody(w http.ResponseWriter, r *http.Request, limit int64) ([]byte, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "failed to read body", err.Error())
+		return nil, false
+	}
+	return body, true
+}
+
+func RouterGatewayMirrorMdu(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
+	dealID, err := parseDealID(dealIDStr)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid X-Nil-Deal-ID", "")
+		return
+	}
+
+	body, ok := readLimitedBody(w, r, 10<<20)
+	if !ok {
+		return
+	}
+
+	providers, err := fetchDealProvidersFromLCD(r.Context(), dealID)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "failed to resolve providers", err.Error())
+		return
+	}
+	if len(providers) == 0 {
+		writeJSONError(w, http.StatusBadGateway, "deal has no providers", "")
+		return
+	}
+
+	headers := r.Header.Clone()
+	headers.Set("Content-Type", "application/octet-stream")
+	var firstErr error
+	for _, providerAddr := range providers {
+		baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
+		if err != nil {
+			firstErr = fmt.Errorf("resolve provider %s: %w", providerAddr, err)
+			break
+		}
+		resp, out, err := forwardBytesToProvider(
+			r.Context(),
+			baseURL,
+			"/sp/upload_mdu",
+			headers,
+			body,
+		)
+		if err != nil {
+			firstErr = fmt.Errorf("forward to %s: %w", providerAddr, err)
+			break
+		}
+		if resp.StatusCode/100 != 2 {
+			firstErr = fmt.Errorf("provider %s returned %d: %s", providerAddr, resp.StatusCode, strings.TrimSpace(string(out)))
+			break
+		}
+	}
+	if firstErr != nil {
+		writeJSONError(w, http.StatusBadGateway, "mirror_mdu failed", firstErr.Error())
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func RouterGatewayMirrorManifest(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
+	dealID, err := parseDealID(dealIDStr)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid X-Nil-Deal-ID", "")
+		return
+	}
+
+	body, ok := readLimitedBody(w, r, 512<<10)
+	if !ok {
+		return
+	}
+
+	providers, err := fetchDealProvidersFromLCD(r.Context(), dealID)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "failed to resolve providers", err.Error())
+		return
+	}
+	if len(providers) == 0 {
+		writeJSONError(w, http.StatusBadGateway, "deal has no providers", "")
+		return
+	}
+
+	headers := r.Header.Clone()
+	headers.Set("Content-Type", "application/octet-stream")
+	var firstErr error
+	for _, providerAddr := range providers {
+		baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
+		if err != nil {
+			firstErr = fmt.Errorf("resolve provider %s: %w", providerAddr, err)
+			break
+		}
+		resp, out, err := forwardBytesToProvider(
+			r.Context(),
+			baseURL,
+			"/sp/upload_manifest",
+			headers,
+			body,
+		)
+		if err != nil {
+			firstErr = fmt.Errorf("forward to %s: %w", providerAddr, err)
+			break
+		}
+		if resp.StatusCode/100 != 2 {
+			firstErr = fmt.Errorf("provider %s returned %d: %s", providerAddr, resp.StatusCode, strings.TrimSpace(string(out)))
+			break
+		}
+	}
+	if firstErr != nil {
+		writeJSONError(w, http.StatusBadGateway, "mirror_manifest failed", firstErr.Error())
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func RouterGatewayMirrorShard(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	dealIDStr := strings.TrimSpace(r.Header.Get("X-Nil-Deal-ID"))
+	dealID, err := parseDealID(dealIDStr)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid X-Nil-Deal-ID", "")
+		return
+	}
+
+	slotStr := strings.TrimSpace(r.Header.Get("X-Nil-Slot"))
+	slot, err := strconv.ParseUint(slotStr, 10, 64)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid X-Nil-Slot", "")
+		return
+	}
+
+	body, ok := readLimitedBody(w, r, 10<<20)
+	if !ok {
+		return
+	}
+
+	providers, err := fetchDealProvidersFromLCD(r.Context(), dealID)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "failed to resolve providers", err.Error())
+		return
+	}
+	if len(providers) == 0 {
+		writeJSONError(w, http.StatusBadGateway, "deal has no providers", "")
+		return
+	}
+	if slot >= uint64(len(providers)) {
+		writeJSONError(w, http.StatusBadRequest, "slot exceeds provider set", "")
+		return
+	}
+
+	providerAddr := strings.TrimSpace(providers[slot])
+	baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "failed to resolve provider endpoint", err.Error())
+		return
+	}
+
+	headers := r.Header.Clone()
+	headers.Set("Content-Type", "application/octet-stream")
+	resp, out, err := forwardBytesToProvider(
+		r.Context(),
+		baseURL,
+		"/sp/upload_shard",
+		headers,
+		body,
+	)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "mirror_shard failed", err.Error())
+		return
+	}
+	if resp.StatusCode/100 != 2 {
+		writeJSONError(w, http.StatusBadGateway, "mirror_shard failed", strings.TrimSpace(string(out)))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
