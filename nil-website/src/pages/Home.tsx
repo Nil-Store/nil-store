@@ -19,17 +19,17 @@ export const Home = () => {
              <img 
                src="/brand/logo-light-512.png"
                alt="NilStore Logo" 
-               className="w-[80vw] md:w-[60vw] max-w-[800px] object-contain transition-opacity duration-300 opacity-10 dark:opacity-0"
+               className="w-[80vw] md:w-[60vw] max-w-[800px] object-contain transition-opacity duration-300 opacity-100 dark:opacity-0"
              />
              <img 
                src="/brand/logo-dark-512.png"
                alt="NilStore Logo" 
-               className="absolute w-[80vw] md:w-[60vw] max-w-[800px] object-contain transition-opacity duration-300 opacity-0 dark:opacity-5"
+               className="absolute w-[80vw] md:w-[60vw] max-w-[800px] object-contain transition-opacity duration-300 opacity-0 dark:opacity-100"
              />
           </motion.div>
 
           {/* Text Content */}
-          <div className="relative z-10">
+          <div className="relative z-10 bg-background/70 backdrop-blur-xl border border-white/20 dark:border-white/10 p-8 md:p-12 rounded-3xl shadow-2xl max-w-4xl mx-auto">
             <motion.h1 // This is the "NilStore" text
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
