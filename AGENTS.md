@@ -558,6 +558,22 @@ This section tracks the currently active TODOs for the AI agent working in this 
 **What’s still missing for a “robust fallback”:**
 - [x] No unified routing layer that automatically switches upload/fetch between local gateway, direct‑to‑SP, and chain precompile.
 - [x] No retry policy or error classification to trigger fallback.
+
+---
+
+### 11.4 Sprint: Gateway Mode2 Append (`/gateway/upload`)
+
+**Objective:** Unblock gateway-side Mode 2 append ingest so the local gateway can be the default encoder/uploader when available (while keeping the browser Mode 2 path as the fallback).
+
+- [x] **Goal 1: Persist stable Mode 2 layout metadata (`nil_gateway`).**
+    - **Behavior:** Write `uploads/deals/<deal_id>/mode2_layout.json` on first Mode 2 ingest to keep `witness_mdus` stable across appends.
+    - **Test gate:** `go test ./...` (covered by append integration tests).
+
+- [x] **Goal 2: Implement Mode 2 append pipeline (`nil_gateway`).**
+    - **Behavior:** Load prior `mdu_0.bin`, reuse existing shards, append file record at next MDU boundary, update roots + witness MDUs, compute new `manifest_root`.
+    - **Provider contract:** Providers remain dumb pipes (`/sp/upload_*`).
+    - **Test gate:** `go test ./... -run TestGateway_Mode2_Append_PreservesExistingFiles`.
+
 - [x] No user‑visible “fallback decision” state (or manual override) for upload/retrieval flows.
 
 #### 11.3.A Delta Sprint Checklist: Gateway Fallback (Routing + Retry + UX)
