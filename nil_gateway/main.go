@@ -559,7 +559,7 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				if strings.Contains(recordPath, "/") {
 					recordPath = filepath.Base(recordPath)
 				}
-				res, err := mode2IngestAndUploadNewDeal(ingestCtx, path, dealID, serviceHint, recordPath)
+				res, err := mode2IngestAndUploadNewDeal(ingestCtx, path, dealID, serviceHint, recordPath, maxMdus)
 				if err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 						http.Error(w, err.Error(), http.StatusRequestTimeout)
@@ -570,8 +570,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				}
 				cid = res.manifestRoot.Canonical
 				allocatedLength = res.allocatedLength
+				size = res.totalSizeBytes
 				fileSize = res.fileSize
-				size = fileSize
 			} else {
 				// First upload for a thin-provisioned deal: stage a fresh NilFS slab on the
 				// assigned provider before the first content commit.
@@ -626,31 +626,66 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			if stripe.mode == 2 {
-				http.Error(w, "mode2 append via /gateway/upload is not supported yet; use browser mode2 path", http.StatusBadRequest)
-				return
-			}
-			// Append path: load existing slab by on-chain manifest root, then append.
-			if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
-				http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
-				return
-			}
-
-			b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, path, chainCID, maxMdus)
-			if err != nil {
-				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					http.Error(w, err.Error(), http.StatusRequestTimeout)
+				if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+					http.Error(w, "mode2 append requires canonical mode (disable NIL_FAKE_INGEST/NIL_FAST_INGEST)", http.StatusBadRequest)
 					return
 				}
-				http.Error(w, fmt.Sprintf("IngestAppendToDeal failed: %v", err), http.StatusInternalServerError)
-				return
-			}
-			cid = manifestRoot
-			allocatedLength = allocLen
-			if info, err := os.Stat(path); err == nil {
-				fileSize = uint64(info.Size())
-			}
-			if b != nil {
-				size = totalSizeBytesFromMdu0(b)
+
+				recordPath := strings.TrimSpace(r.FormValue("file_path"))
+				if recordPath == "" {
+					recordPath = strings.TrimSpace(header.Filename)
+				}
+				if recordPath != "" {
+					if validated, err := validateNilfsFilePath(recordPath); err == nil {
+						recordPath = validated
+					}
+				}
+				if strings.Contains(recordPath, "/") {
+					recordPath = filepath.Base(recordPath)
+				}
+
+				chainRoot, err := parseManifestRoot(chainCID)
+				if err != nil {
+					http.Error(w, "invalid deal cid", http.StatusInternalServerError)
+					return
+				}
+				res, err := mode2IngestAndUploadAppendDeal(ingestCtx, path, dealID, serviceHint, recordPath, chainRoot, maxMdus)
+				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						http.Error(w, err.Error(), http.StatusRequestTimeout)
+						return
+					}
+					http.Error(w, fmt.Sprintf("mode2 append failed: %v", err), http.StatusInternalServerError)
+					return
+				}
+				cid = res.manifestRoot.Canonical
+				allocatedLength = res.allocatedLength
+				size = res.totalSizeBytes
+				fileSize = res.fileSize
+			} else {
+				// Append path: load existing slab by on-chain manifest root, then append.
+				if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
+					http.Error(w, "append is only supported in canonical ingest mode", http.StatusBadRequest)
+					return
+				}
+
+				b, manifestRoot, allocLen, err := IngestAppendToDeal(ingestCtx, path, chainCID, maxMdus)
+				if err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						http.Error(w, err.Error(), http.StatusRequestTimeout)
+						return
+					}
+					http.Error(w, fmt.Sprintf("IngestAppendToDeal failed: %v", err), http.StatusInternalServerError)
+					return
+				}
+				cid = manifestRoot
+				allocatedLength = allocLen
+				if info, err := os.Stat(path); err == nil {
+					fileSize = uint64(info.Size())
+				}
+				if b != nil {
+					size = totalSizeBytesFromMdu0(b)
+				}
 			}
 		}
 	} else {
