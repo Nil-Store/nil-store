@@ -348,9 +348,9 @@ func main() {
 		r.HandleFunc("/gateway/receipts", RouterGatewaySubmitReceipts).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/session-receipt", RouterGatewaySubmitSessionReceipt).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/session-proof", RouterGatewaySubmitRetrievalSessionProof).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/mirror_mdu", SpUploadMdu).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/mirror_shard", SpUploadShard).Methods("POST", "OPTIONS")
-		r.HandleFunc("/gateway/mirror_manifest", SpUploadManifest).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_mdu", RouterGatewayMirrorMdu).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_shard", RouterGatewayMirrorShard).Methods("POST", "OPTIONS")
+		r.HandleFunc("/gateway/mirror_manifest", RouterGatewayMirrorManifest).Methods("POST", "OPTIONS")
 	} else {
 		r.HandleFunc("/gateway/upload", GatewayUpload).Methods("POST", "OPTIONS")
 		r.HandleFunc("/gateway/open-session/{cid}", GatewayOpenSession).Methods("POST", "OPTIONS")
