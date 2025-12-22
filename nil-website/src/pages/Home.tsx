@@ -1,14 +1,6 @@
 import { ArrowRight, Database, Shield, Activity } from "lucide-react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ReactNode } from "react";
-
-const WordWrapper = ({ children, className = "" }: { children: ReactNode, className?: string }) => (
-  <span className={`bg-background/60 backdrop-blur-md rounded-lg px-2 py-0.5 inline-block mx-1 my-0.5 ${className}`}>
-    {children}
-  </span>
-);
-
 export const Home = () => {
   return (
     <div className="pt-8 pb-12 px-4">
@@ -36,17 +28,15 @@ export const Home = () => {
           </motion.div>
 
           {/* Text Content */}
-          <div className="relative z-10 max-w-4xl mx-auto flex flex-col items-center">
+          <div className="relative z-10 max-w-4xl mx-auto flex flex-col items-center drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
               className="group text-6xl md:text-8xl font-extrabold tracking-tight mb-6"
             >
-              <span className="bg-background/60 backdrop-blur-md rounded-3xl px-6 py-2 inline-block">
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 drop-shadow-lg">
-                  NilStore
-                </span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 drop-shadow-md">
+                NilStore
               </span>
             </motion.h1>
 
@@ -56,13 +46,11 @@ export const Home = () => {
               transition={{ duration: 0.8 }}
               className="text-5xl md:text-6xl font-bold mb-6 tracking-tight text-foreground flex flex-col items-center gap-2"
             >
-              <span className="bg-background/60 backdrop-blur-md rounded-2xl px-6 py-1 inline-block">
+              <span>
                 Storage,
               </span>
-              <span className="bg-background/60 backdrop-blur-md rounded-2xl px-6 py-1 inline-block">
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600">
-                  Unsealed.
-                </span>
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-600 drop-shadow-md">
+                Unsealed.
               </span>
             </motion.h2>
 
@@ -70,20 +58,10 @@ export const Home = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4, duration: 0.8 }}
-              className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed flex flex-wrap justify-center px-4"
+              className="text-xl md:text-2xl text-slate-900 dark:text-slate-100 max-w-3xl mx-auto mb-10 leading-relaxed font-medium"
             >
-              <WordWrapper><strong className="text-purple-600 dark:text-purple-400">NilStore</strong></WordWrapper>{' '}
-              <WordWrapper>is</WordWrapper>{' '}
-              <WordWrapper>a</WordWrapper>{' '}
-              <WordWrapper><strong className="text-purple-600 dark:text-purple-400">Decentralized</strong>,</WordWrapper>{' '}
-              <WordWrapper><strong className="text-purple-600 dark:text-purple-400">Autonomous</strong></WordWrapper>{' '}
-              <WordWrapper>and</WordWrapper>{' '}
-              <WordWrapper><strong className="text-purple-600 dark:text-purple-400">Self-Governing</strong></WordWrapper>
-              <div className="basis-full h-0"></div> {/* Line break approximation for readability structure */}
-              <WordWrapper><strong className="text-purple-600 dark:text-purple-400">Storage</strong></WordWrapper>{' '}
-              <WordWrapper>and</WordWrapper>{' '}
-              <WordWrapper><strong className="text-purple-600 dark:text-purple-400">Distribution</strong></WordWrapper>{' '}
-              <WordWrapper><strong className="text-purple-600 dark:text-purple-400">Network</strong>.</WordWrapper>
+              <strong className="text-purple-600 dark:text-purple-400">NilStore</strong> is a <strong className="text-purple-600 dark:text-purple-400">Decentralized</strong>, <strong className="text-purple-600 dark:text-purple-400">Autonomous</strong> and <strong className="text-purple-600 dark:text-purple-400">Self-Governing</strong><br/>
+              <strong className="text-purple-600 dark:text-purple-400">Storage</strong> and <strong className="text-purple-600 dark:text-purple-400">Distribution</strong> <strong className="text-purple-600 dark:text-purple-400">Network</strong>.
             </motion.div>
 
             <motion.div
