@@ -158,7 +158,13 @@ export async function executeWithFallback<T>(
     attempts,
     chosen: null,
   }
-  throw new TransportTraceError(`All ${op} attempts failed`, trace)
+  const lastFailure = [...attempts].reverse().find((a) => !a.ok)
+  const suffix = lastFailure?.errorMessage
+    ? `: ${lastFailure.errorMessage}`
+    : lastFailure?.status
+      ? ` (HTTP ${lastFailure.status})`
+      : ''
+  throw new TransportTraceError(`All ${op} attempts failed${suffix}`, trace)
 }
 
 export function attachTraceError(err: unknown, trace: DecisionTrace): TransportFailure {
