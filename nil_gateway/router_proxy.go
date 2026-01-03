@@ -265,6 +265,35 @@ func RouterGatewayUpload(w http.ResponseWriter, r *http.Request) {
 	proxyToProviderBaseURL(w, r, baseURL)
 }
 
+func RouterGatewayUploadLocal(w http.ResponseWriter, r *http.Request) {
+	setCORS(w)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// Same routing rule as /gateway/upload: require deal_id in the URL query string.
+	dealID, ok := requireDealIDQuery(w, r)
+	if !ok {
+		return
+	}
+	providerAddr, err := resolveDealAssignedProvider(r.Context(), dealID)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrDealNotFound) {
+			status = http.StatusNotFound
+		}
+		writeJSONError(w, status, "failed to resolve deal provider", err.Error())
+		return
+	}
+	baseURL, err := resolveProviderHTTPBaseURL(r.Context(), providerAddr)
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, "failed to resolve provider endpoint", err.Error())
+		return
+	}
+	proxyToProviderBaseURL(w, r, baseURL)
+}
+
 func RouterGatewayUploadStatus(w http.ResponseWriter, r *http.Request) {
 	setCORS(w)
 	if r.Method == http.MethodOptions {

@@ -475,6 +475,18 @@ func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
 				return fmt.Errorf("failed to remove incomplete existing slab dir %s: %w", finalDir, rmErr)
 			}
 			if retryErr := os.Rename(stagingDir, finalDir); retryErr != nil {
+				// Another writer may have recreated the destination after we removed it.
+				if info, statErr := os.Stat(finalDir); statErr == nil && info.IsDir() {
+					if mode2DirLooksComplete(finalDir) {
+						mode2EnsureCompleteMarker(finalDir)
+						_ = os.RemoveAll(stagingDir)
+						return nil
+					}
+					if mergeErr := mode2MergeStagingIntoFinal(stagingDir, finalDir); mergeErr == nil {
+						mode2EnsureCompleteMarker(finalDir)
+						return nil
+					}
+				}
 				return retryErr
 			}
 			mode2EnsureCompleteMarker(finalDir)
@@ -484,8 +496,20 @@ func mode2FinalizeStagingDir(stagingDir string, finalDir string) error {
 		// Unexpected: finalDir exists as a file. Best-effort remove and retry.
 		if removeErr := os.Remove(finalDir); removeErr == nil {
 			if retryErr := os.Rename(stagingDir, finalDir); retryErr != nil {
+				if info, statErr := os.Stat(finalDir); statErr == nil && info.IsDir() {
+					if mode2DirLooksComplete(finalDir) {
+						mode2EnsureCompleteMarker(finalDir)
+						_ = os.RemoveAll(stagingDir)
+						return nil
+					}
+					if mergeErr := mode2MergeStagingIntoFinal(stagingDir, finalDir); mergeErr == nil {
+						mode2EnsureCompleteMarker(finalDir)
+						return nil
+					}
+				}
 				return retryErr
 			}
+			mode2EnsureCompleteMarker(finalDir)
 			return nil
 		}
 

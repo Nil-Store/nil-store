@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -78,6 +79,7 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 		ProviderBase:  strings.TrimSpace(providerBase),
 		Capabilities: map[string]bool{
 			"upload":         true,
+			"upload_local":   localImportEnabled(),
 			"fetch":          true,
 			"list_files":     true,
 			"slab":           true,
@@ -94,6 +96,10 @@ func GatewayStatus(w http.ResponseWriter, r *http.Request) {
 			"artifact_spec": "mode2-artifacts-v1",
 			"rs_default":    "8+4",
 		},
+	}
+	if localImportEnabled() {
+		status.Extra["local_import_root"] = localImportRoot()
+		status.Extra["local_import_allow_abs"] = strconv.FormatBool(localImportAllowAbs())
 	}
 	p2pAddrs := getP2PAnnounceAddrs()
 	if len(p2pAddrs) == 0 {
