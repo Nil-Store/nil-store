@@ -2,6 +2,8 @@ package keeper_test
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -9,6 +11,7 @@ import (
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 
 	"nilchain/x/crypto_ffi"
@@ -295,7 +298,7 @@ func TestProveLiveness_RepairingSlotRejected(t *testing.T) {
 	_, err = msgServer.ProveLiveness(f.ctx, &types.MsgProveLiveness{
 		Creator: oldProvider,
 		DealId:  res.DealId,
-		EpochId: 1,
+		EpochId: 0,
 		ProofType: &types.MsgProveLiveness_SystemProof{
 			SystemProof: &types.ChainedProof{},
 		},
@@ -480,7 +483,7 @@ func TestProveLiveness_Invalid(t *testing.T) {
 	proofMsg := &types.MsgProveLiveness{
 		Creator: assignedProvider,
 		DealId:  resDeal.DealId,
-		EpochId: 1,
+		EpochId: 0,
 		ProofType: &types.MsgProveLiveness_SystemProof{
 			SystemProof: &types.ChainedProof{
 				MduIndex:        0,
@@ -527,7 +530,8 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 
 	// Register extra providers for placement
 	for i := 0; i < 15; i++ {
-		addrBz := []byte(fmt.Sprintf("extra_prov_happy_%02d", i))
+		addrBz := make([]byte, 20)
+		copy(addrBz, fmt.Sprintf("extra_prov_happy_%02d", i))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
 		msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{Creator: addr, Capabilities: "General", TotalStorage: 1000, Endpoints: testProviderEndpoints})
 	}
@@ -559,8 +563,8 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
 	require.NoError(t, err)
 
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root})
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
+	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{make([]byte, 32), root})
+	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 1)
 	require.NoError(t, err)
 
 	// Commit Content with the real ManifestRoot commitment so VerifyChainedProof can succeed.
@@ -569,8 +573,34 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	epochSeed, err := f.keeper.EpochSeeds.Get(f.ctx, 0)
+	require.NoError(t, err)
+	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
+	require.NoError(t, err)
+	metaMdus := uint64(1) + deal.WitnessMdus
+	userMdus := deal.TotalMdus - metaMdus
+
+	providerBytes, err := sdk.AccAddressFromBech32(assignedProvider)
+	require.NoError(t, err)
+	require.Len(t, providerBytes, 20)
+
+	var tmp [8]byte
+	challengeBuf := make([]byte, 0, len("nilstore/chal/v1")+len(epochSeed)+8+8+20+8)
+	challengeBuf = append(challengeBuf, []byte("nilstore/chal/v1")...)
+	challengeBuf = append(challengeBuf, epochSeed...)
+	binary.BigEndian.PutUint64(tmp[:], resDeal.DealId)
+	challengeBuf = append(challengeBuf, tmp[:]...)
+	binary.BigEndian.PutUint64(tmp[:], deal.CurrentGen)
+	challengeBuf = append(challengeBuf, tmp[:]...)
+	challengeBuf = append(challengeBuf, providerBytes...)
+	binary.BigEndian.PutUint64(tmp[:], 0)
+	challengeBuf = append(challengeBuf, tmp[:]...)
+	sum := sha256.Sum256(challengeBuf)
+	blobIndex := binary.BigEndian.Uint64(sum[8:16]) % types.BlobsPerMdu
+	mduIndex := metaMdus + (binary.BigEndian.Uint64(sum[0:8]) % userMdus)
+
 	// Compute Proof for chunk 0
-	chunkIdx := uint32(0)
+	chunkIdx := uint32(blobIndex)
 	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
 	require.NoError(t, err)
 
@@ -583,7 +613,7 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	manifestCommitment := mustDecodeHexBytes(t, manifestCid)
 	ok, err = crypto_ffi.VerifyChainedProof(
 		manifestCommitment,
-		0,
+		mduIndex,
 		manifestProof,
 		root,
 		commitment,
@@ -607,10 +637,10 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	proofMsg := &types.MsgProveLiveness{
 		Creator: assignedProvider,
 		DealId:  resDeal.DealId,
-		EpochId: 1,
+		EpochId: 0,
 		ProofType: &types.MsgProveLiveness_SystemProof{
 			SystemProof: &types.ChainedProof{
-				MduIndex:        0, // Mock
+				MduIndex:        mduIndex,
 				MduRootFr:       root,
 				ManifestOpening: manifestProof,
 
@@ -711,7 +741,7 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 	// Construct a RetrievalReceipt with a bogus signature (proof is valid).
 	receipt := types.RetrievalReceipt{
 		DealId:      resDeal.DealId,
-		EpochId:     1,
+		EpochId:     0,
 		Provider:    assignedProvider,
 		BytesServed: 1024,
 		FilePath:    "file.txt",
@@ -738,7 +768,7 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 	proofMsg := &types.MsgProveLiveness{
 		Creator: assignedProvider,
 		DealId:  resDeal.DealId,
-		EpochId: 1,
+		EpochId: 0,
 		ProofType: &types.MsgProveLiveness_UserReceipt{
 			UserReceipt: &receipt,
 		},
@@ -756,7 +786,7 @@ func TestProveLiveness_InvalidUserReceipt(t *testing.T) {
 	proofMsg2 := &types.MsgProveLiveness{
 		Creator: assignedProvider,
 		DealId:  resDeal.DealId,
-		EpochId: 1,
+		EpochId: 0,
 		ProofType: &types.MsgProveLiveness_UserReceipt{
 			UserReceipt: &receipt,
 		},
@@ -776,7 +806,12 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	}
 
 	// 2. Register a provider
-	addrBz := []byte("provider_strict_bind_")
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx)
+	params := f.keeper.GetParams(sdkCtx)
+	params.QuotaMinBlobs = 2
+	require.NoError(t, f.keeper.Params.Set(f.ctx, params))
+
+	addrBz := []byte("provider_strict_bind")
 	providerAddr, _ := f.addressCodec.BytesToString(addrBz)
 	_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
 		Creator:      providerAddr,
@@ -788,7 +823,8 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 
 	// Register extra providers for placement.
 	for i := 0; i < 15; i++ {
-		extraBz := []byte(fmt.Sprintf("extra_prov_bind_%02d", i))
+		extraBz := make([]byte, 20)
+		copy(extraBz, fmt.Sprintf("extra_prov_bind_%02d", i))
 		extraAddr, _ := f.addressCodec.BytesToString(extraBz)
 		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
 			Creator:      extraAddr,
@@ -818,8 +854,8 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	root, err := crypto_ffi.ComputeMduMerkleRoot(mduData)
 	require.NoError(t, err)
 
-	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{root})
-	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 0)
+	manifestCid, manifestBlob := mustComputeManifestCid(t, [][]byte{make([]byte, 32), root})
+	manifestProof, _, err := crypto_ffi.ComputeManifestProof(manifestBlob, 1)
 	require.NoError(t, err)
 
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
@@ -827,12 +863,41 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chunkIdx := uint32(0)
-	commitment, merkleProof, z, y, kzgProof, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx)
+	epochSeed, err := f.keeper.EpochSeeds.Get(f.ctx, 0)
+	require.NoError(t, err)
+	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
+	require.NoError(t, err)
+	metaMdus := uint64(1) + deal.WitnessMdus
+	userMdus := deal.TotalMdus - metaMdus
+
+	providerBytes, err := sdk.AccAddressFromBech32(assignedProvider)
+	require.NoError(t, err)
+	require.Len(t, providerBytes, 20)
+
+	var tmp [8]byte
+	derive := func(ordinal uint64) (uint64, uint32) {
+		buf := make([]byte, 0, len("nilstore/chal/v1")+len(epochSeed)+8+8+20+8)
+		buf = append(buf, []byte("nilstore/chal/v1")...)
+		buf = append(buf, epochSeed...)
+		binary.BigEndian.PutUint64(tmp[:], resDeal.DealId)
+		buf = append(buf, tmp[:]...)
+		binary.BigEndian.PutUint64(tmp[:], deal.CurrentGen)
+		buf = append(buf, tmp[:]...)
+		buf = append(buf, providerBytes...)
+		binary.BigEndian.PutUint64(tmp[:], ordinal)
+		buf = append(buf, tmp[:]...)
+		sum := sha256.Sum256(buf)
+		mdu := metaMdus + (binary.BigEndian.Uint64(sum[0:8]) % userMdus)
+		blob := binary.BigEndian.Uint64(sum[8:16]) % types.BlobsPerMdu
+		return mdu, uint32(blob)
+	}
+
+	mduIndex0, chunkIdx0 := derive(0)
+	commitment0, merkleProof0, z0, y0, kzgProof0, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx0)
 	require.NoError(t, err)
 
 	// Sanity: Hop2+Hop3 should verify in isolation.
-	ok, err := crypto_ffi.VerifyMduProof(root, commitment, merkleProof, chunkIdx, 64, z, y, kzgProof)
+	ok, err := crypto_ffi.VerifyMduProof(root, commitment0, merkleProof0, chunkIdx0, 64, z0, y0, kzgProof0)
 	require.NoError(t, err)
 	require.True(t, ok)
 
@@ -840,40 +905,40 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	manifestCommitment := mustDecodeHexBytes(t, manifestCid)
 	ok, err = crypto_ffi.VerifyChainedProof(
 		manifestCommitment,
-		0,
+		mduIndex0,
 		manifestProof,
 		root,
-		commitment,
-		uint64(chunkIdx),
+		commitment0,
+		uint64(chunkIdx0),
 		64,
-		merkleProof,
-		z,
-		y,
-		kzgProof,
+		merkleProof0,
+		z0,
+		y0,
+		kzgProof0,
 	)
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	merklePath := make([][]byte, 0)
-	for i := 0; i < len(merkleProof); i += 32 {
-		merklePath = append(merklePath, merkleProof[i:i+32])
+	merklePath0 := make([][]byte, 0)
+	for i := 0; i < len(merkleProof0); i += 32 {
+		merklePath0 = append(merklePath0, merkleProof0[i:i+32])
 	}
 
 	okMsg := &types.MsgProveLiveness{
 		Creator: assignedProvider,
 		DealId:  resDeal.DealId,
-		EpochId: 1,
+		EpochId: 0,
 		ProofType: &types.MsgProveLiveness_SystemProof{
 			SystemProof: &types.ChainedProof{
-				MduIndex:        0,
+				MduIndex:        mduIndex0,
 				MduRootFr:       root,
 				ManifestOpening: manifestProof,
-				BlobCommitment:  commitment,
-				MerklePath:      merklePath,
-				BlobIndex:       chunkIdx,
-				ZValue:          z,
-				YValue:          y,
-				KzgOpeningProof: kzgProof,
+				BlobCommitment:  commitment0,
+				MerklePath:      merklePath0,
+				BlobIndex:       chunkIdx0,
+				ZValue:          z0,
+				YValue:          y0,
+				KzgOpeningProof: kzgProof0,
 			},
 		},
 	}
@@ -882,12 +947,56 @@ func TestProveLiveness_StrictBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.Success)
 
-	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
+	tamperedDeal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
 	require.NoError(t, err)
-	deal.ManifestRoot = bytes.Repeat([]byte{0x42}, 48)
-	require.NoError(t, f.keeper.Deals.Set(f.ctx, resDeal.DealId, deal))
+	tamperedDeal.ManifestRoot = bytes.Repeat([]byte{0x42}, 48)
+	require.NoError(t, f.keeper.Deals.Set(f.ctx, resDeal.DealId, tamperedDeal))
 
-	res2, err := msgServer.ProveLiveness(f.ctx, okMsg)
+	mduIndex1, chunkIdx1 := derive(1)
+	commitment1, merkleProof1, z1, y1, kzgProof1, err := crypto_ffi.ComputeMduProofTest(mduData, chunkIdx1)
+	require.NoError(t, err)
+
+	ok, err = crypto_ffi.VerifyChainedProof(
+		manifestCommitment,
+		mduIndex1,
+		manifestProof,
+		root,
+		commitment1,
+		uint64(chunkIdx1),
+		64,
+		merkleProof1,
+		z1,
+		y1,
+		kzgProof1,
+	)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	merklePath1 := make([][]byte, 0)
+	for i := 0; i < len(merkleProof1); i += 32 {
+		merklePath1 = append(merklePath1, merkleProof1[i:i+32])
+	}
+
+	badMsg := &types.MsgProveLiveness{
+		Creator: assignedProvider,
+		DealId:  resDeal.DealId,
+		EpochId: 0,
+		ProofType: &types.MsgProveLiveness_SystemProof{
+			SystemProof: &types.ChainedProof{
+				MduIndex:        mduIndex1,
+				MduRootFr:       root,
+				ManifestOpening: manifestProof,
+				BlobCommitment:  commitment1,
+				MerklePath:      merklePath1,
+				BlobIndex:       chunkIdx1,
+				ZValue:          z1,
+				YValue:          y1,
+				KzgOpeningProof: kzgProof1,
+			},
+		},
+	}
+
+	res2, err := msgServer.ProveLiveness(f.ctx, badMsg)
 	require.NoError(t, err)
 	require.False(t, res2.Success)
 }

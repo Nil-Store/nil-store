@@ -114,7 +114,7 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 
 	receiptA := types.RetrievalReceipt{
 		DealId:       resDeal.DealId,
-		EpochId:      1,
+		EpochId:      0,
 		Provider:     assignedProvider,
 		FilePath:     "a.txt",
 		RangeStart:   0,
@@ -128,7 +128,7 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 
 	receiptB := types.RetrievalReceipt{
 		DealId:       resDeal.DealId,
-		EpochId:      1,
+		EpochId:      0,
 		Provider:     assignedProvider,
 		FilePath:     "b.txt",
 		RangeStart:   0,
@@ -143,7 +143,7 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 	_, err = msgServer.ProveLiveness(f.ctx, &types.MsgProveLiveness{
 		Creator: assignedProvider,
 		DealId:  resDeal.DealId,
-		EpochId: 1,
+		EpochId: 0,
 		ProofType: &types.MsgProveLiveness_UserReceiptBatch{
 			UserReceiptBatch: &types.RetrievalReceiptBatch{
 				Receipts: []types.RetrievalReceipt{receiptA, receiptB},
@@ -251,7 +251,7 @@ func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
 
 	sessionReceipt := types.DownloadSessionReceipt{
 		DealId:        resDeal.DealId,
-		EpochId:       1,
+		EpochId:       0,
 		Provider:      assignedProvider,
 		FilePath:      "file.txt",
 		TotalBytes:    2048,
@@ -286,7 +286,7 @@ func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
 	_, err = msgServer.ProveLiveness(f.ctx, &types.MsgProveLiveness{
 		Creator: assignedProvider,
 		DealId:  resDeal.DealId,
-		EpochId: 1,
+		EpochId: 0,
 		ProofType: &types.MsgProveLiveness_SessionProof{
 			SessionProof: sessionProof,
 		},

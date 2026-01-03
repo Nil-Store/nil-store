@@ -1,6 +1,7 @@
 package keeper_test
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -36,7 +37,7 @@ func initFixture(t *testing.T) *fixture {
 
 	// Ensure we have a non-empty ChainID for tests that rely on it.
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	sdkCtx = sdkCtx.WithChainID("test-chain")
+	sdkCtx = sdkCtx.WithChainID("test-chain").WithBlockHeight(1).WithHeaderHash(bytes.Repeat([]byte{0xAB}, 32))
 	ctx = sdkCtx
 
 	authority := authtypes.NewModuleAddress(types.GovModuleName)
@@ -53,6 +54,10 @@ func initFixture(t *testing.T) *fixture {
 	// Initialize params
 	if err := k.Params.Set(ctx, types.DefaultParams()); err != nil {
 		t.Fatalf("failed to set params: %v", err)
+	}
+
+	if err := k.BeginBlock(ctx); err != nil {
+		t.Fatalf("failed to run begin blocker: %v", err)
 	}
 
 	return &fixture{

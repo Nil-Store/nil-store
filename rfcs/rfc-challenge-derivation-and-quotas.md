@@ -28,7 +28,8 @@ This RFC freezes:
 ### 1.1 Epoch
 NilStore defines a **liveness epoch** with fixed length:
 - `EPOCH_LEN_BLOCKS` (param; e.g. 100 blocks)
-- `epoch_id = floor(block_height / EPOCH_LEN_BLOCKS)`
+- `epoch_id = floor((block_height-1) / EPOCH_LEN_BLOCKS)` for 1-indexed block heights (CometBFT / Cosmos SDK)
+  - For 0-indexed height systems, this simplifies to `floor(block_height / EPOCH_LEN_BLOCKS)`.
 
 ### 1.2 Assignment
 An **assignment** is:
@@ -72,7 +73,7 @@ Unless otherwise stated, hashes are computed over byte concatenation using:
 Define the epoch seed as:
 
 ```
-epoch_start_height = epoch_id * EPOCH_LEN_BLOCKS
+epoch_start_height = epoch_id * EPOCH_LEN_BLOCKS + 1     // 1-indexed (Cosmos SDK)
 R_e = SHA256("nilstore/epoch/v1" || chain_id || epoch_id || block_hash(epoch_start_height))
 ```
 
@@ -196,7 +197,7 @@ credits_blobs = min(credit_cap, unique_proved_blobs_in_epoch)
 ```
 
 Uniqueness is enforced by storing a per-epoch set keyed by:
-`credit_id = SHA256("nilstore/credit/v1" || epoch_id || deal_id || assignment || mdu_index || blob_index)`.
+`credit_id = SHA256("nilstore/credit/v1" || epoch_id || deal_id || current_gen || assignment || mdu_index || blob_index)`.
 
 ---
 
@@ -205,7 +206,9 @@ Uniqueness is enforced by storing a per-epoch set keyed by:
 ### 6.0 Proof acceptance rules (must-fail)
 - `system_proof` MUST match one derived synthetic challenge for that assignment and epoch.
   - The chain checks membership by recomputing `C_i` for `i ∈ [0..synthetic_needed-1]` and comparing `(mdu_index, blob_index)`.
-  - Duplicate synthetic proofs for the same `(epoch, assignment, mdu_index, blob_index)` MUST NOT be double-counted.
+- Duplicate synthetic proofs for the same `(epoch, assignment, mdu_index, blob_index)` MUST NOT be double-counted.
+  - Uniqueness is enforced by storing a per-epoch set keyed by:
+    `challenge_id = SHA256("nilstore/synth/v1" || epoch_id || deal_id || current_gen || assignment || mdu_index || blob_index)`.
 - `session_proof` and receipt paths MAY be outside the synthetic challenge set; they still accrue credits (§5).
 
 ### 6.1 Invalid proofs (hard failures)
@@ -238,6 +241,7 @@ To implement the above without storing per-proof raw history, add collections:
 
 - `CreditSeen(credit_id)` with TTL to prevent replay/double-counting.
 - `SyntheticSeen(challenge_id)` to prevent counting the same synthetic proof twice.
+  - Implementations SHOULD include `current_gen` in `challenge_id` so that proofs for a prior generation cannot satisfy synthetic demand after a manifest update.
 
 All keys are deterministic hashes to keep store keys bounded.
 
