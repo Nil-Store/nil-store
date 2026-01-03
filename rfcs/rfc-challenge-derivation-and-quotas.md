@@ -81,6 +81,10 @@ Rationale:
 - unpredictable prior to the epoch boundary (assuming honest majority of validators)
 - does not rely on any off-chain RNG or trusted beacon
 
+**Implementation note (Cosmos SDK):**
+- `block_hash(h)` is the CometBFT header hash at height `h` (exposed as `ctx.HeaderHash()` during that block).
+- To avoid requiring historical block-hash access inside keeper logic, implementations SHOULD persist `R_e` in module state at `epoch_start_height` and reference it for all subsequent proof/credit accounting in that epoch.
+
 ### 3.2 Challenge set size
 For each assignment, the chain derives a target challenge count:
 
