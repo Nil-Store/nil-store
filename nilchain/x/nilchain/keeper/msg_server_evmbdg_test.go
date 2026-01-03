@@ -168,6 +168,8 @@ func TestUpdateDealContentFromEvm_Valid(t *testing.T) {
 		DealId:     createRes.DealId,
 		Cid:        makeManifestRootHex(0xab), // 48-byte hex
 		SizeBytes:  1024 * 1024 * 100,         // 100 MB
+		TotalMdus:  2,
+		WitnessMdus: 0,
 		Nonce:      2,
 		ChainId:    chainID,
 	}
@@ -247,6 +249,8 @@ func TestUpdateDealContentFromEvm_Unauthorized(t *testing.T) {
 		DealId:     createRes.DealId,
 		Cid:        makeManifestRootHex(0xbb),
 		SizeBytes:  100,
+		TotalMdus:  2,
+		WitnessMdus: 0,
 		Nonce:      1,
 		ChainId:    chainID,
 	}
@@ -310,6 +314,8 @@ func TestUpdateDealContentFromEvm_AllowsLargeContent(t *testing.T) {
 		DealId:     createRes.DealId,
 		Cid:        makeManifestRootHex(0xcc),
 		SizeBytes:  5 * 1024 * 1024 * 1024, // 5 GiB
+		TotalMdus:  2,
+		WitnessMdus: 0,
 		Nonce:      2,
 		ChainId:    chainID,
 	}

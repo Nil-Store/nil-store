@@ -95,7 +95,7 @@ func TestProveLiveness_UserReceiptBatch_NonceIsScopedToDealAndFilePath(t *testin
 	}
 
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: owner, DealId: resDeal.DealId, Cid: manifestCid, Size_: 8 * 1024 * 1024,
+		Creator: owner, DealId: resDeal.DealId, Cid: manifestCid, Size_: 8 * 1024 * 1024, TotalMdus: 2, WitnessMdus: 0,
 	})
 	require.NoError(t, err)
 
@@ -226,7 +226,7 @@ func TestProveLiveness_SessionProof_Valid_UsesParamChainID(t *testing.T) {
 	}
 
 	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
-		Creator: owner, DealId: resDeal.DealId, Cid: manifestCid, Size_: 8 * 1024 * 1024,
+		Creator: owner, DealId: resDeal.DealId, Cid: manifestCid, Size_: 8 * 1024 * 1024, TotalMdus: 2, WitnessMdus: 0,
 	})
 	require.NoError(t, err)
 

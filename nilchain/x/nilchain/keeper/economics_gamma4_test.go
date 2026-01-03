@@ -265,6 +265,8 @@ func TestGamma4_UpdateDealContent_ChargesTermDepositInBondDenom(t *testing.T) {
 		DealId:  resDeal.DealId,
 		Cid:     validManifestCid,
 		Size_:   100,
+		TotalMdus:   2,
+		WitnessMdus: 0,
 	})
 	require.NoError(t, err)
 
