@@ -227,6 +227,15 @@ When `missed_epochs` exceeds `evict_after_missed_epochs` (param), the chain SHOU
 - mark the slot as `REPAIRING`
 - select and attach a `pending_provider` candidate (see `rfcs/rfc-mode2-onchain-state.md`)
 
+**Candidate selection (deterministic):**
+- Let `U` be the ordered list of `Active` providers matching the deal’s service hint and **not already assigned** to the deal (including not already `pending_provider` on any slot).
+- Choose:
+  ```
+  j = U64BE(SHA256("nilstore/repair/v1" || R_e || U64BE(deal_id) || U64BE(current_gen) || U64BE(slot))[0..8]) % len(U)
+  candidate = U[j]
+  ```
+  - If `len(U)==0`, the chain SHOULD emit an event and leave the slot in place (manual repair).
+
 ---
 
 ## 7. Required State Additions (for implementation sprints)

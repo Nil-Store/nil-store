@@ -20,6 +20,7 @@ const (
 	challengeTag   = "nilstore/chal/v1"
 	creditIDTag    = "nilstore/credit/v1"
 	syntheticIDTag = "nilstore/synth/v1"
+	repairTag      = "nilstore/repair/v1"
 )
 
 func epochIDForHeight(height uint64, epochLenBlocks uint64) (uint64, error) {
@@ -92,6 +93,281 @@ func (k Keeper) BeginBlock(goCtx context.Context) error {
 		return fmt.Errorf("failed to persist epoch seed: %w", err)
 	}
 	return nil
+}
+
+func (k Keeper) EndBlock(goCtx context.Context) error {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	params := k.GetParams(ctx)
+
+	height := uint64(ctx.BlockHeight())
+	epochID, err := epochIDForHeight(height, params.EpochLenBlocks)
+	if err != nil {
+		return err
+	}
+	startHeight, err := epochStartHeight(epochID, params.EpochLenBlocks)
+	if err != nil {
+		return err
+	}
+	endHeight := startHeight + params.EpochLenBlocks - 1
+	if endHeight < startHeight {
+		return fmt.Errorf("epoch_end_height overflow")
+	}
+	if height != endHeight {
+		return nil
+	}
+
+	epochSeed, err := k.mustEpochSeed(ctx, epochID)
+	if err != nil {
+		return err
+	}
+
+	return k.Deals.Walk(goCtx, nil, func(dealID uint64, deal types.Deal) (stop bool, err error) {
+		if deal.TotalMdus == 0 {
+			return false, nil
+		}
+		if len(deal.ManifestRoot) != 48 {
+			return false, nil
+		}
+		if height < deal.StartBlock || height > deal.EndBlock {
+			return false, nil
+		}
+
+		stripe, err := stripeParamsForDeal(deal)
+		if err != nil {
+			return false, nil
+		}
+
+		quotaBlobs, err := quotaBlobsForAssignment(params, deal, stripe)
+		if err != nil {
+			return false, nil
+		}
+
+		creditCap := creditCapBlobs(quotaBlobs, params.CreditCapBps)
+		epochKey := collections.Join(epochID, deal.Id)
+
+		if stripe.mode == 2 {
+			if len(deal.Mode2Slots) == 0 {
+				return false, nil
+			}
+
+			reserved := make(map[string]struct{}, len(deal.Mode2Slots))
+			for _, slot := range deal.Mode2Slots {
+				if slot == nil {
+					continue
+				}
+				if strings.TrimSpace(slot.Provider) != "" {
+					reserved[strings.TrimSpace(slot.Provider)] = struct{}{}
+				}
+				if strings.TrimSpace(slot.PendingProvider) != "" {
+					reserved[strings.TrimSpace(slot.PendingProvider)] = struct{}{}
+				}
+			}
+
+			updated := false
+
+			for idx, slot := range deal.Mode2Slots {
+				if slot == nil {
+					continue
+				}
+				slotNum := uint64(slot.Slot)
+
+				if slot.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
+					continue
+				}
+
+				creditsSeen, err := k.EpochCreditsMode2.Get(ctx, collections.Join(epochKey, slotNum))
+				if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return false, err
+				}
+				synthSeen, err := k.EpochSyntheticMode2.Get(ctx, collections.Join(epochKey, slotNum))
+				if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return false, err
+				}
+
+				creditsApplied := creditsSeen
+				if creditsApplied > creditCap {
+					creditsApplied = creditCap
+				}
+				if creditsApplied > quotaBlobs {
+					creditsApplied = quotaBlobs
+				}
+				satisfied := creditsApplied + synthSeen
+
+				missedKey := collections.Join(deal.Id, slotNum)
+				if satisfied >= quotaBlobs {
+					if err := k.MissedEpochsMode2.Remove(ctx, missedKey); err != nil && !errors.Is(err, collections.ErrNotFound) {
+						return false, err
+					}
+					continue
+				}
+
+				missedEpochs, err := k.MissedEpochsMode2.Get(ctx, missedKey)
+				if err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return false, err
+				}
+				missedEpochs++
+				if err := k.MissedEpochsMode2.Set(ctx, missedKey, missedEpochs); err != nil {
+					return false, err
+				}
+
+				ctx.EventManager().EmitEvent(
+					sdk.NewEvent(
+						"liveness_quota_shortfall",
+						sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+						sdk.NewAttribute("epoch_id", fmt.Sprintf("%d", epochID)),
+						sdk.NewAttribute("mode", "2"),
+						sdk.NewAttribute("slot", fmt.Sprintf("%d", slotNum)),
+						sdk.NewAttribute("quota_blobs", fmt.Sprintf("%d", quotaBlobs)),
+						sdk.NewAttribute("credits_seen", fmt.Sprintf("%d", creditsSeen)),
+						sdk.NewAttribute("credits_applied", fmt.Sprintf("%d", creditsApplied)),
+						sdk.NewAttribute("synthetic_seen", fmt.Sprintf("%d", synthSeen)),
+						sdk.NewAttribute("missed_epochs", fmt.Sprintf("%d", missedEpochs)),
+					),
+				)
+
+				if params.EvictAfterMissedEpochs == 0 || missedEpochs < params.EvictAfterMissedEpochs {
+					continue
+				}
+				if slot.Status != types.SlotStatus_SLOT_STATUS_ACTIVE || strings.TrimSpace(slot.PendingProvider) != "" {
+					continue
+				}
+
+				candidate, ok, err := k.selectRepairCandidate(ctx, deal, reserved, epochSeed, slotNum)
+				if err != nil {
+					return false, err
+				}
+				if !ok {
+					continue
+				}
+
+				slot.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
+				slot.PendingProvider = candidate
+				slot.StatusSinceHeight = ctx.BlockHeight()
+				slot.RepairTargetGen = deal.CurrentGen
+				deal.Mode2Slots[idx] = slot
+				reserved[candidate] = struct{}{}
+				updated = true
+
+				ctx.EventManager().EmitEvent(
+					sdk.NewEvent(
+						"auto_start_slot_repair",
+						sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+						sdk.NewAttribute("slot", fmt.Sprintf("%d", slotNum)),
+						sdk.NewAttribute("provider", slot.Provider),
+						sdk.NewAttribute("pending_provider", candidate),
+						sdk.NewAttribute("repair_target_gen", fmt.Sprintf("%d", slot.RepairTargetGen)),
+					),
+				)
+			}
+
+			if updated {
+				if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
+					return false, fmt.Errorf("failed to persist mode2 repair update: %w", err)
+				}
+			}
+
+			return false, nil
+		}
+
+		for _, provider := range deal.Providers {
+			creditsSeen, err := k.EpochCreditsMode1.Get(ctx, collections.Join(epochKey, provider))
+			if err != nil && !errors.Is(err, collections.ErrNotFound) {
+				return false, err
+			}
+			synthSeen, err := k.EpochSyntheticMode1.Get(ctx, collections.Join(epochKey, provider))
+			if err != nil && !errors.Is(err, collections.ErrNotFound) {
+				return false, err
+			}
+
+			creditsApplied := creditsSeen
+			if creditsApplied > creditCap {
+				creditsApplied = creditCap
+			}
+			if creditsApplied > quotaBlobs {
+				creditsApplied = quotaBlobs
+			}
+			satisfied := creditsApplied + synthSeen
+
+			missedKey := collections.Join(deal.Id, provider)
+			if satisfied >= quotaBlobs {
+				if err := k.MissedEpochsMode1.Remove(ctx, missedKey); err != nil && !errors.Is(err, collections.ErrNotFound) {
+					return false, err
+				}
+				continue
+			}
+
+			missedEpochs, err := k.MissedEpochsMode1.Get(ctx, missedKey)
+			if err != nil && !errors.Is(err, collections.ErrNotFound) {
+				return false, err
+			}
+			missedEpochs++
+			if err := k.MissedEpochsMode1.Set(ctx, missedKey, missedEpochs); err != nil {
+				return false, err
+			}
+
+			ctx.EventManager().EmitEvent(
+				sdk.NewEvent(
+					"liveness_quota_shortfall",
+					sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+					sdk.NewAttribute("epoch_id", fmt.Sprintf("%d", epochID)),
+					sdk.NewAttribute("mode", "1"),
+					sdk.NewAttribute("provider", provider),
+					sdk.NewAttribute("quota_blobs", fmt.Sprintf("%d", quotaBlobs)),
+					sdk.NewAttribute("credits_seen", fmt.Sprintf("%d", creditsSeen)),
+					sdk.NewAttribute("credits_applied", fmt.Sprintf("%d", creditsApplied)),
+					sdk.NewAttribute("synthetic_seen", fmt.Sprintf("%d", synthSeen)),
+					sdk.NewAttribute("missed_epochs", fmt.Sprintf("%d", missedEpochs)),
+				),
+			)
+		}
+
+		return false, nil
+	})
+}
+
+func (k Keeper) selectRepairCandidate(ctx sdk.Context, deal types.Deal, reserved map[string]struct{}, epochSeed []byte, slot uint64) (string, bool, error) {
+	parsedHint, _ := types.ParseServiceHint(deal.ServiceHint)
+	serviceHint := strings.TrimSpace(parsedHint.Base)
+
+	var candidates []string
+	err := k.Providers.Walk(ctx, nil, func(key string, provider types.Provider) (stop bool, err error) {
+		if provider.Status != "Active" {
+			return false, nil
+		}
+
+		if serviceHint == "Hot" && provider.Capabilities != "General" && provider.Capabilities != "Edge" {
+			return false, nil
+		}
+		if serviceHint == "Cold" && provider.Capabilities != "Archive" && provider.Capabilities != "General" {
+			return false, nil
+		}
+
+		addr := strings.TrimSpace(provider.Address)
+		if addr == "" {
+			return false, nil
+		}
+		if _, ok := reserved[addr]; ok {
+			return false, nil
+		}
+		candidates = append(candidates, addr)
+		return false, nil
+	})
+	if err != nil {
+		return "", false, fmt.Errorf("failed to walk providers: %w", err)
+	}
+	if len(candidates) == 0 {
+		return "", false, nil
+	}
+
+	buf := make([]byte, 0, len(repairTag)+len(epochSeed)+8+8+8)
+	buf = append(buf, []byte(repairTag)...)
+	buf = append(buf, epochSeed...)
+	buf = append(buf, u64be(deal.Id)...)
+	buf = append(buf, u64be(deal.CurrentGen)...)
+	buf = append(buf, u64be(slot)...)
+	sum := sha256.Sum256(buf)
+	idx := binary.BigEndian.Uint64(sum[0:8]) % uint64(len(candidates))
+	return candidates[idx], true, nil
 }
 
 func (k Keeper) mustEpochSeed(ctx sdk.Context, epochID uint64) ([]byte, error) {
@@ -289,10 +565,24 @@ func (k Keeper) recordCreditForProof(ctx sdk.Context, epochID uint64, deal types
 		creditsKeyAny any
 	)
 
+	metaMdus, _, err := dealMduCounts(deal)
+	if err != nil {
+		return err
+	}
+	if mduIndex < metaMdus {
+		return nil
+	}
+
 	if stripe.mode == 2 {
 		slot, ok := providerSlotIndex(deal, provider)
 		if !ok {
 			return fmt.Errorf("provider not assigned to deal")
+		}
+		if int(slot) < len(deal.Mode2Slots) {
+			slotState := deal.Mode2Slots[slot]
+			if slotState != nil && slotState.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
+				return nil
+			}
 		}
 		assignment := assignmentBytesMode2(slot)
 		id = computeCreditID(epochID, deal.Id, deal.CurrentGen, assignment, mduIndex, blobIndex)
