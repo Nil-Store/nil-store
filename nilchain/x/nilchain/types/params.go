@@ -12,16 +12,23 @@ import (
 var _ paramtypes.ParamSet = (*Params)(nil)
 
 var (
-	KeyBaseStripeCost        = []byte("BaseStripeCost")
-	KeyHalvingInterval       = []byte("HalvingInterval")
-	KeyEip712ChainID         = []byte("Eip712ChainId")
-	KeyStoragePrice          = []byte("StoragePrice")
-	KeyDealCreationFee       = []byte("DealCreationFee")
-	KeyMinDurationBlocks     = []byte("MinDurationBlocks")
-	KeyBaseRetrievalFee      = []byte("BaseRetrievalFee")
-	KeyRetrievalPricePerBlob = []byte("RetrievalPricePerBlob")
-	KeyRetrievalBurnBps      = []byte("RetrievalBurnBps")
-	KeyMonthLenBlocks        = []byte("MonthLenBlocks")
+	KeyBaseStripeCost         = []byte("BaseStripeCost")
+	KeyHalvingInterval        = []byte("HalvingInterval")
+	KeyEip712ChainID          = []byte("Eip712ChainId")
+	KeyStoragePrice           = []byte("StoragePrice")
+	KeyDealCreationFee        = []byte("DealCreationFee")
+	KeyMinDurationBlocks      = []byte("MinDurationBlocks")
+	KeyBaseRetrievalFee       = []byte("BaseRetrievalFee")
+	KeyRetrievalPricePerBlob  = []byte("RetrievalPricePerBlob")
+	KeyRetrievalBurnBps       = []byte("RetrievalBurnBps")
+	KeyMonthLenBlocks         = []byte("MonthLenBlocks")
+	KeyEpochLenBlocks         = []byte("EpochLenBlocks")
+	KeyQuotaBpsPerEpochHot    = []byte("QuotaBpsPerEpochHot")
+	KeyQuotaBpsPerEpochCold   = []byte("QuotaBpsPerEpochCold")
+	KeyQuotaMinBlobs          = []byte("QuotaMinBlobs")
+	KeyQuotaMaxBlobs          = []byte("QuotaMaxBlobs")
+	KeyCreditCapBps           = []byte("CreditCapBps")
+	KeyEvictAfterMissedEpochs = []byte("EvictAfterMissedEpochs")
 )
 
 // ParamKeyTable the param key table for launch module
@@ -41,18 +48,32 @@ func NewParams(
 	retrievalPricePerBlob sdk.Coin,
 	retrievalBurnBps uint64,
 	monthLenBlocks uint64,
+	epochLenBlocks uint64,
+	quotaBpsPerEpochHot uint64,
+	quotaBpsPerEpochCold uint64,
+	quotaMinBlobs uint64,
+	quotaMaxBlobs uint64,
+	creditCapBps uint64,
+	evictAfterMissedEpochs uint64,
 ) Params {
 	return Params{
-		BaseStripeCost:        baseStripeCost,
-		HalvingInterval:       halvingInterval,
-		Eip712ChainId:         eip712ChainID,
-		StoragePrice:          storagePrice,
-		DealCreationFee:       dealCreationFee,
-		MinDurationBlocks:     minDurationBlocks,
-		BaseRetrievalFee:      baseRetrievalFee,
-		RetrievalPricePerBlob: retrievalPricePerBlob,
-		RetrievalBurnBps:      retrievalBurnBps,
-		MonthLenBlocks:        monthLenBlocks,
+		BaseStripeCost:         baseStripeCost,
+		HalvingInterval:        halvingInterval,
+		Eip712ChainId:          eip712ChainID,
+		StoragePrice:           storagePrice,
+		DealCreationFee:        dealCreationFee,
+		MinDurationBlocks:      minDurationBlocks,
+		BaseRetrievalFee:       baseRetrievalFee,
+		RetrievalPricePerBlob:  retrievalPricePerBlob,
+		RetrievalBurnBps:       retrievalBurnBps,
+		MonthLenBlocks:         monthLenBlocks,
+		EpochLenBlocks:         epochLenBlocks,
+		QuotaBpsPerEpochHot:    quotaBpsPerEpochHot,
+		QuotaBpsPerEpochCold:   quotaBpsPerEpochCold,
+		QuotaMinBlobs:          quotaMinBlobs,
+		QuotaMaxBlobs:          quotaMaxBlobs,
+		CreditCapBps:           creditCapBps,
+		EvictAfterMissedEpochs: evictAfterMissedEpochs,
 	}
 }
 
@@ -69,6 +90,13 @@ func DefaultParams() Params {
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)), // RetrievalPricePerBlob (provisional devnet default)
 		500,  // RetrievalBurnBps (5%)
 		1000, // MonthLenBlocks (devnet-friendly "month")
+		100,  // EpochLenBlocks (liveness epoch length)
+		100,  // QuotaBpsPerEpochHot (1%)
+		50,   // QuotaBpsPerEpochCold (0.5%)
+		1,    // QuotaMinBlobs
+		64,   // QuotaMaxBlobs
+		5000, // CreditCapBps (50%)
+		3,    // EvictAfterMissedEpochs
 	)
 }
 
@@ -85,6 +113,13 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyRetrievalPricePerBlob, &p.RetrievalPricePerBlob, validateRetrievalPricePerBlob),
 		paramtypes.NewParamSetPair(KeyRetrievalBurnBps, &p.RetrievalBurnBps, validateRetrievalBurnBps),
 		paramtypes.NewParamSetPair(KeyMonthLenBlocks, &p.MonthLenBlocks, validateMonthLenBlocks),
+		paramtypes.NewParamSetPair(KeyEpochLenBlocks, &p.EpochLenBlocks, validateEpochLenBlocks),
+		paramtypes.NewParamSetPair(KeyQuotaBpsPerEpochHot, &p.QuotaBpsPerEpochHot, validateQuotaBps),
+		paramtypes.NewParamSetPair(KeyQuotaBpsPerEpochCold, &p.QuotaBpsPerEpochCold, validateQuotaBps),
+		paramtypes.NewParamSetPair(KeyQuotaMinBlobs, &p.QuotaMinBlobs, validateQuotaMinBlobs),
+		paramtypes.NewParamSetPair(KeyQuotaMaxBlobs, &p.QuotaMaxBlobs, validateQuotaMaxBlobs),
+		paramtypes.NewParamSetPair(KeyCreditCapBps, &p.CreditCapBps, validateCreditCapBps),
+		paramtypes.NewParamSetPair(KeyEvictAfterMissedEpochs, &p.EvictAfterMissedEpochs, validateEvictAfterMissedEpochs),
 	}
 }
 
@@ -118,6 +153,27 @@ func (p Params) Validate() error {
 		return err
 	}
 	if err := validateMonthLenBlocks(p.MonthLenBlocks); err != nil {
+		return err
+	}
+	if err := validateEpochLenBlocks(p.EpochLenBlocks); err != nil {
+		return err
+	}
+	if err := validateQuotaBps(p.QuotaBpsPerEpochHot); err != nil {
+		return err
+	}
+	if err := validateQuotaBps(p.QuotaBpsPerEpochCold); err != nil {
+		return err
+	}
+	if err := validateQuotaMinBlobs(p.QuotaMinBlobs); err != nil {
+		return err
+	}
+	if err := validateQuotaMaxBlobs(p.QuotaMaxBlobs); err != nil {
+		return err
+	}
+	if err := validateCreditCapBps(p.CreditCapBps); err != nil {
+		return err
+	}
+	if err := validateEvictAfterMissedEpochs(p.EvictAfterMissedEpochs); err != nil {
 		return err
 	}
 	return nil
@@ -220,6 +276,72 @@ func validateMonthLenBlocks(i interface{}) error {
 	_, ok := i.(uint64)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	return nil
+}
+
+func validateEpochLenBlocks(i interface{}) error {
+	v, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v == 0 {
+		return fmt.Errorf("epoch_len_blocks must be non-zero")
+	}
+	return nil
+}
+
+func validateQuotaBps(i interface{}) error {
+	v, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v > 10000 {
+		return fmt.Errorf("quota bps must be <= 10000 (got %d)", v)
+	}
+	return nil
+}
+
+func validateQuotaMinBlobs(i interface{}) error {
+	v, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v == 0 {
+		return fmt.Errorf("quota_min_blobs must be non-zero")
+	}
+	return nil
+}
+
+func validateQuotaMaxBlobs(i interface{}) error {
+	v, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v == 0 {
+		return fmt.Errorf("quota_max_blobs must be non-zero")
+	}
+	return nil
+}
+
+func validateCreditCapBps(i interface{}) error {
+	v, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v > 10000 {
+		return fmt.Errorf("credit cap bps must be <= 10000 (got %d)", v)
+	}
+	return nil
+}
+
+func validateEvictAfterMissedEpochs(i interface{}) error {
+	v, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v == 0 {
+		return fmt.Errorf("evict_after_missed_epochs must be non-zero")
 	}
 	return nil
 }
