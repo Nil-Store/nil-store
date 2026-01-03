@@ -929,6 +929,17 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 	}
 
 	params := k.GetParams(ctx)
+	epochID, err := epochIDForHeight(uint64(ctx.BlockHeight()), params.EpochLenBlocks)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid liveness epoch: %s", err.Error())
+	}
+	if msg.EpochId != epochID {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("epoch_id must match current epoch (%d)", epochID)
+	}
+	epochSeed, err := k.mustEpochSeed(ctx, epochID)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("missing epoch seed for epoch %d: %s", epochID, err.Error())
+	}
 
 	// --- INFLATIONARY DECAY ---
 	// BaseReward = 1 NIL * (1 / 2^(Height/Interval))
@@ -1070,6 +1081,10 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 			return fmt.Errorf("failed to update receipt nonce: %w", err)
 		}
 
+		if err := k.recordCreditForProof(ctx, epochID, deal, stripe, msg.Creator, receipt.ProofDetails.MduIndex, uint64(receipt.ProofDetails.BlobIndex)); err != nil {
+			return err
+		}
+
 		// Track bandwidth for escrow/payment accounting and UI heat stats.
 		if bandwidthBytes > bandwidthBytes+receipt.BytesServed {
 			return sdkerrors.ErrInvalidRequest.Wrap("receipt bytes overflow")
@@ -1089,6 +1104,94 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		if err != nil {
 			ctx.Logger().Error("Triple Proof Verification Error", "err", err)
 			ok = false
+		}
+		if ok {
+			metaMdus, userMdus, derr := dealMduCounts(deal)
+			if derr != nil {
+				ok = false
+			} else if pt.SystemProof.MduIndex < metaMdus {
+				ok = false
+			} else {
+				quotaBlobs, qerr := quotaBlobsForAssignment(params, deal, stripe)
+				if qerr != nil {
+					ok = false
+				} else {
+					epochKey := collections.Join(epochID, deal.Id)
+					var creditsSeen uint64
+					if stripe.mode == 2 {
+						slot, sok := providerSlotIndex(deal, msg.Creator)
+						if !sok {
+							ok = false
+						} else {
+							creditsSeen, err = k.EpochCreditsMode2.Get(ctx, collections.Join(epochKey, slot))
+							if err != nil && !errors.Is(err, collections.ErrNotFound) {
+								return nil, err
+							}
+						}
+					} else {
+						creditsSeen, err = k.EpochCreditsMode1.Get(ctx, collections.Join(epochKey, msg.Creator))
+						if err != nil && !errors.Is(err, collections.ErrNotFound) {
+							return nil, err
+						}
+					}
+
+					creditsApplied := creditsSeen
+					cap := creditCapBlobs(quotaBlobs, params.CreditCapBps)
+					if creditsApplied > cap {
+						creditsApplied = cap
+					}
+					if creditsApplied > quotaBlobs {
+						creditsApplied = quotaBlobs
+					}
+					syntheticNeeded := quotaBlobs - creditsApplied
+					if syntheticNeeded == 0 {
+						ok = false
+					} else {
+						match := false
+						if stripe.mode == 2 {
+							slot, sok := providerSlotIndex(deal, msg.Creator)
+							if !sok {
+								ok = false
+							} else if stripe.rows == 0 || uint64(pt.SystemProof.BlobIndex) >= stripe.leafCount {
+								ok = false
+							} else {
+								for i := uint64(0); i < syntheticNeeded; i++ {
+									mdu, leaf := deriveMode2Challenge(epochSeed, deal.Id, deal.CurrentGen, slot, userMdus, metaMdus, stripe.rows, i)
+									if mdu == pt.SystemProof.MduIndex && leaf == uint64(pt.SystemProof.BlobIndex) {
+										match = true
+										break
+									}
+								}
+							}
+						} else {
+							provider20, aerr := assignmentBytesMode1(msg.Creator)
+							if aerr != nil {
+								ok = false
+							} else {
+								for i := uint64(0); i < syntheticNeeded; i++ {
+									mdu, blob := deriveMode1Challenge(epochSeed, deal.Id, deal.CurrentGen, provider20, userMdus, metaMdus, i)
+									if mdu == pt.SystemProof.MduIndex && blob == uint64(pt.SystemProof.BlobIndex) {
+										match = true
+										break
+									}
+								}
+							}
+						}
+
+						if ok && match {
+							isNew, rerr := k.recordSyntheticForProof(ctx, epochID, deal, stripe, msg.Creator, pt.SystemProof.MduIndex, uint64(pt.SystemProof.BlobIndex))
+							if rerr != nil {
+								return nil, rerr
+							}
+							if !isNew {
+								ok = false
+							}
+						} else {
+							ok = false
+						}
+					}
+				}
+			}
 		}
 		if !ok {
 			// Track health for system proofs that fail verification.
@@ -1231,6 +1334,10 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 			if err := k.IncrementHeat(ctx, deal.Id, chunk.RangeLen, false); err != nil {
 				ctx.Logger().Error("failed to increment heat", "error", err)
+			}
+
+			if err := k.recordCreditForProof(ctx, epochID, deal, stripe, msg.Creator, chunk.ProofDetails.MduIndex, uint64(chunk.ProofDetails.BlobIndex)); err != nil {
+				return nil, err
 			}
 		}
 
@@ -1928,6 +2035,12 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	}
 	startGlobal := session.StartMduIndex*stripe.leafCount + uint64(session.StartBlobIndex)
 
+	params := k.GetParams(ctx)
+	epochID, err := epochIDForHeight(uint64(ctx.BlockHeight()), params.EpochLenBlocks)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid liveness epoch: %s", err.Error())
+	}
+
 	verifyChainedProof := func(chainedProof *types.ChainedProof) (bool, error) {
 		if chainedProof == nil {
 			return false, nil
@@ -1995,6 +2108,10 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		}
 		if !ok {
 			return nil, sdkerrors.ErrUnauthorized.Wrap("invalid liveness proof")
+		}
+
+		if err := k.recordCreditForProof(ctx, epochID, deal, stripe, msg.Creator, p.MduIndex, uint64(p.BlobIndex)); err != nil {
+			return nil, err
 		}
 	}
 

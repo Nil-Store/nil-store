@@ -14,7 +14,6 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
-	
 
 	"nilchain/x/nilchain/client/cli"
 	"nilchain/x/nilchain/keeper"
@@ -24,20 +23,19 @@ import (
 var (
 	_ module.AppModuleBasic = (*AppModule)(nil)
 	_ module.AppModule      = (*AppModule)(nil)
-	_ module.HasGenesis	  = (*AppModule)(nil)
+	_ module.HasGenesis     = (*AppModule)(nil)
 
 	_ appmodule.AppModule       = (*AppModule)(nil)
 	_ appmodule.HasBeginBlocker = (*AppModule)(nil)
 	_ appmodule.HasEndBlocker   = (*AppModule)(nil)
-	
 )
 
 // AppModule implements the AppModule interface that defines the inter-dependent methods that modules need to implement
 type AppModule struct {
-	cdc           codec.Codec
-	keeper        keeper.Keeper
-	authKeeper    types.AuthKeeper
-	bankKeeper    types.BankKeeper
+	cdc        codec.Codec
+	keeper     keeper.Keeper
+	authKeeper types.AuthKeeper
+	bankKeeper types.BankKeeper
 }
 
 func NewAppModule(
@@ -47,10 +45,10 @@ func NewAppModule(
 	bankKeeper types.BankKeeper,
 ) AppModule {
 	return AppModule{
-		cdc:           cdc,
-		keeper:        keeper,
-		authKeeper:    authKeeper,
-		bankKeeper:    bankKeeper,
+		cdc:        cdc,
+		keeper:     keeper,
+		authKeeper: authKeeper,
+		bankKeeper: bankKeeper,
 	}
 }
 
@@ -79,8 +77,8 @@ func (AppModule) RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 
 // RegisterServices registers a gRPC query service to respond to the module-specific gRPC queries
 func (am AppModule) RegisterServices(registrar grpc.ServiceRegistrar) error {
-    types.RegisterMsgServer(registrar, keeper.NewMsgServerImpl(am.keeper))
-    types.RegisterQueryServer(registrar, keeper.NewQueryServerImpl(am.keeper))
+	types.RegisterMsgServer(registrar, keeper.NewMsgServerImpl(am.keeper))
+	types.RegisterQueryServer(registrar, keeper.NewQueryServerImpl(am.keeper))
 
 	return nil
 }
@@ -136,8 +134,8 @@ func (AppModule) ConsensusVersion() uint64 { return 1 }
 
 // BeginBlock contains the logic that is automatically triggered at the beginning of each block.
 // The begin block implementation is optional.
-func (am AppModule) BeginBlock(_ context.Context) error {
-	return nil
+func (am AppModule) BeginBlock(ctx context.Context) error {
+	return am.keeper.BeginBlock(ctx)
 }
 
 // EndBlock contains the logic that is automatically triggered at the end of each block.
