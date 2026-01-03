@@ -13,6 +13,9 @@
 #
 # Hub-only mode (no local providers):
 #   PROVIDER_COUNT=0 ./scripts/run_devnet_alpha_multi_sp.sh start
+#
+# Optional: Enable local disk import fast-path (gateway reads local files directly):
+#   NIL_LOCAL_IMPORT_ENABLED=1 NIL_LOCAL_IMPORT_ALLOW_ABS=1 PROVIDER_COUNT=12 START_WEB=1 ./scripts/run_devnet_alpha_multi_sp.sh start
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -403,6 +406,9 @@ start_provider() {
       NILCHAIND_BIN="$NILCHAIND_BIN" \
       NIL_PROVIDER_KEY="$key" \
       NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
+      NIL_LOCAL_IMPORT_ENABLED="${NIL_LOCAL_IMPORT_ENABLED:-}" \
+      NIL_LOCAL_IMPORT_ALLOW_ABS="${NIL_LOCAL_IMPORT_ALLOW_ABS:-}" \
+      NIL_LOCAL_IMPORT_ROOT="${NIL_LOCAL_IMPORT_ROOT:-}" \
       "$NIL_GATEWAY_BIN" \
       >"$LOG_DIR/$key.log" 2>&1 &
     echo $! >"$PID_DIR/$key.pid"
@@ -421,6 +427,9 @@ start_router() {
       NIL_UPLOAD_DIR="$LOG_DIR/router_tmp" \
       NILCHAIND_BIN="$NILCHAIND_BIN" \
       NIL_GATEWAY_SP_AUTH="$NIL_GATEWAY_SP_AUTH" \
+      NIL_LOCAL_IMPORT_ENABLED="${NIL_LOCAL_IMPORT_ENABLED:-}" \
+      NIL_LOCAL_IMPORT_ALLOW_ABS="${NIL_LOCAL_IMPORT_ALLOW_ABS:-}" \
+      NIL_LOCAL_IMPORT_ROOT="${NIL_LOCAL_IMPORT_ROOT:-}" \
       "$NIL_GATEWAY_BIN" \
       >"$LOG_DIR/router.log" 2>&1 &
     echo $! >"$PID_DIR/router.pid"
@@ -452,8 +461,7 @@ stop_all() {
       rm -f "$pid_file"
     fi
   done
-  for i in $(seq 1 "$PROVIDER_COUNT"); do
-    pid_file="$PID_DIR/provider$i.pid"
+  for pid_file in "$PID_DIR"/provider*.pid; do
     if [ -f "$pid_file" ]; then
       pid=$(cat "$pid_file")
       kill "$pid" 2>/dev/null || true
