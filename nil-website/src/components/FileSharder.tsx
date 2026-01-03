@@ -97,6 +97,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mode2Uploading, setMode2Uploading] = useState(false)
   const [mode2UploadComplete, setMode2UploadComplete] = useState(false)
   const [mode2UploadError, setMode2UploadError] = useState<string | null>(null)
+  const [showLocalImport, setShowLocalImport] = useState(false)
+  const [localImportPath, setLocalImportPath] = useState('')
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -149,6 +151,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const isMode2 = Boolean(stripeParams && stripeParams.k > 0 && stripeParams.m > 0)
   const gatewayMode2Enabled = isMode2 && !appConfig.gatewayDisabled
   const gatewayReachable = localGateway.status === 'connected' && gatewayMode2Enabled
+  const localImportCap = Boolean(localGateway.details?.capabilities?.upload_local)
+  const localImportAvailable = gatewayReachable && localImportCap
   const activeUploading = isMode2 ? mode2Uploading : isUploading
   const isUploadComplete = isMode2
     ? mode2UploadComplete
@@ -700,14 +704,15 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
       const startTs = performance.now();
       setProcessing(true);
       setShards([]);
-      setCollectedMdus([]);
-      setCurrentManifestRoot(null);
-      setCurrentManifestBlob(null);
-      setLogs([]);
-      resetUpload();
-      setMode2Shards([]);
-      setMode2Uploading(false);
-      setMode2UploadComplete(false);
+        setCollectedMdus([]);
+        setCurrentManifestRoot(null);
+        setCurrentManifestBlob(null);
+        setLogs([]);
+        setShowLocalImport(false)
+        resetUpload();
+        setMode2Shards([]);
+        setMode2Uploading(false);
+        setMode2UploadComplete(false);
       setMode2UploadError(null);
       addLog(`Processing file: ${file.name} (${formatBytes(file.size)})`);
       setShardProgress({
@@ -750,6 +755,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           steps_total?: number
           result?: {
             manifest_root?: string
+            size_bytes?: number
+            file_size_bytes?: number
+            allocated_length?: number
           }
         }
 
@@ -767,6 +775,9 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           const obj = value as Record<string, unknown>
           const resultObj = obj.result && typeof obj.result === 'object' ? (obj.result as Record<string, unknown>) : null
           const manifestRoot = resultObj && typeof resultObj.manifest_root === 'string' ? resultObj.manifest_root : undefined
+          const sizeBytes = resultObj ? asNumber(resultObj.size_bytes) : undefined
+          const fileSizeBytes = resultObj ? asNumber(resultObj.file_size_bytes) : undefined
+          const allocatedLength = resultObj ? asNumber(resultObj.allocated_length) : undefined
 
           return {
             status: typeof obj.status === 'string' ? obj.status : undefined,
@@ -777,7 +788,15 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             bytes_total: asNumber(obj.bytes_total),
             steps_done: asNumber(obj.steps_done),
             steps_total: asNumber(obj.steps_total),
-            result: manifestRoot ? { manifest_root: manifestRoot } : undefined,
+            result:
+              manifestRoot || sizeBytes || fileSizeBytes || allocatedLength
+                ? {
+                    manifest_root: manifestRoot,
+                    size_bytes: sizeBytes,
+                    file_size_bytes: fileSizeBytes,
+                    allocated_length: allocatedLength,
+                  }
+                : undefined,
           }
         }
 
@@ -799,7 +818,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
         form.append('file_size_bytes', String(file.size))
         form.append('file', file)
 
-        const pollStatus = async () => {
+        const pollStatus = async (): Promise<GatewayUploadJobStatus> => {
           while (!stopPolling) {
             try {
               const res = await fetch(statusUrl, { method: 'GET', signal: AbortSignal.timeout(2500) })
@@ -843,14 +862,25 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     blobsTotal: workTotal,
                     fileBytesTotal: bytesTotal > 0 ? bytesTotal : p.fileBytesTotal,
                   }))
+
+                  const terminalStatus = String(job.status || '').trim()
+                  if (terminalStatus === 'success') {
+                    stopPolling = true
+                    return job
+                  }
+                  if (terminalStatus === 'error') {
+                    stopPolling = true
+                    throw new Error(String(job.error || 'gateway upload failed').trim() || 'gateway upload failed')
+                  }
                 }
               }
             } catch {
-              // Ignore polling errors; the primary upload request is the source of truth.
+              // Ignore polling errors while the gateway is working; the status endpoint is best-effort.
             }
 
             await new Promise((r) => setTimeout(r, 1000))
           }
+          throw new Error('upload polling stopped')
         }
 
         const pollPromise = pollStatus()
@@ -875,38 +905,33 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             signal: AbortSignal.timeout(1_800_000),
           })
 
-          stopPolling = true
-          await pollPromise.catch(() => {})
-
           if (!resp.ok) {
             const txt = await resp.text().catch(() => '')
             const statusErr = String(lastJob?.error || '')
+            stopPolling = true
+            await pollPromise.catch(() => {})
             throw new Error(txt || statusErr || `gateway upload failed (${resp.status})`)
           }
 
-          const payload = (await resp.json().catch(() => null)) as {
-            manifest_root?: string
-            cid?: string
-            size_bytes?: number
-            file_size_bytes?: number
-            allocated_length?: number
-          } | null
+          const jobDone = await pollPromise
 
-          const statusRoot = String(lastJob?.result?.manifest_root || '')
-          const root = String(payload?.manifest_root || payload?.cid || statusRoot || '').trim()
+          const root = String(jobDone?.result?.manifest_root || '').trim()
           if (!root) throw new Error('gateway upload returned no manifest_root')
-          const gatewaySizeBytes = Number(payload?.size_bytes ?? payload?.file_size_bytes ?? file.size) || file.size
+          const gatewaySizeBytes =
+            Number(jobDone?.result?.size_bytes ?? jobDone?.result?.file_size_bytes ?? file.size) || file.size
 
           setCurrentManifestRoot(root)
-          setCurrentManifestBlob(null)
-          setCollectedMdus([])
-          setMode2Shards([])
-          setMode2UploadError(null)
-          setMode2UploadComplete(true)
-          addLog(`> Gateway Mode 2 ingest complete. manifest_root=${root}`)
-          setShardProgress((p) => ({
-            ...p,
-            phase: 'done',
+        setCurrentManifestBlob(null)
+        setCollectedMdus([])
+        setMode2Shards([])
+        setMode2UploadError(null)
+        setMode2UploadComplete(true)
+        setShowLocalImport(false)
+        setLocalImportPath('')
+        addLog(`> Gateway Mode 2 ingest complete. manifest_root=${root}`)
+        setShardProgress((p) => ({
+          ...p,
+          phase: 'done',
             label: 'Gateway Mode 2 ingest complete. Ready to commit.',
             fileBytesTotal: gatewaySizeBytes,
             currentOpStartedAtMs: null,
@@ -1593,6 +1618,250 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     }
   }, [addLog, dealId, ensureWasmReady, gatewayMode2Enabled, isConnected, resetUpload, stripeParams]);
 
+  const processLocalImport = useCallback(async () => {
+    const rawPath = String(localImportPath || '').trim()
+    if (!rawPath) return
+
+    if (!isConnected) {
+      alert('Connect wallet first')
+      return
+    }
+
+    if (!localImportAvailable) {
+      alert('Local gateway import is not enabled/available. Enable it on the gateway with NIL_LOCAL_IMPORT_ENABLED=1.')
+      return
+    }
+
+    const displayName = rawPath.split(/[\\/]/).pop() || rawPath
+    const startTs = performance.now()
+
+    setProcessing(true)
+    setShards([])
+    setCollectedMdus([])
+    setCurrentManifestRoot(null)
+    setCurrentManifestBlob(null)
+    setLogs([])
+    resetUpload()
+    setMode2Shards([])
+    setMode2Uploading(false)
+    setMode2UploadComplete(false)
+    setMode2UploadError(null)
+    addLog(`Processing local file: ${displayName} (fast path)`)
+    setShardProgress({
+      phase: 'planning',
+      label: 'Gateway local import: starting...',
+      blobsDone: 0,
+      blobsTotal: 0,
+      blobsInCurrentMdu: 0,
+      blobsPerMdu: 64,
+      workDone: 0,
+      workTotal: 0,
+      avgWorkMs: null,
+      fileBytesTotal: 0,
+      currentOpStartedAtMs: performance.now(),
+      startTsMs: startTs,
+      totalUserMdus: 0,
+      totalWitnessMdus: 0,
+      currentMduIndex: null,
+      currentMduKind: null,
+      lastOpMs: null,
+    })
+
+    type GatewayUploadJobStatus = {
+      status?: string
+      phase?: string
+      message?: string
+      error?: string
+      bytes_done?: number
+      bytes_total?: number
+      steps_done?: number
+      steps_total?: number
+      result?: {
+        manifest_root?: string
+        size_bytes?: number
+        file_size_bytes?: number
+        allocated_length?: number
+      }
+    }
+
+    const asNumber = (value: unknown): number | undefined => {
+      if (typeof value === 'number') return value
+      if (typeof value === 'string') {
+        const n = Number(value)
+        return Number.isFinite(n) ? n : undefined
+      }
+      return undefined
+    }
+
+    const parseGatewayUploadJobStatus = (value: unknown): GatewayUploadJobStatus | null => {
+      if (!value || typeof value !== 'object') return null
+      const obj = value as Record<string, unknown>
+      const resultObj = obj.result && typeof obj.result === 'object' ? (obj.result as Record<string, unknown>) : null
+      const manifestRoot = resultObj && typeof resultObj.manifest_root === 'string' ? resultObj.manifest_root : undefined
+      const sizeBytes = resultObj ? asNumber(resultObj.size_bytes) : undefined
+      const fileSizeBytes = resultObj ? asNumber(resultObj.file_size_bytes) : undefined
+      const allocatedLength = resultObj ? asNumber(resultObj.allocated_length) : undefined
+
+      return {
+        status: typeof obj.status === 'string' ? obj.status : undefined,
+        phase: typeof obj.phase === 'string' ? obj.phase : undefined,
+        message: typeof obj.message === 'string' ? obj.message : undefined,
+        error: typeof obj.error === 'string' ? obj.error : undefined,
+        bytes_done: asNumber(obj.bytes_done),
+        bytes_total: asNumber(obj.bytes_total),
+        steps_done: asNumber(obj.steps_done),
+        steps_total: asNumber(obj.steps_total),
+        result:
+          manifestRoot || sizeBytes || fileSizeBytes || allocatedLength
+            ? {
+                manifest_root: manifestRoot,
+                size_bytes: sizeBytes,
+                file_size_bytes: fileSizeBytes,
+                allocated_length: allocatedLength,
+              }
+            : undefined,
+      }
+    }
+
+    let stopPolling = false
+    let lastJob: GatewayUploadJobStatus | null = null
+
+    const gatewayBase = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '')
+    const uploadId =
+      globalThis.crypto && 'randomUUID' in globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function'
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const statusUrl = `${gatewayBase}/gateway/upload-status?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(
+      uploadId,
+    )}`
+    const url = `${gatewayBase}/gateway/upload-local?deal_id=${encodeURIComponent(dealId)}&upload_id=${encodeURIComponent(uploadId)}`
+
+    const pollStatus = async (): Promise<GatewayUploadJobStatus> => {
+      while (!stopPolling) {
+        try {
+          const res = await fetch(statusUrl, { method: 'GET', signal: AbortSignal.timeout(2500) })
+          if (res.ok) {
+            const job = parseGatewayUploadJobStatus(await res.json().catch(() => null))
+            if (job) {
+              lastJob = job
+              const phase = String(job.phase || '').trim()
+              const status = String(job.status || '').trim()
+              const message = String(job.message || '').trim()
+              const bytesDone = Number(job.bytes_done || 0) || 0
+              const bytesTotal = Number(job.bytes_total || 0) || 0
+              const stepsDone = Number(job.steps_done || 0) || 0
+              const stepsTotal = Number(job.steps_total || 0) || 0
+
+              const phaseLabel = message || phase || status || 'working'
+              const label = `Gateway Mode 2: ${phaseLabel}`
+
+              const phaseState: ShardPhase =
+                phase === 'receiving'
+                  ? 'gateway_receiving'
+                  : phase === 'encoding'
+                    ? 'gateway_encoding'
+                    : phase === 'uploading'
+                      ? 'gateway_uploading'
+                      : phase === 'done'
+                        ? 'done'
+                        : 'planning'
+
+              const useBytes = phaseState === 'gateway_receiving' && bytesTotal > 0
+              const workDone = useBytes ? bytesDone : stepsDone
+              const workTotal = useBytes ? bytesTotal : stepsTotal
+
+              setShardProgress((p) => ({
+                ...p,
+                phase: phaseState,
+                label,
+                workDone,
+                workTotal,
+                blobsDone: workDone,
+                blobsTotal: workTotal,
+                fileBytesTotal: bytesTotal > 0 ? bytesTotal : p.fileBytesTotal,
+              }))
+
+              const terminalStatus = String(job.status || '').trim()
+              if (terminalStatus === 'success') {
+                stopPolling = true
+                return job
+              }
+              if (terminalStatus === 'error') {
+                stopPolling = true
+                throw new Error(String(job.error || 'gateway upload failed').trim() || 'gateway upload failed')
+              }
+            }
+          }
+        } catch {
+          // Best-effort polling.
+        }
+
+        await new Promise((r) => setTimeout(r, 1000))
+      }
+      throw new Error('upload polling stopped')
+    }
+
+    const pollPromise = pollStatus()
+
+    try {
+      setMode2Uploading(true)
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ local_path: rawPath, file_path: displayName }),
+        signal: AbortSignal.timeout(30_000),
+      })
+
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => '')
+        const statusErr = String(lastJob?.error || '')
+        stopPolling = true
+        await pollPromise.catch(() => {})
+        throw new Error(txt || statusErr || `gateway local import failed (${resp.status})`)
+      }
+
+      const jobDone = await pollPromise
+      const root = String(jobDone?.result?.manifest_root || '').trim()
+      if (!root) throw new Error('gateway local import returned no manifest_root')
+      const gatewaySizeBytes =
+        Number(jobDone?.result?.size_bytes ?? jobDone?.result?.file_size_bytes ?? 0) || 0
+
+      setCurrentManifestRoot(root)
+      setCurrentManifestBlob(null)
+      setCollectedMdus([])
+      setMode2Shards([])
+      setMode2UploadError(null)
+      setMode2UploadComplete(true)
+      addLog(`> Gateway Mode 2 ingest complete. manifest_root=${root}`)
+      setShardProgress((p) => ({
+        ...p,
+        phase: 'done',
+        label: 'Gateway Mode 2 ingest complete. Ready to commit.',
+        fileBytesTotal: gatewaySizeBytes > 0 ? gatewaySizeBytes : p.fileBytesTotal,
+        currentOpStartedAtMs: null,
+        lastOpMs: performance.now() - startTs,
+      }))
+    } catch (e: unknown) {
+      stopPolling = true
+      await pollPromise.catch(() => {})
+
+      const msg = e instanceof Error ? e.message : String(e)
+      addLog(`> Gateway local import failed: ${msg}`)
+      setMode2UploadError(msg)
+      setShardProgress((p) => ({
+        ...p,
+        phase: 'error',
+        label: `Gateway local import failed: ${msg}`,
+        currentOpStartedAtMs: null,
+        lastOpMs: performance.now() - startTs,
+      }))
+    } finally {
+      setMode2Uploading(false)
+      setProcessing(false)
+      stopPolling = true
+    }
+  }, [addLog, dealId, isConnected, localImportAvailable, localImportPath, resetUpload])
+
   // Helper for encoding (matches nil_core/coding.rs encode_to_mdu)
   function encodeToMdu(rawData: Uint8Array): Uint8Array {
       const MDU_SIZE = 8 * 1024 * 1024;
@@ -1690,45 +1959,85 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                   : 'border-border hover:border-primary/50 bg-card'
                 }
               `}
-            >
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-secondary">
-                    <Cpu className="h-5 w-5 text-foreground" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-foreground">Upload a file</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {isMode2 && gatewayMode2Enabled ? (
-                        gatewayReachable ? (
-                          'Local gateway connected (fast path).'
+              >
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-secondary">
+                      <Cpu className="h-5 w-5 text-foreground" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">Upload a file</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {isMode2 && gatewayMode2Enabled ? (
+                          gatewayReachable ? (
+                            'Local gateway connected (fast path).'
+                          ) : (
+                            'No local gateway detected (in-browser sharding).'
+                          )
+                        ) : wasmStatus === 'initializing' ? (
+                          'Preparing in-browser sharding…'
+                        ) : wasmStatus === 'error' ? (
+                          `In-browser sharding unavailable: ${wasmError || 'init failed'}`
                         ) : (
-                          'No local gateway detected (in-browser sharding).'
-                        )
-                      ) : wasmStatus === 'initializing' ? (
-                        'Preparing in-browser sharding…'
-                      ) : wasmStatus === 'error' ? (
-                        `In-browser sharding unavailable: ${wasmError || 'init failed'}`
-                      ) : (
-                        'In-browser sharding.'
-                      )}
+                          'In-browser sharding.'
+                        )}
+                      </div>
                     </div>
                   </div>
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                    <label className="inline-flex w-full cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 sm:w-auto">
+                      Choose file
+                      <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
+                    </label>
+                    {localImportAvailable ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowLocalImport((v) => !v)}
+                        className="inline-flex w-full items-center justify-center rounded-md border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-secondary/40 sm:w-auto"
+                      >
+                        {showLocalImport ? 'Hide local import' : 'Import from disk'}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-                <label className="inline-flex w-full cursor-pointer items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 sm:w-auto">
-                  Choose file
-                  <input type="file" className="hidden" onChange={handleFileSelect} data-testid="mdu-file-input" />
-                </label>
               </div>
-            </div>
-          )}
+            )}
 
-      {showStatusPanel && (
-        <div className="bg-card rounded-xl border border-border p-4 shadow-sm text-sm">
-          <p className="font-bold text-foreground mb-2">Current Activity:</p>
-          <div className="space-y-2">
-            {hasError ? (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
+            {localImportAvailable && showLocalImport ? (
+              <div className="rounded-xl border border-border bg-background/60 p-4 text-sm">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Local import (fastest)</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Let your local gateway read the file directly from disk (no browser upload).
+                </div>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <input
+                    value={localImportPath}
+                    onChange={(e) => setLocalImportPath(e.target.value)}
+                    placeholder="Paste a local file path…"
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                    spellCheck={false}
+                  />
+                  <button
+                    type="button"
+                    onClick={processLocalImport}
+                    disabled={!localImportPath.trim() || processing || activeUploading}
+                    className="inline-flex w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50 sm:w-auto"
+                  >
+                    Import
+                  </button>
+                </div>
+                <div className="mt-2 text-[11px] text-muted-foreground">
+                  Tip: Drag a file from Finder into this field to paste its path.
+                </div>
+              </div>
+            ) : null}
+
+        {showStatusPanel && (
+          <div className="bg-card rounded-xl border border-border p-4 shadow-sm text-sm">
+            <p className="font-bold text-foreground mb-2">Current Activity:</p>
+            <div className="space-y-2">
+              {hasError ? (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-[11px] text-destructive">
                 {commitError ? `Commit failed: ${commitError.message}` : null}
                 {commitError && mode2UploadError ? <span className="mx-2 text-border">|</span> : null}
                 {mode2UploadError ? `Upload failed: ${mode2UploadError}` : null}
