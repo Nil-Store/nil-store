@@ -37,9 +37,9 @@ This document tracks **what is missing** between the current implementation in t
 - **Test gate:** new e2e (multi-SP) that simulates slot failure → repair catch-up → slot rejoin without breaking reads.
 
 ### P0-CHAIN-002 — Challenge derivation + proof demand policy + quota enforcement
-- **Status:** SPECIFIED (RFC)
+- **Status:** PARTIAL (DEVNET)
 - **Spec:** `spec.md` §7.6, Appendix B (3, 4); `rfcs/rfc-challenge-derivation-and-quotas.md`
-- **Current state:** sessions/proofs exist; deterministic quota + synthetic fill policy is now specified, but not implemented in keeper state machines.
+- **Current state:** epoch seed persistence + deterministic synthetic challenge derivation are implemented; credits are counted from receipts/session proofs; system proofs must match the derived set; epoch-end quota enforcement increments missed epochs and can auto-start Mode 2 slot repair when thresholds are exceeded.
 - **DoD:** deterministic challenge derivation from chain state + epoch randomness; quota accounting; penalties for non-compliance distinct from invalid proofs.
 - **Test gate:** keeper unit tests + adversarial sim tests for challenge determinism and anti-grind properties.
 
