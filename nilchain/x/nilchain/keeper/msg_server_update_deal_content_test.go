@@ -50,6 +50,8 @@ func TestUpdateDealContent_HappyPath(t *testing.T) {
 		DealId:  resDeal.DealId,
 		Cid:     validManifestCid,
 		Size_:   size,
+		TotalMdus:   2,
+		WitnessMdus: 0,
 	})
 	require.NoError(t, err)
 	require.True(t, resUpd.Success)
@@ -144,6 +146,8 @@ func TestUpdateDealContent_AllowsLargeContent(t *testing.T) {
 		DealId:  resDeal.DealId,
 		Cid:     validManifestCid,
 		Size_:   size,
+		TotalMdus:   2,
+		WitnessMdus: 0,
 	})
 	require.NoError(t, err)
 	require.True(t, resUpd.Success)

@@ -26,6 +26,44 @@ type msgServer struct {
 	Keeper
 }
 
+func validateCommitSlabAccounting(deal types.Deal, totalMdus uint64, witnessMdus uint64) error {
+	if totalMdus == 0 {
+		return sdkerrors.ErrInvalidRequest.Wrap("total_mdus must be non-zero")
+	}
+	if witnessMdus == ^uint64(0) {
+		return sdkerrors.ErrInvalidRequest.Wrap("witness_mdus is too large")
+	}
+
+	metaMdus := witnessMdus + 1
+	if totalMdus <= metaMdus {
+		return sdkerrors.ErrInvalidRequest.Wrapf(
+			"total_mdus must exceed meta_mdus (1+witness_mdus); total=%d witness=%d",
+			totalMdus,
+			witnessMdus,
+		)
+	}
+
+	// Append-only slab accounting invariants.
+	if deal.TotalMdus != 0 {
+		if witnessMdus != deal.WitnessMdus {
+			return sdkerrors.ErrInvalidRequest.Wrapf(
+				"witness_mdus is immutable once initialized; have=%d got=%d",
+				deal.WitnessMdus,
+				witnessMdus,
+			)
+		}
+		if totalMdus < deal.TotalMdus {
+			return sdkerrors.ErrInvalidRequest.Wrapf(
+				"total_mdus cannot decrease (append-only); have=%d got=%d",
+				deal.TotalMdus,
+				totalMdus,
+			)
+		}
+	}
+
+	return nil
+}
+
 // NewMsgServerImpl returns an implementation of the MsgServer interface
 // for the provided Keeper.
 func NewMsgServerImpl(keeper Keeper) types.MsgServer {
@@ -536,6 +574,9 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	if msg.Size_ == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("new content size cannot be zero")
 	}
+	if err := validateCommitSlabAccounting(deal, msg.TotalMdus, msg.WitnessMdus); err != nil {
+		return nil, err
+	}
 
 	// Atomic Update
 	manifestRoot, err := hex.DecodeString(strings.TrimPrefix(msg.Cid, "0x"))
@@ -548,6 +589,21 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	}
 	deal.ManifestRoot = manifestRoot
 	deal.Size_ = msg.Size_
+	deal.TotalMdus = msg.TotalMdus
+	deal.WitnessMdus = msg.WitnessMdus
+
+	// If a slot is repairing, new commits advance the catch-up target generation.
+	if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 {
+		for i, slot := range deal.Mode2Slots {
+			if slot == nil {
+				continue
+			}
+			if slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING && slot.RepairTargetGen < deal.CurrentGen {
+				slot.RepairTargetGen = deal.CurrentGen
+				deal.Mode2Slots[i] = slot
+			}
+		}
+	}
 
 	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
@@ -559,6 +615,8 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
 			sdk.NewAttribute(types.AttributeKeyCID, msg.Cid),
 			sdk.NewAttribute(types.AttributeKeySize, fmt.Sprintf("%d", deal.Size_)),
+			sdk.NewAttribute("total_mdus", fmt.Sprintf("%d", deal.TotalMdus)),
+			sdk.NewAttribute("witness_mdus", fmt.Sprintf("%d", deal.WitnessMdus)),
 			sdk.NewAttribute("current_gen", fmt.Sprintf("%d", deal.CurrentGen)),
 		),
 	)
@@ -654,6 +712,9 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	if deal.Owner != ownerAcc.String() {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner can update content")
 	}
+	if err := validateCommitSlabAccounting(deal, intent.TotalMdus, intent.WitnessMdus); err != nil {
+		return nil, err
+	}
 
 	// --- TERM DEPOSIT (Storage Lock-in) ---
 	// Cost = (NewSize - OldSize) * Duration * Price
@@ -690,6 +751,21 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	}
 	deal.ManifestRoot = manifestRoot
 	deal.Size_ = intent.SizeBytes
+	deal.TotalMdus = intent.TotalMdus
+	deal.WitnessMdus = intent.WitnessMdus
+
+	// If a slot is repairing, new commits advance the catch-up target generation.
+	if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 {
+		for i, slot := range deal.Mode2Slots {
+			if slot == nil {
+				continue
+			}
+			if slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING && slot.RepairTargetGen < deal.CurrentGen {
+				slot.RepairTargetGen = deal.CurrentGen
+				deal.Mode2Slots[i] = slot
+			}
+		}
+	}
 
 	if err := k.Deals.Set(ctx, intent.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
@@ -701,6 +777,8 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
 			sdk.NewAttribute(types.AttributeKeyCID, intent.Cid),
 			sdk.NewAttribute(types.AttributeKeySize, fmt.Sprintf("%d", deal.Size_)),
+			sdk.NewAttribute("total_mdus", fmt.Sprintf("%d", deal.TotalMdus)),
+			sdk.NewAttribute("witness_mdus", fmt.Sprintf("%d", deal.WitnessMdus)),
 			sdk.NewAttribute("current_gen", fmt.Sprintf("%d", deal.CurrentGen)),
 		),
 	)

@@ -665,6 +665,36 @@ func (p *Precompile) runUpdateDealContent(ctx sdk.Context, evm *vm.EVM, contract
 		return nil, errors.New("updateDealContent: sizeBytes must be > 0")
 	}
 
+	// Slab accounting fields (new): callers SHOULD provide these explicitly.
+	// For backwards compatibility, fall back to existing on-chain values when present.
+	var (
+		totalMdus   uint64
+		witnessMdus uint64
+	)
+	if v, ok := args["totalMdus"]; ok && v != nil {
+		totalMdus, err = asUint64(v)
+		if err != nil {
+			return nil, errors.New("updateDealContent: invalid totalMdus")
+		}
+	}
+	if v, ok := args["witnessMdus"]; ok && v != nil {
+		witnessMdus, err = asUint64(v)
+		if err != nil {
+			return nil, errors.New("updateDealContent: invalid witnessMdus")
+		}
+	}
+	if totalMdus == 0 || witnessMdus == 0 {
+		deal, derr := p.keeper.Deals.Get(ctx, dealID)
+		if derr == nil {
+			if totalMdus == 0 {
+				totalMdus = deal.TotalMdus
+			}
+			if witnessMdus == 0 {
+				witnessMdus = deal.WitnessMdus
+			}
+		}
+	}
+
 	caller := contract.Caller()
 	creator := sdk.AccAddress(caller.Bytes()).String()
 	cid := "0x" + hex.EncodeToString(manifestRoot)
@@ -675,6 +705,8 @@ func (p *Precompile) runUpdateDealContent(ctx sdk.Context, evm *vm.EVM, contract
 		DealId:  dealID,
 		Cid:     cid,
 		Size_:   sizeBytes,
+		TotalMdus:   totalMdus,
+		WitnessMdus: witnessMdus,
 	})
 	if err != nil {
 		return nil, err

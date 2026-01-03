@@ -56,6 +56,8 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 		DealId:  resDeal.DealId,
 		Cid:     "0x" + hexEncode(manifestRoot),
 		Size_:   8 * 1024 * 1024,
+		TotalMdus:   2,
+		WitnessMdus: 0,
 	})
 	require.NoError(t, err)
 
