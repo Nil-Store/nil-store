@@ -1724,7 +1724,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
     }
 
     let stopPolling = false
-    let lastJob: GatewayUploadJobStatus | null = null
+    let lastJob: GatewayUploadJobStatus | null = null as GatewayUploadJobStatus | null
 
     const gatewayBase = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '')
     const uploadId =
