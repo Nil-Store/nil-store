@@ -141,7 +141,7 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 // EndBlock contains the logic that is automatically triggered at the end of each block.
 // The end block implementation is optional.
 func (am AppModule) EndBlock(ctx context.Context) error {
-	return am.keeper.CheckMissedProofs(ctx)
+	return am.keeper.EndBlock(ctx)
 }
 
 // GetTxCmd returns the root tx command for the module.
