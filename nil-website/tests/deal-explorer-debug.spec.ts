@@ -150,6 +150,22 @@ test('Deal Explorer debug: browser cache + SP retrieval + gateway raw fetch', as
     })
   })
 
+  await page.route('**/gateway/open-session/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        download_session: 'dl-test-session',
+        deal_id: Number(dealId),
+        epoch_id: 1,
+        provider: 'nil1provider',
+        file_path: filePath,
+        expires_at: Math.floor(Date.now() / 1000) + 600,
+      }),
+    })
+  })
+
   await page.route('**/gateway/fetch/**', async (route) => {
     await route.fulfill({
       status: 206,

@@ -31,7 +31,7 @@ export interface FetchInput {
   filePath: string
   /**
    * When true, performs an on-chain RetrievalSession flow and submits proofs (slow, costs escrow).
-   * When false (default), downloads via a `download_session` fast path (no receipts).
+   * When false (default), downloads via a fast path (no receipts).
    */
   withReceipt?: boolean
   /**
@@ -96,15 +96,15 @@ function decodeHttpError(bodyText: string): string {
   return trimmed
 }
 
-function randomDownloadSessionId(): string {
-  try {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID()
-    }
-  } catch (e) {
-    void e
-  }
-  return `dl-${Date.now()}-${Math.floor(Math.random() * 1_000_000_000)}`
+function rawFetchUrl(base: string, req: { manifestRoot: Hex; dealId: string; owner: string; filePath: string; rangeStart: number; rangeLen: number }): string {
+  const normalizeBase = (s: string) => s.replace(/\/$/, '')
+  const q = new URLSearchParams()
+  q.set('deal_id', req.dealId)
+  q.set('owner', req.owner)
+  q.set('file_path', req.filePath)
+  q.set('range_start', String(req.rangeStart))
+  q.set('range_len', String(req.rangeLen))
+  return `${normalizeBase(base)}/gateway/debug/raw-fetch/${encodeURIComponent(req.manifestRoot)}?${q.toString()}`
 }
 
 export function useFetch() {
@@ -179,19 +179,16 @@ export function useFetch() {
         typeof input.mduSizeBytes === 'number' &&
         typeof input.blobSizeBytes === 'number'
 
-      const chunks =
-        withReceipt
-          ? hasMeta
-            ? planNilfsFileRangeChunks({
-                fileStartOffset: input.fileStartOffset!,
-                fileSizeBytes: input.fileSizeBytes!,
-                rangeStart: wantRangeStart,
-                rangeLen: effectiveRangeLen,
-                mduSizeBytes: input.mduSizeBytes!,
-                blobSizeBytes: input.blobSizeBytes!,
-              })
-            : [{ rangeStart: wantRangeStart, rangeLen: effectiveRangeLen }]
-          : [{ rangeStart: wantRangeStart, rangeLen: effectiveRangeLen }]
+      const chunks = hasMeta
+        ? planNilfsFileRangeChunks({
+            fileStartOffset: input.fileStartOffset!,
+            fileSizeBytes: input.fileSizeBytes!,
+            rangeStart: wantRangeStart,
+            rangeLen: effectiveRangeLen,
+            mduSizeBytes: input.mduSizeBytes!,
+            blobSizeBytes: input.blobSizeBytes!,
+          })
+        : [{ rangeStart: wantRangeStart, rangeLen: effectiveRangeLen }]
 
       if (withReceipt && !hasMeta && effectiveRangeLen > blobSizeBytes) {
         throw new Error('range fetch > blob size requires fileStartOffset/fileSizeBytes/mduSizeBytes/blobSizeBytes')
@@ -236,12 +233,40 @@ export function useFetch() {
       }
 
       if (!withReceipt) {
-        const downloadSessionId = randomDownloadSessionId()
+        const shouldTryRawFetch = effectiveRangeLen > blobSizeBytes
+        const rawFetchBases = serviceOverride
+          ? [serviceOverride]
+          : [
+              ...(!appConfig.gatewayDisabled ? [appConfig.gatewayBase] : []),
+              ...(directBase && directBase !== appConfig.gatewayBase ? [directBase] : []),
+            ]
+
+        const tryRawFetch = async (): Promise<Uint8Array | null> => {
+          if (!shouldTryRawFetch) return null
+          for (const base of rawFetchBases) {
+            const url = rawFetchUrl(base, { manifestRoot, dealId, owner, filePath, rangeStart: wantRangeStart, rangeLen: effectiveRangeLen })
+            try {
+              const res = await fetch(url)
+              if (!res.ok) {
+                const txt = await res.text().catch(() => '')
+                throw new Error(decodeHttpError(txt) || `raw fetch failed (${res.status})`)
+              }
+              return new Uint8Array(await res.arrayBuffer())
+            } catch (e) {
+              const msg = e instanceof Error ? decodeHttpError(e.message) : String(e)
+              // Only treat "slab missing" as a recoverable raw-fetch failure; other errors should surface.
+              if (/slab not found on disk/i.test(msg) || /file not found in deal/i.test(msg)) continue
+              throw e
+            }
+          }
+          return null
+        }
+
         setProgress((p) => ({
           ...p,
           phase: 'fetching',
           filePath,
-          chunkCount: 1,
+          chunkCount: chunks.length,
           chunksFetched: 0,
           bytesTotal: effectiveRangeLen,
           bytesFetched: 0,
@@ -249,28 +274,169 @@ export function useFetch() {
           receiptsTotal: 0,
         }))
 
-        const rangeResult = await transport.fetchRange({
-          manifestRoot,
-          owner,
-          dealId,
-          filePath,
-          rangeStart: wantRangeStart,
-          rangeLen: effectiveRangeLen,
-          downloadSessionId,
-          directBase,
-          p2pTarget: planP2pTarget,
-          preference: preferenceOverride,
-        })
+        const rawBytes = await tryRawFetch()
+        if (rawBytes) {
+          const blob = new Blob([rawBytes] as BlobPart[], { type: 'application/octet-stream' })
+          const url = URL.createObjectURL(blob)
+          setDownloadUrl(url)
+          setProgress((p) => ({
+            ...p,
+            phase: 'done',
+            chunksFetched: chunks.length,
+            bytesFetched: rawBytes.byteLength,
+          }))
+          return { url, blob }
+        }
 
-        const bytes = rangeResult.data.bytes
-        const blob = new Blob([bytes] as BlobPart[], { type: 'application/octet-stream' })
+        // Fallback: open a download session (1 signature) then fetch blob-sized chunks with X-Nil-Download-Session.
+        if (!ethereum || typeof ethereum.request !== 'function') {
+          throw new Error('Ethereum provider (MetaMask) not available')
+        }
+        if (!address) throw new Error('Connect a wallet to authorize download')
+        if (!hasMeta && effectiveRangeLen > blobSizeBytes) {
+          throw new Error('range fetch > blob size requires fileStartOffset/fileSizeBytes/mduSizeBytes/blobSizeBytes')
+        }
+
+        let metaAuth:
+          | {
+              reqSig: string
+              reqNonce: number
+              reqExpiresAt: number
+              signedRangeStart: number
+              signedRangeLen: number
+            }
+          | undefined
+
+        const shouldSignMetaAuth = (err: unknown): boolean => {
+          if (!(err instanceof Error)) return false
+          const msg = decodeHttpError(err.message)
+          return /req_sig is required/i.test(msg) || /invalid req_nonce/i.test(msg) || /invalid req_expires_at/i.test(msg)
+        }
+
+        const signMetaAuth = async () => {
+          const now = Math.floor(Date.now() / 1000)
+          const reqNonce = Math.floor(Math.random() * 1_000_000_000) + Date.now()
+          const reqExpiresAt = now + 9 * 60
+          const typedData = buildRetrievalRequestTypedData(
+            {
+              deal_id: Number(dealId),
+              file_path: filePath,
+              range_start: wantRangeStart,
+              range_len: effectiveRangeLen,
+              nonce: reqNonce,
+              expires_at: reqExpiresAt,
+            },
+            appConfig.chainId,
+          )
+          const reqSig = (await ethereum.request({
+            method: 'eth_signTypedData_v4',
+            params: [address, JSON.stringify(typedData)],
+          })) as string
+
+          metaAuth = {
+            reqSig,
+            reqNonce,
+            reqExpiresAt,
+            signedRangeStart: wantRangeStart,
+            signedRangeLen: effectiveRangeLen,
+          }
+          return metaAuth
+        }
+
+        const openDownloadSession = async (base: string, auth?: typeof metaAuth): Promise<string> => {
+          const normalizeBase = (s: string) => s.replace(/\/$/, '')
+          const q = new URLSearchParams()
+          q.set('deal_id', dealId)
+          q.set('owner', owner)
+          q.set('file_path', filePath)
+          const url = `${normalizeBase(base)}/gateway/open-session/${encodeURIComponent(manifestRoot)}?${q.toString()}`
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+              ...(auth
+                ? {
+                    'X-Nil-Req-Sig': auth.reqSig,
+                    'X-Nil-Req-Nonce': String(auth.reqNonce),
+                    'X-Nil-Req-Expires-At': String(auth.reqExpiresAt),
+                    'X-Nil-Req-Range-Start': String(auth.signedRangeStart),
+                    'X-Nil-Req-Range-Len': String(auth.signedRangeLen),
+                  }
+                : {}),
+            },
+          })
+          if (!res.ok) {
+            const txt = await res.text().catch(() => '')
+            throw new Error(decodeHttpError(txt) || `open-session failed (${res.status})`)
+          }
+          const json = (await res.json().catch(() => null)) as { download_session?: string } | null
+          const id = String(json?.download_session || '').trim()
+          if (!id) throw new Error('open-session returned an invalid download_session')
+          return id
+        }
+
+        const openBases = serviceOverride
+          ? [serviceOverride]
+          : [
+              ...(!appConfig.gatewayDisabled ? [appConfig.gatewayBase] : []),
+              ...(directBase && directBase !== appConfig.gatewayBase ? [directBase] : []),
+            ]
+
+        let downloadSessionId: string | null = null
+        let sessionPreference: RoutePreference | undefined = undefined
+        for (const base of openBases) {
+          try {
+            downloadSessionId = await openDownloadSession(base, metaAuth)
+            sessionPreference = base === appConfig.gatewayBase ? 'prefer_gateway' : 'prefer_direct_sp'
+            break
+          } catch (err) {
+            if (!metaAuth && shouldSignMetaAuth(err)) {
+              setProgress((p) => ({ ...p, message: 'Sign the download request to authorize retrieval' }))
+              metaAuth = await signMetaAuth()
+              downloadSessionId = await openDownloadSession(base, metaAuth)
+              sessionPreference = base === appConfig.gatewayBase ? 'prefer_gateway' : 'prefer_direct_sp'
+              break
+            }
+          }
+        }
+        if (!downloadSessionId) {
+          throw new Error('failed to open download session')
+        }
+
+        const parts: Uint8Array[] = new Array(chunks.length)
+        let bytesFetched = 0
+        for (let i = 0; i < chunks.length; i++) {
+          const c = chunks[i]
+          const rangeResult = await transport.fetchRange({
+            manifestRoot,
+            owner,
+            dealId,
+            filePath,
+            rangeStart: c.rangeStart,
+            rangeLen: c.rangeLen,
+            downloadSessionId,
+            directBase,
+            p2pTarget: planP2pTarget,
+            preference: sessionPreference ?? preferenceOverride,
+          })
+          const buf = rangeResult.data.bytes
+          parts[i] = buf
+          bytesFetched += buf.byteLength
+          setProgress((p) => ({
+            ...p,
+            phase: 'fetching',
+            chunksFetched: Math.min(p.chunkCount || chunks.length, i + 1),
+            bytesFetched: Math.min(p.bytesTotal || bytesFetched, bytesFetched),
+          }))
+        }
+
+        const blob = new Blob(parts as BlobPart[], { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
         setDownloadUrl(url)
         setProgress((p) => ({
           ...p,
           phase: 'done',
-          chunksFetched: 1,
-          bytesFetched: bytes.byteLength,
+          chunksFetched: chunks.length,
+          bytesFetched,
         }))
         return { url, blob }
       }
@@ -599,8 +765,13 @@ export function useFetch() {
     } catch (e) {
       console.error(e)
       setProgress((p) => ({ ...p, phase: 'error', message: (e as Error).message }))
-      setReceiptStatus('failed')
-      setReceiptError((e as Error).message)
+      if (input.withReceipt) {
+        setReceiptStatus('failed')
+        setReceiptError((e as Error).message)
+      } else {
+        setReceiptStatus('idle')
+        setReceiptError(null)
+      }
       return null
     } finally {
       setLoading(false)
