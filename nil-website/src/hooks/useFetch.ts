@@ -251,11 +251,15 @@ export function useFetch() {
                 const txt = await res.text().catch(() => '')
                 throw new Error(decodeHttpError(txt) || `raw fetch failed (${res.status})`)
               }
-              return new Uint8Array(await res.arrayBuffer())
+              const bytes = new Uint8Array(await res.arrayBuffer())
+              if (bytes.byteLength !== effectiveRangeLen) {
+                throw new Error(`raw fetch returned ${bytes.byteLength} bytes (expected ${effectiveRangeLen})`)
+              }
+              return bytes
             } catch (e) {
               const msg = e instanceof Error ? decodeHttpError(e.message) : String(e)
               // Only treat "slab missing" as a recoverable raw-fetch failure; other errors should surface.
-              if (/slab not found on disk/i.test(msg) || /file not found in deal/i.test(msg)) continue
+              if (/slab not found on disk/i.test(msg) || /file not found in deal/i.test(msg) || /raw fetch returned/i.test(msg)) continue
               throw e
             }
           }
