@@ -207,9 +207,13 @@ print("22" * 48)
 PY
 )"
 SIZE_BYTES=131072
+# Dummy manifest root; use minimal valid NilFS layout.
+WITNESS_MDUS=1
+TOTAL_MDUS=3
 
 banner "Updating deal content"
 run_yes "$BINARY" tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" \
+  --total-mdus "$TOTAL_MDUS" --witness-mdus "$WITNESS_MDUS" \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
 sleep 2
 
