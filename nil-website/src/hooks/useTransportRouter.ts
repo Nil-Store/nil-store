@@ -84,7 +84,8 @@ type FetchRangeRequest = {
   filePath: string
   rangeStart: number
   rangeLen: number
-  sessionId: string
+  sessionId?: string
+  downloadSessionId?: string
   auth?: FetchRangeAuth
   expectedProvider?: string
   directBase?: string
@@ -471,6 +472,9 @@ export function useTransportRouter() {
     if (!Number.isFinite(req.rangeLen) || req.rangeLen <= 0) {
       throw new Error('rangeLen must be > 0')
     }
+    if (!req.sessionId && !req.downloadSessionId) {
+      throw new Error('sessionId or downloadSessionId is required')
+    }
 
     const directBase = resolveDirectBase(req.directBase)
     const directP2p = req.p2pTarget?.multiaddr?.trim()
@@ -492,7 +496,8 @@ export function useTransportRouter() {
         signal,
         headers: {
           Range: `bytes=${req.rangeStart}-${rangeEnd}`,
-          'X-Nil-Session-Id': req.sessionId,
+          ...(req.sessionId ? { 'X-Nil-Session-Id': req.sessionId } : {}),
+          ...(req.downloadSessionId ? { 'X-Nil-Download-Session': req.downloadSessionId } : {}),
           ...(req.auth
             ? {
                 'X-Nil-Req-Sig': req.auth.reqSig,
@@ -540,7 +545,7 @@ export function useTransportRouter() {
         execute: async (signal) => executeFetch(directBase, signal),
       })
     }
-    if (directP2p && appConfig.p2pEnabled) {
+    if (directP2p && appConfig.p2pEnabled && req.sessionId) {
       candidates.push({
         backend: 'libp2p' as const,
         endpoint: directP2p,

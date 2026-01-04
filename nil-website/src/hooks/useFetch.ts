@@ -30,6 +30,11 @@ export interface FetchInput {
   owner: string
   filePath: string
   /**
+   * When true, performs an on-chain RetrievalSession flow and submits proofs (slow, costs escrow).
+   * When false (default), downloads via a `download_session` fast path (no receipts).
+   */
+  withReceipt?: boolean
+  /**
    * Base URL for the service hosting `/gateway/*` retrieval endpoints.
    * Defaults to `appConfig.gatewayBase`.
    *
@@ -91,6 +96,17 @@ function decodeHttpError(bodyText: string): string {
   return trimmed
 }
 
+function randomDownloadSessionId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+  } catch (e) {
+    void e
+  }
+  return `dl-${Date.now()}-${Math.floor(Math.random() * 1_000_000_000)}`
+}
+
 export function useFetch() {
   const { address } = useAccount()
   const transport = useTransportRouter()
@@ -126,10 +142,13 @@ export function useFetch() {
     })
 
     try {
-      if (!address) throw new Error('Connect a wallet to submit retrieval proofs')
+      const withReceipt = Boolean(input.withReceipt)
       const ethereum = window.ethereum
-      if (!ethereum || typeof ethereum.request !== 'function') {
-        throw new Error('Ethereum provider (MetaMask) not available')
+      if (withReceipt) {
+        if (!address) throw new Error('Connect a wallet to submit retrieval proofs')
+        if (!ethereum || typeof ethereum.request !== 'function') {
+          throw new Error('Ethereum provider (MetaMask) not available')
+        }
       }
 
       const dealId = normalizeDealId(input.dealId)
@@ -161,18 +180,20 @@ export function useFetch() {
         typeof input.blobSizeBytes === 'number'
 
       const chunks =
-        hasMeta
-          ? planNilfsFileRangeChunks({
-              fileStartOffset: input.fileStartOffset!,
-              fileSizeBytes: input.fileSizeBytes!,
-              rangeStart: wantRangeStart,
-              rangeLen: effectiveRangeLen,
-              mduSizeBytes: input.mduSizeBytes!,
-              blobSizeBytes: input.blobSizeBytes!,
-            })
+        withReceipt
+          ? hasMeta
+            ? planNilfsFileRangeChunks({
+                fileStartOffset: input.fileStartOffset!,
+                fileSizeBytes: input.fileSizeBytes!,
+                rangeStart: wantRangeStart,
+                rangeLen: effectiveRangeLen,
+                mduSizeBytes: input.mduSizeBytes!,
+                blobSizeBytes: input.blobSizeBytes!,
+              })
+            : [{ rangeStart: wantRangeStart, rangeLen: effectiveRangeLen }]
           : [{ rangeStart: wantRangeStart, rangeLen: effectiveRangeLen }]
 
-      if (!hasMeta && effectiveRangeLen > blobSizeBytes) {
+      if (withReceipt && !hasMeta && effectiveRangeLen > blobSizeBytes) {
         throw new Error('range fetch > blob size requires fileStartOffset/fileSizeBytes/mduSizeBytes/blobSizeBytes')
       }
 
@@ -214,12 +235,57 @@ export function useFetch() {
         return endpoint
       }
 
-      const parts: Uint8Array[] = []
+      if (!withReceipt) {
+        const downloadSessionId = randomDownloadSessionId()
+        setProgress((p) => ({
+          ...p,
+          phase: 'fetching',
+          filePath,
+          chunkCount: 1,
+          chunksFetched: 0,
+          bytesTotal: effectiveRangeLen,
+          bytesFetched: 0,
+          receiptsSubmitted: 0,
+          receiptsTotal: 0,
+        }))
+
+        const rangeResult = await transport.fetchRange({
+          manifestRoot,
+          owner,
+          dealId,
+          filePath,
+          rangeStart: wantRangeStart,
+          rangeLen: effectiveRangeLen,
+          downloadSessionId,
+          directBase,
+          p2pTarget: planP2pTarget,
+          preference: preferenceOverride,
+        })
+
+        const bytes = rangeResult.data.bytes
+        const blob = new Blob([bytes] as BlobPart[], { type: 'application/octet-stream' })
+        const url = URL.createObjectURL(blob)
+        setDownloadUrl(url)
+        setProgress((p) => ({
+          ...p,
+          phase: 'done',
+          chunksFetched: 1,
+          bytesFetched: bytes.byteLength,
+        }))
+        return { url, blob }
+      }
+
+      if (!ethereum || typeof ethereum.request !== 'function') {
+        throw new Error('Ethereum provider (MetaMask) not available')
+      }
+
+      const parts: Uint8Array[] = new Array(chunks.length)
       let bytesFetched = 0
       let receiptsSubmitted = 0
       let chunksFetched = 0
 
       type PlannedChunk = {
+        chunkIndex: number
         rangeStart: number
         rangeLen: number
         provider: string
@@ -231,7 +297,8 @@ export function useFetch() {
       }
 
       const plannedChunks: PlannedChunk[] = []
-      for (const c of chunks) {
+      for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+        const c = chunks[chunkIndex]
         const planResult = await transport.plan({
           manifestRoot,
           owner,
@@ -255,6 +322,7 @@ export function useFetch() {
         if (blobCount <= 0n) throw new Error('gateway plan did not return blob_count')
 
         plannedChunks.push({
+          chunkIndex,
           rangeStart: c.rangeStart,
           rangeLen: c.rangeLen,
           provider,
@@ -455,7 +523,7 @@ export function useFetch() {
           }
 
           const buf = rangeResult.data.bytes
-          parts.push(buf)
+          parts[c.chunkIndex] = buf
           bytesFetched += buf.byteLength
           chunksFetched += 1
 
@@ -507,6 +575,12 @@ export function useFetch() {
         if (!proofRes.ok) {
           const text = await proofRes.text().catch(() => '')
           throw new Error(decodeHttpError(text) || `submit session proof failed (${proofRes.status})`)
+        }
+      }
+
+      for (let i = 0; i < parts.length; i++) {
+        if (!(parts[i] instanceof Uint8Array)) {
+          throw new Error(`download failed (missing chunk ${i})`)
         }
       }
 
