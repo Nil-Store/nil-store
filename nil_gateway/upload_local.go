@@ -200,6 +200,8 @@ func GatewayUploadLocal(w http.ResponseWriter, r *http.Request) {
 			SizeBytes:       res.sizeBytes,
 			FileSizeBytes:   res.fileSizeBytes,
 			AllocatedLength: res.allocatedLength,
+			TotalMdus:       res.totalMdus,
+			WitnessMdus:     res.witnessMdus,
 		})
 	}()
 

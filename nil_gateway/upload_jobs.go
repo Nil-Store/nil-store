@@ -37,6 +37,8 @@ type uploadJobResult struct {
 	SizeBytes       uint64 `json:"size_bytes"`
 	FileSizeBytes   uint64 `json:"file_size_bytes"`
 	AllocatedLength uint64 `json:"allocated_length"`
+	TotalMdus       uint64 `json:"total_mdus"`
+	WitnessMdus     uint64 `json:"witness_mdus"`
 }
 
 type uploadJob struct {

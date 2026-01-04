@@ -553,6 +553,8 @@ type gatewayUploadComputeResult struct {
 	sizeBytes       uint64
 	fileSizeBytes   uint64
 	allocatedLength uint64
+	totalMdus       uint64
+	witnessMdus     uint64
 }
 
 func computeGatewayUploadResult(ctx context.Context, in gatewayUploadComputeInput) (gatewayUploadComputeResult, error) {
@@ -584,6 +586,8 @@ func computeGatewayUploadResult(ctx context.Context, in gatewayUploadComputeInpu
 		size         uint64
 		fileSize     uint64
 		allocatedLen uint64
+		totalMdus    uint64
+		witnessMdus  uint64
 	)
 
 	useUploadJobCtx := withUploadJob(ctx, in.job)
@@ -628,6 +632,8 @@ func computeGatewayUploadResult(ctx context.Context, in gatewayUploadComputeInpu
 				allocatedLen = res.allocatedLength
 				fileSize = res.fileSize
 				size = res.sizeBytes
+				totalMdus = 1 + res.witnessMdus + res.userMdus
+				witnessMdus = res.witnessMdus
 			} else {
 				// First upload for a thin-provisioned deal: stage a fresh NilFS slab on the
 				// assigned provider before the first content commit.
@@ -644,27 +650,33 @@ func computeGatewayUploadResult(ctx context.Context, in gatewayUploadComputeInpu
 					if ingestErr != nil {
 						return gatewayUploadComputeResult{}, ingestErr
 					}
+					if b != nil {
+						witnessMdus = b.GetWitnessCount()
+						size = totalSizeBytesFromMdu0(b)
+						b.Free()
+					}
 					cid = manifestRoot
 					allocatedLen = allocLen
 					if info, statErr := os.Stat(in.uploadedPath); statErr == nil {
 						fileSize = uint64(info.Size())
 					}
-					if b != nil {
-						size = totalSizeBytesFromMdu0(b)
-					}
+					totalMdus = allocLen
 				default:
 					b, manifestRoot, allocLen, ingestErr := IngestNewDeal(ctx, in.uploadedPath, maxMdus, in.fileRecordPath)
 					if ingestErr != nil {
 						return gatewayUploadComputeResult{}, ingestErr
 					}
+					if b != nil {
+						witnessMdus = b.GetWitnessCount()
+						size = totalSizeBytesFromMdu0(b)
+						b.Free()
+					}
 					cid = manifestRoot
 					allocatedLen = allocLen
 					if info, statErr := os.Stat(in.uploadedPath); statErr == nil {
 						fileSize = uint64(info.Size())
 					}
-					if b != nil {
-						size = totalSizeBytesFromMdu0(b)
-					}
+					totalMdus = allocLen
 				}
 			}
 		} else {
@@ -677,6 +689,8 @@ func computeGatewayUploadResult(ctx context.Context, in gatewayUploadComputeInpu
 				allocatedLen = res.allocatedLength
 				fileSize = res.fileSize
 				size = res.sizeBytes
+				totalMdus = 1 + res.witnessMdus + res.userMdus
+				witnessMdus = res.witnessMdus
 			} else {
 				if os.Getenv("NIL_FAKE_INGEST") == "1" || os.Getenv("NIL_FAST_INGEST") == "1" {
 					return gatewayUploadComputeResult{}, gatewayHTTPError{
@@ -689,14 +703,17 @@ func computeGatewayUploadResult(ctx context.Context, in gatewayUploadComputeInpu
 				if ingestErr != nil {
 					return gatewayUploadComputeResult{}, ingestErr
 				}
+				if b != nil {
+					witnessMdus = b.GetWitnessCount()
+					size = totalSizeBytesFromMdu0(b)
+					b.Free()
+				}
 				cid = manifestRoot
 				allocatedLen = allocLen
 				if info, statErr := os.Stat(in.uploadedPath); statErr == nil {
 					fileSize = uint64(info.Size())
 				}
-				if b != nil {
-					size = totalSizeBytesFromMdu0(b)
-				}
+				totalMdus = allocLen
 			}
 		}
 	} else {
@@ -715,34 +732,50 @@ func computeGatewayUploadResult(ctx context.Context, in gatewayUploadComputeInpu
 			if ingestErr != nil {
 				return gatewayUploadComputeResult{}, ingestErr
 			}
+			if b != nil {
+				witnessMdus = b.GetWitnessCount()
+				size = totalSizeBytesFromMdu0(b)
+				b.Free()
+			}
 			cid = manifestRoot
 			allocatedLen = allocLen
 			if info, statErr := os.Stat(in.uploadedPath); statErr == nil {
 				fileSize = uint64(info.Size())
 			}
-			if b != nil {
-				size = totalSizeBytesFromMdu0(b)
-			}
+			totalMdus = allocLen
 		default:
 			// Full canonical ingest (Triple-Proof valid).
 			b, manifestRoot, allocLen, ingestErr := IngestNewDeal(ctx, in.uploadedPath, maxMdus, in.fileRecordPath)
 			if ingestErr != nil {
 				return gatewayUploadComputeResult{}, ingestErr
 			}
+			if b != nil {
+				witnessMdus = b.GetWitnessCount()
+				size = totalSizeBytesFromMdu0(b)
+				b.Free()
+			}
 			cid = manifestRoot
 			allocatedLen = allocLen
 			if info, statErr := os.Stat(in.uploadedPath); statErr == nil {
 				fileSize = uint64(info.Size())
 			}
-			if b != nil {
-				size = totalSizeBytesFromMdu0(b)
-			}
+			totalMdus = allocLen
 		}
 	}
 
 	// Backstop: preserve previous behavior if we could not compute a non-zero total size.
 	if size == 0 {
 		size = fileSize
+	}
+	if totalMdus == 0 && allocatedLen > 0 {
+		totalMdus = allocatedLen
+	}
+	if totalMdus > 0 && witnessMdus > 0 && totalMdus <= witnessMdus+1 {
+		return gatewayUploadComputeResult{}, fmt.Errorf(
+			"invalid slab accounting: total_mdus must exceed 1+witness_mdus (total=%d witness=%d)",
+			totalMdus,
+			witnessMdus,
+		)
 	}
 
 	cid = strings.TrimSpace(cid)
@@ -755,6 +788,8 @@ func computeGatewayUploadResult(ctx context.Context, in gatewayUploadComputeInpu
 		sizeBytes:       size,
 		fileSizeBytes:   fileSize,
 		allocatedLength: allocatedLen,
+		totalMdus:       totalMdus,
+		witnessMdus:     witnessMdus,
 	}, nil
 }
 
@@ -1043,6 +1078,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 				SizeBytes:       res.sizeBytes,
 				FileSizeBytes:   res.fileSizeBytes,
 				AllocatedLength: res.allocatedLength,
+				TotalMdus:       res.totalMdus,
+				WitnessMdus:     res.witnessMdus,
 			})
 		}()
 
@@ -1090,6 +1127,8 @@ func GatewayUpload(w http.ResponseWriter, r *http.Request) {
 		"size_bytes":       res.sizeBytes,
 		"file_size_bytes":  res.fileSizeBytes,
 		"allocated_length": res.allocatedLength,
+		"total_mdus":       res.totalMdus,
+		"witness_mdus":     res.witnessMdus,
 		"filename":         filename,
 		"upload_id":        uploadID,
 	}
