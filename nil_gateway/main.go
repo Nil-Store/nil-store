@@ -1267,6 +1267,9 @@ type updateDealContentRequest struct {
 	DealID    uint64 `json:"deal_id"`
 	Cid       string `json:"cid"`
 	SizeBytes uint64 `json:"size_bytes"`
+	// NilFS slab layout (required by on-chain invariants).
+	TotalMdus   uint64 `json:"total_mdus"`
+	WitnessMdus uint64 `json:"witness_mdus"`
 }
 
 // GatewayUpdateDealContent is a legacy/devnet helper to commit content to a deal
@@ -1291,8 +1294,30 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 
 	dealIDStr := strconv.FormatUint(req.DealID, 10)
 	sizeStr := strconv.FormatUint(req.SizeBytes, 10)
+	totalMdus := req.TotalMdus
+	witnessMdus := req.WitnessMdus
+	// Back-compat for older callers: if they didn't send layout fields, use a
+	// minimal, valid layout. If a caller explicitly sets witness_mdus=0 while
+	// providing total_mdus, preserve it.
+	if totalMdus == 0 && witnessMdus == 0 {
+		witnessMdus = 1
+		totalMdus = 1 + witnessMdus + 1
+	}
+	if totalMdus == 0 && witnessMdus > 0 {
+		totalMdus = 1 + witnessMdus + 1
+	}
+	totalMdusStr := strconv.FormatUint(totalMdus, 10)
+	witnessMdusStr := strconv.FormatUint(witnessMdus, 10)
 
-	log.Printf("Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --cid %s --size %s", nilchaindBin, dealIDStr, req.Cid, sizeStr)
+	log.Printf(
+		"Executing nilchaind command: %s tx nilchain update-deal-content --deal-id %s --cid %s --size %s --total-mdus %s --witness-mdus %s",
+		nilchaindBin,
+		dealIDStr,
+		req.Cid,
+		sizeStr,
+		totalMdusStr,
+		witnessMdusStr,
+	)
 
 	out, err := runTxWithRetry(
 		r.Context(),
@@ -1300,6 +1325,8 @@ func GatewayUpdateDealContent(w http.ResponseWriter, r *http.Request) {
 		"--deal-id", dealIDStr,
 		"--cid", req.Cid,
 		"--size", sizeStr,
+		"--total-mdus", totalMdusStr,
+		"--witness-mdus", witnessMdusStr,
 		"--chain-id", chainID,
 		"--from", "faucet",
 		"--yes",
@@ -3191,28 +3218,24 @@ func GatewaySlab(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusForbidden, "forbidden: owner does not match deal", "")
 			return
 		}
-		if strings.TrimSpace(dealCID) == "" {
-			writeJSONError(
-				w,
-				http.StatusConflict,
-				"deal has no committed manifest_root yet",
-				"Commit content via /gateway/update-deal-content-evm (or update-deal-content) first",
-			)
-			return
-		}
-		dealRoot, err := parseManifestRoot(dealCID)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
-			return
-		}
-		if dealRoot.Canonical != manifestRoot.Canonical {
-			writeJSONError(
-				w,
-				http.StatusConflict,
-				"stale manifest_root (does not match on-chain deal state)",
-				fmt.Sprintf("Query the deal and retry with manifest_root=%s", dealRoot.Canonical),
-			)
-			return
+		// Only enforce manifest_root equality once the deal has committed content.
+		// Before commit, callers can still query the slab layout on disk (used for
+		// staging/UX and EVM UpdateContent signing).
+		if strings.TrimSpace(dealCID) != "" {
+			dealRoot, err := parseManifestRoot(dealCID)
+			if err != nil {
+				writeJSONError(w, http.StatusInternalServerError, "invalid on-chain manifest_root", err.Error())
+				return
+			}
+			if dealRoot.Canonical != manifestRoot.Canonical {
+				writeJSONError(
+					w,
+					http.StatusConflict,
+					"stale manifest_root (does not match on-chain deal state)",
+					fmt.Sprintf("Query the deal and retry with manifest_root=%s", dealRoot.Canonical),
+				)
+				return
+			}
 		}
 	}
 
