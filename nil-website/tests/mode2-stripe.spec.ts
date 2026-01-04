@@ -107,8 +107,8 @@ test.describe('mode2 stripe', () => {
     await expect(page.getByText(/Receipt failed/i)).toHaveCount(0)
     await expect(page.getByText(/Download failed/i)).toHaveCount(0)
 
-    await expect.poll(() => planCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
     await expect.poll(() => fetchCalls, { timeout: 60_000 }).toBeGreaterThanOrEqual(expectedChunks)
+    expect(planCalls).toBe(0)
 
     const cachedBytes = await page.evaluate(
       async ({ dealId, cacheName }) => {
