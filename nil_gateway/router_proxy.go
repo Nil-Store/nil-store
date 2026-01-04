@@ -16,7 +16,20 @@ import (
 )
 
 var routerHTTPClient = &http.Client{
-	Transport: &http.Transport{
+	Transport: newRouterTransport(10 * time.Second),
+}
+
+// Upload proxy requests can involve very large request bodies (hundreds of MiB). A
+// ResponseHeaderTimeout can fire while the provider is still draining the body
+// (client finished writing to the socket buffer) which looks like a "timeout
+// awaiting response headers" on localhost. Disable header timeouts for upload
+// proxying and rely on the upstream ingest timeout + client cancellation.
+var routerUploadHTTPClient = &http.Client{
+	Transport: newRouterTransport(0),
+}
+
+func newRouterTransport(responseHeaderTimeout time.Duration) *http.Transport {
+	return &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
 			Timeout:   4 * time.Second,
@@ -24,10 +37,19 @@ var routerHTTPClient = &http.Client{
 		}).DialContext,
 		TLSHandshakeTimeout:   4 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		ResponseHeaderTimeout: 10 * time.Second,
+		ResponseHeaderTimeout: responseHeaderTimeout,
 		IdleConnTimeout:       90 * time.Second,
 		MaxIdleConns:          128,
-	},
+	}
+}
+
+func routerClientForPath(path string) *http.Client {
+	switch path {
+	case "/gateway/upload", "/gateway/upload-local":
+		return routerUploadHTTPClient
+	default:
+		return routerHTTPClient
+	}
 }
 
 func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBaseURL string) {
@@ -48,7 +70,14 @@ func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBase
 		target += "?" + r.URL.RawQuery
 	}
 
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body)
+	ctx := r.Context()
+	cancel := func() {}
+	if r.URL.Path == "/gateway/upload" || r.URL.Path == "/gateway/upload-local" {
+		ctx, cancel = context.WithTimeout(ctx, uploadIngestTimeout)
+	}
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, r.Method, target, r.Body)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to create provider request", err.Error())
 		return
@@ -56,7 +85,8 @@ func proxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerBase
 	req.Header = r.Header.Clone()
 	req.Header.Set(gatewayAuthHeader, gatewayToProviderAuthToken())
 
-	resp, err := routerHTTPClient.Do(req)
+	client := routerClientForPath(r.URL.Path)
+	resp, err := client.Do(req)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, "failed to contact provider", err.Error())
 		return
