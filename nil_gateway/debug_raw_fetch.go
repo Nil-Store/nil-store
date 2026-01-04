@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gorilla/mux"
 )
@@ -90,6 +94,90 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Mode2 stores user data as striped shards. The normal fetch path can reconstruct
+	// the required MDUs on-demand, but raw-fetch decodes directly from mdu_<idx>.bin.
+	// Ensure the required user MDUs exist to avoid silent truncation on large files.
+	if hasDealQuery {
+		serviceHint, serr := fetchDealServiceHintFromLCD(r.Context(), dealID)
+		if serr != nil {
+			writeJSONError(w, http.StatusBadGateway, "failed to query deal service hint", serr.Error())
+			return
+		}
+		stripe, perr := stripeParamsFromHint(serviceHint)
+		if perr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to parse deal service hint", perr.Error())
+			return
+		}
+		if stripe.mode == 2 {
+			startOffset, fileLen, witnessCount, metaErr := GetFileMetaByPath(dealDir, filePath)
+			if metaErr != nil {
+				if errors.Is(metaErr, os.ErrNotExist) {
+					writeJSONError(w, http.StatusNotFound, "file not found in deal", "")
+					return
+				}
+				writeJSONError(w, http.StatusInternalServerError, "failed to resolve file metadata", metaErr.Error())
+				return
+			}
+			if fileLen == 0 || rangeStart >= fileLen {
+				writeJSONError(w, http.StatusRequestedRangeNotSatisfiable, "range not satisfiable", "")
+				return
+			}
+
+			effectiveLen := rangeLen
+			if effectiveLen == 0 || effectiveLen > fileLen-rangeStart {
+				effectiveLen = fileLen - rangeStart
+			}
+			if effectiveLen == 0 {
+				writeJSONError(w, http.StatusRequestedRangeNotSatisfiable, "range not satisfiable", "")
+				return
+			}
+
+			absStart := startOffset + rangeStart
+			absEnd := absStart + effectiveLen - 1
+			startMdu := uint64(1) + witnessCount + (absStart / RawMduCapacity)
+			endMdu := uint64(1) + witnessCount + (absEnd / RawMduCapacity)
+
+			// Reconstruct MDUs concurrently but keep a conservative limit to avoid
+			// overwhelming local providers during large downloads.
+			ctx, cancel := context.WithCancel(r.Context())
+			defer cancel()
+
+			sem := make(chan struct{}, 4)
+			errOnce := make(chan error, 1)
+			var wg sync.WaitGroup
+
+			reconstruct := func(idx uint64) {
+				defer wg.Done()
+				select {
+				case sem <- struct{}{}:
+				case <-ctx.Done():
+					return
+				}
+				defer func() { <-sem }()
+
+				if _, err := ensureMode2MduOnDisk(ctx, dealID, manifestRoot, idx, dealDir, stripe); err != nil {
+					select {
+					case errOnce <- fmt.Errorf("mdu_%d.bin: %w", idx, err):
+						cancel()
+					default:
+					}
+				}
+			}
+
+			for idx := startMdu; idx <= endMdu; idx++ {
+				wg.Add(1)
+				go reconstruct(idx)
+			}
+			wg.Wait()
+			select {
+			case err := <-errOnce:
+				writeJSONError(w, http.StatusBadGateway, "failed to reconstruct Mode2 MDU", err.Error())
+				return
+			default:
+			}
+		}
+	}
+
 	content, _, _, _, servedLen, _, err := resolveNilfsFileSegmentForFetch(dealDir, filePath, rangeStart, rangeLen)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -109,8 +197,12 @@ func GatewayDebugRawFetch(w http.ResponseWriter, r *http.Request) {
 	// Provide a small, parseable hint for debug tooling (not used by the main UI yet).
 	w.Header().Set("X-Nil-Debug-Range-Start", strconv.FormatUint(rangeStart, 10))
 	w.Header().Set("X-Nil-Debug-Range-Len", strconv.FormatUint(servedLen, 10))
+	w.Header().Set("Content-Length", strconv.FormatUint(servedLen, 10))
 
-	_, _ = io.Copy(w, content)
+	written, copyErr := io.CopyN(w, content, int64(servedLen))
+	if copyErr != nil {
+		log.Printf("GatewayDebugRawFetch: stream error after %d/%d bytes: %v", written, servedLen, copyErr)
+	}
 	if flusher, ok := w.(http.Flusher); ok {
 		flusher.Flush()
 	}
