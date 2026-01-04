@@ -22,6 +22,7 @@ import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
+import { gatewayFetchSlabLayout } from '../api/gatewayClient'
 
 interface Provider {
   address: string
@@ -1059,11 +1060,39 @@ export function Dashboard() {
     }
 
     try {
+        const gatewayBase = (appConfig.gatewayBase || 'http://localhost:8080').replace(/\/$/, '')
+        const maybeSlabMatches =
+          contentSlab &&
+          typeof contentSlab.manifest_root === 'string' &&
+          contentSlab.manifest_root.toLowerCase() === manifestHex.toLowerCase()
+
+        let totalMdus = maybeSlabMatches ? Number(contentSlab?.total_mdus || 0) : 0
+        let witnessMdus = maybeSlabMatches ? Number(contentSlab?.witness_mdus || 0) : 0
+
+        if ((totalMdus === 0 || witnessMdus === 0) && nilAddress) {
+          try {
+            const slabLayout = await gatewayFetchSlabLayout(gatewayBase, manifestHex, {
+              dealId: targetDealId,
+              owner: nilAddress,
+            })
+            totalMdus = Number(slabLayout.total_mdus || 0) || 0
+            witnessMdus = Number(slabLayout.witness_mdus || 0) || 0
+          } catch {
+            // Best-effort. If gateway is absent, this legacy path isn't supported.
+          }
+        }
+
+        if (totalMdus === 0 || witnessMdus === 0) {
+          throw new Error('Missing slab layout (total_mdus/witness_mdus). Upload via gateway or use Deal Explorer upload.')
+        }
+
         await submitUpdate({
             creator: address || nilAddress,
             dealId: Number(targetDealId),
             cid: trimmedRoot,
-            sizeBytes: manifestSize
+            sizeBytes: manifestSize,
+            totalMdus,
+            witnessMdus,
         })
         setStatusTone('success')
         setStatusMsg(`Content committed to deal ${targetDealId}.`)
