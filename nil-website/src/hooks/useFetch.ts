@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useAccount } from 'wagmi'
 import { numberToHex, type Hex } from 'viem'
 
@@ -6,13 +6,18 @@ import { appConfig } from '../config'
 import { normalizeDealId } from '../lib/dealId'
 import { buildRetrievalRequestTypedData } from '../lib/eip712'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
+import { parseServiceHint } from '../lib/serviceHint'
 import {
   decodeComputeRetrievalSessionIdsResult,
   encodeComputeRetrievalSessionIdsData,
   encodeConfirmRetrievalSessionsData,
   encodeOpenRetrievalSessionsData,
 } from '../lib/nilstorePrecompile'
-import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
+import {
+  planNilfsFileRangeChunks,
+  rawMduCapacityFromMduSize,
+  rawOffsetToEncodedBlobIndex,
+} from '../lib/rangeChunker'
 import {
   resolveProviderEndpoint,
   resolveProviderEndpointByAddress,
@@ -29,6 +34,9 @@ export interface FetchInput {
   manifestRoot: string
   owner: string
   filePath: string
+  serviceHint?: string
+  witnessMdus?: number
+  dealProviders?: string[]
   /**
    * When true, performs an on-chain RetrievalSession flow and submits proofs (slow, costs escrow).
    * When false (default), downloads via a fast path (no receipts).
@@ -110,6 +118,7 @@ function rawFetchUrl(base: string, req: { manifestRoot: Hex; dealId: string; own
 export function useFetch() {
   const { address } = useAccount()
   const transport = useTransportRouter()
+  const openNonceRef = useRef<bigint>(0n)
   const [loading, setLoading] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
   const [receiptStatus, setReceiptStatus] = useState<'idle' | 'submitted' | 'failed'>('idle')
@@ -454,6 +463,10 @@ export function useFetch() {
       if (!ethereum || typeof ethereum.request !== 'function') {
         throw new Error('Ethereum provider (MetaMask) not available')
       }
+      if (!address) {
+        throw new Error('Connect a wallet to submit retrieval proofs')
+      }
+      const fromAddress = address
 
       const parts: Uint8Array[] = new Array(chunks.length)
       let bytesFetched = 0
@@ -468,73 +481,173 @@ export function useFetch() {
         startMduIndex: bigint
         startBlobIndex: number
         blobCount: bigint
-        planBackend: string
-        planEndpoint?: string
+        globalStart: bigint
+        globalEnd: bigint
       }
 
       const plannedChunks: PlannedChunk[] = []
-      for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-        const c = chunks[chunkIndex]
-        const planResult = await transport.plan({
-          manifestRoot,
-          owner,
-          dealId,
-          filePath,
-          rangeStart: c.rangeStart,
-          rangeLen: c.rangeLen,
-          directBase,
-          p2pTarget: planP2pTarget,
-          preference: preferenceOverride,
-        })
+      const hint = parseServiceHint(input.serviceHint)
+      const mode2K = hint.mode === 'mode2' ? Number(hint.rsK || 0) : 0
+      const mode2M = hint.mode === 'mode2' ? Number(hint.rsM || 0) : 0
+      const mode2Rows = mode2K > 0 && 64 % mode2K === 0 ? Math.floor(64 / mode2K) : 0
+      const localProviders = Array.isArray(input.dealProviders) ? input.dealProviders : []
+      const localWitnessMdus = Number.isFinite(input.witnessMdus) ? Math.max(0, Math.floor(Number(input.witnessMdus))) : 0
+      const stripeLeafCount =
+        mode2K > 0 && mode2M > 0 && mode2Rows > 0
+          ? BigInt((mode2K + mode2M) * mode2Rows)
+          : BigInt(Math.max(1, Math.floor(mduSizeBytes / blobSizeBytes)))
 
-        const planJson = planResult.data
-        const provider = String(planJson.provider || '').trim()
-        if (!provider) throw new Error('gateway plan did not return provider')
-        const startMduIndex = BigInt(Number(planJson.start_mdu_index || 0))
-        const startBlobIndex = Number(planJson.start_blob_index || 0)
-        const blobCount = BigInt(Number(planJson.blob_count || 0))
-        if (startMduIndex <= 0n) throw new Error('gateway plan did not return start_mdu_index')
-        if (!Number.isFinite(startBlobIndex) || startBlobIndex < 0) throw new Error('gateway plan did not return start_blob_index')
-        if (blobCount <= 0n) throw new Error('gateway plan did not return blob_count')
+      const canPlanLocally =
+        hint.mode === 'mode2' &&
+        mode2K > 0 &&
+        mode2M > 0 &&
+        mode2Rows > 0 &&
+        localProviders.length >= mode2K + mode2M &&
+        Number.isFinite(input.witnessMdus) &&
+        (input.witnessMdus as number) >= 0 &&
+        typeof input.fileStartOffset === 'number' &&
+        Number.isFinite(input.fileStartOffset) &&
+        input.fileStartOffset >= 0 &&
+        Number.isFinite(mduSizeBytes) &&
+        mduSizeBytes > 0 &&
+        Number.isFinite(blobSizeBytes) &&
+        blobSizeBytes > 0
 
-        plannedChunks.push({
-          chunkIndex,
-          rangeStart: c.rangeStart,
-          rangeLen: c.rangeLen,
-          provider,
-          startMduIndex,
-          startBlobIndex,
-          blobCount,
-          planBackend: planResult.backend,
-          planEndpoint: planResult.trace?.chosen?.endpoint,
-        })
-      }
+      if (canPlanLocally) {
+        const rawMduCapacity = rawMduCapacityFromMduSize(mduSizeBytes)
+        if (!Number.isFinite(rawMduCapacity) || rawMduCapacity <= 0) {
+          throw new Error('invalid mduSizeBytes for local planning')
+        }
+        const fileStartOffset = input.fileStartOffset as number
+        for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+          const c = chunks[chunkIndex]
+          const absStart = fileStartOffset + c.rangeStart
+          const absEnd = absStart + c.rangeLen - 1
+          const startUserMdu = Math.floor(absStart / rawMduCapacity)
+          const endUserMdu = Math.floor(absEnd / rawMduCapacity)
+          if (startUserMdu !== endUserMdu) {
+            throw new Error('range chunk crosses MDU boundary (local planning)')
+          }
+          const startMduIndexU64 = 1 + localWitnessMdus + startUserMdu
+          if (!Number.isFinite(startMduIndexU64) || startMduIndexU64 <= 0) {
+            throw new Error('invalid start_mdu_index computed (local planning)')
+          }
+          const offsetInMdu = absStart % rawMduCapacity
+          const endOffsetInMdu = absEnd % rawMduCapacity
+          const startBlob = rawOffsetToEncodedBlobIndex(offsetInMdu, blobSizeBytes)
+          const endBlob = rawOffsetToEncodedBlobIndex(endOffsetInMdu, blobSizeBytes)
+          if (!Number.isFinite(startBlob) || startBlob < 0) {
+            throw new Error('failed to map start blob (local planning)')
+          }
+          if (!Number.isFinite(endBlob) || endBlob < 0) {
+            throw new Error('failed to map end blob (local planning)')
+          }
+          if (startBlob !== endBlob) {
+            throw new Error('range chunk crosses blob boundary (local planning)')
+          }
+          const row = Math.floor(startBlob / mode2K)
+          const col = startBlob % mode2K
+          const leafIndex = col * mode2Rows + row
+          const slot = Math.floor(leafIndex / mode2Rows)
+          const provider = String(localProviders[slot] || '').trim()
+          if (!provider) throw new Error(`missing provider for slot ${slot} (local planning)`)
 
-      const leafCount = BigInt(Math.max(1, Math.floor(mduSizeBytes / blobSizeBytes)))
-      const providerGroups = new Map<string, {
-        provider: string
-        chunks: PlannedChunk[]
-        globalStart: bigint
-        globalEnd: bigint
-      }>()
+          const startMduIndex = BigInt(startMduIndexU64)
+          const startBlobIndex = leafIndex
+          const blobCount = 1n
+          const globalStart = startMduIndex * stripeLeafCount + BigInt(startBlobIndex)
+          const globalEnd = globalStart
 
-      for (const chunk of plannedChunks) {
-        const globalStart = chunk.startMduIndex * leafCount + BigInt(chunk.startBlobIndex)
-        const globalEnd = globalStart + chunk.blobCount - 1n
-        const existing = providerGroups.get(chunk.provider)
-        if (existing) {
-          existing.chunks.push(chunk)
-          if (globalStart < existing.globalStart) existing.globalStart = globalStart
-          if (globalEnd > existing.globalEnd) existing.globalEnd = globalEnd
-        } else {
-          providerGroups.set(chunk.provider, {
-            provider: chunk.provider,
-            chunks: [chunk],
+          plannedChunks.push({
+            chunkIndex,
+            rangeStart: c.rangeStart,
+            rangeLen: c.rangeLen,
+            provider,
+            startMduIndex,
+            startBlobIndex,
+            blobCount,
+            globalStart,
+            globalEnd,
+          })
+        }
+      } else {
+        for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+          const c = chunks[chunkIndex]
+          const planResult = await transport.plan({
+            manifestRoot,
+            owner,
+            dealId,
+            filePath,
+            rangeStart: c.rangeStart,
+            rangeLen: c.rangeLen,
+            directBase,
+            p2pTarget: planP2pTarget,
+            preference: preferenceOverride,
+          })
+
+          const planJson = planResult.data
+          const provider = String(planJson.provider || '').trim()
+          if (!provider) throw new Error('gateway plan did not return provider')
+          const startMduIndex = BigInt(Number(planJson.start_mdu_index || 0))
+          const startBlobIndex = Number(planJson.start_blob_index || 0)
+          const blobCount = BigInt(Number(planJson.blob_count || 0))
+          if (startMduIndex <= 0n) throw new Error('gateway plan did not return start_mdu_index')
+          if (!Number.isFinite(startBlobIndex) || startBlobIndex < 0) {
+            throw new Error('gateway plan did not return start_blob_index')
+          }
+          if (blobCount <= 0n) throw new Error('gateway plan did not return blob_count')
+
+          const globalStart = startMduIndex * stripeLeafCount + BigInt(startBlobIndex)
+          const globalEnd = globalStart + blobCount - 1n
+
+          plannedChunks.push({
+            chunkIndex,
+            rangeStart: c.rangeStart,
+            rangeLen: c.rangeLen,
+            provider,
+            startMduIndex,
+            startBlobIndex,
+            blobCount,
             globalStart,
             globalEnd,
           })
         }
       }
+
+      type PlannedSession = {
+        provider: string
+        globalStart: bigint
+        globalEnd: bigint
+        chunks: PlannedChunk[]
+      }
+
+      const sessions: PlannedSession[] = []
+      const chunksByProvider = new Map<string, PlannedChunk[]>()
+      for (const c of plannedChunks) {
+        const list = chunksByProvider.get(c.provider)
+        if (list) list.push(c)
+        else chunksByProvider.set(c.provider, [c])
+      }
+
+      for (const [provider, groupChunks] of chunksByProvider) {
+        groupChunks.sort((a, b) => (a.globalStart < b.globalStart ? -1 : a.globalStart > b.globalStart ? 1 : 0))
+        let current: PlannedSession | null = null
+        for (const chunk of groupChunks) {
+          if (!current) {
+            current = { provider, globalStart: chunk.globalStart, globalEnd: chunk.globalEnd, chunks: [chunk] }
+            continue
+          }
+          if (chunk.globalStart === current.globalEnd+1n) {
+            current.globalEnd = chunk.globalEnd
+            current.chunks.push(chunk)
+            continue
+          }
+          sessions.push(current)
+          current = { provider, globalStart: chunk.globalStart, globalEnd: chunk.globalEnd, chunks: [chunk] }
+        }
+        if (current) sessions.push(current)
+      }
+      sessions.sort((a, b) => (a.globalStart < b.globalStart ? -1 : a.globalStart > b.globalStart ? 1 : 0))
 
       setProgress((p) => ({
         ...p,
@@ -543,54 +656,76 @@ export function useFetch() {
         chunkCount: chunks.length,
         bytesTotal: effectiveRangeLen,
         receiptsSubmitted: 0,
-        receiptsTotal: providerGroups.size > 0 ? 2 : 0,
+        receiptsTotal: sessions.length > 0 ? 2 : 0,
       }))
 
-      const groups = Array.from(providerGroups.values())
-      const openBaseNonce = BigInt(Date.now())
-      const openRequests = groups.map((group, index) => {
-        const groupStartMdu = group.globalStart / leafCount
-        const groupStartBlob = Number(group.globalStart % leafCount)
-        const groupBlobCount = group.globalEnd - group.globalStart + 1n
+      const estimateGasWithMargin = async (tx: { from: string; to: string; data: Hex }): Promise<Hex | null> => {
+        try {
+          const raw = (await ethereum.request({
+            method: 'eth_estimateGas',
+            params: [tx],
+          })) as Hex
+          const gas = BigInt(raw)
+          // +20% safety margin.
+          return numberToHex((gas * 12n) / 10n)
+        } catch (e) {
+          void e
+          return null
+        }
+      }
+
+      const nowNonceBase = BigInt(Date.now()) * 1_000_000n
+      const openBaseNonce = nowNonceBase > openNonceRef.current ? nowNonceBase : openNonceRef.current + 1n
+      const openRequests = sessions.map((session, index) => {
+        const startMduIndex = session.globalStart / stripeLeafCount
+        const startBlobIndex = Number(session.globalStart % stripeLeafCount)
+        const blobCount = session.globalEnd - session.globalStart + 1n
         return {
           dealId: BigInt(dealId),
-          provider: group.provider,
+          provider: session.provider,
           manifestRoot,
-          startMduIndex: groupStartMdu,
-          startBlobIndex: groupStartBlob,
-          blobCount: groupBlobCount,
+          startMduIndex,
+          startBlobIndex,
+          blobCount,
           nonce: openBaseNonce + BigInt(index),
           expiresAt: 0n,
         }
       })
+      openNonceRef.current = openBaseNonce + BigInt(openRequests.length)
 
       const computeData = encodeComputeRetrievalSessionIdsData(openRequests)
       const computeResult = (await ethereum.request({
         method: 'eth_call',
-        params: [{ from: address, to: appConfig.nilstorePrecompile, data: computeData }, 'latest'],
+        params: [{ from: fromAddress, to: appConfig.nilstorePrecompile, data: computeData }, 'latest'],
       })) as Hex
       const { providers: computedProviders, sessionIds: computedSessionIds } =
         decodeComputeRetrievalSessionIdsResult(computeResult)
-      const sessionsByProvider = new Map<string, Hex>()
-      for (let i = 0; i < computedProviders.length; i++) {
-        const provider = String(computedProviders[i] || '').trim()
-        const sessionId = computedSessionIds[i]
-        if (!provider || !sessionId) continue
-        sessionsByProvider.set(provider, sessionId)
+      void computedProviders
+      if (computedSessionIds.length !== openRequests.length) {
+        throw new Error(`computeRetrievalSessionIds returned ${computedSessionIds.length} sessionIds (expected ${openRequests.length})`)
       }
-      for (const group of groups) {
-        if (!sessionsByProvider.has(group.provider)) {
-          throw new Error(`computeRetrievalSessionIds did not return session for ${group.provider}`)
-        }
-      }
+
+      type ResolvedSession = PlannedSession & { sessionId: Hex }
+      const resolvedSessions: ResolvedSession[] = sessions.map((s, i) => ({
+        ...s,
+        sessionId: computedSessionIds[i],
+      }))
 
       const openTxData = encodeOpenRetrievalSessionsData(openRequests)
+      const openGas = await estimateGasWithMargin({ from: fromAddress, to: appConfig.nilstorePrecompile, data: openTxData })
       const openTxHash = (await ethereum.request({
         method: 'eth_sendTransaction',
-        params: [{ from: address, to: appConfig.nilstorePrecompile, data: openTxData, gas: numberToHex(7_000_000) }],
+        params: [
+          {
+            from: fromAddress,
+            to: appConfig.nilstorePrecompile,
+            data: openTxData,
+            ...(openGas ? { gas: openGas } : { gas: numberToHex(7_000_000) }),
+          },
+        ],
       })) as Hex
 
-      await waitForTransactionReceipt(openTxHash)
+      await waitForTransactionReceipt(openTxHash, { timeoutMs: 180_000 })
 
       receiptsSubmitted = 1
       setProgress((p) => ({
@@ -647,12 +782,9 @@ export function useFetch() {
         return metaAuth
       }
 
-      for (const group of groups) {
-        const provider = group.provider
-        const sessionId = sessionsByProvider.get(provider)
-        if (!sessionId) {
-          throw new Error(`missing session for provider ${provider}`)
-        }
+      for (const session of resolvedSessions) {
+        const provider = session.provider
+        const sessionId = session.sessionId
 
         const providerEndpoint = await getProviderEndpoint(provider)
         const providerP2pEndpoint = await getProviderP2pEndpoint(provider)
@@ -663,14 +795,13 @@ export function useFetch() {
 
         let fetchDirectBase =
           providerEndpoint?.baseUrl ||
-          group.chunks.find((c) => c.planBackend === 'direct_sp')?.planEndpoint ||
           (serviceOverride && serviceOverride !== appConfig.gatewayBase ? serviceOverride : undefined) ||
           (directBase && directBase !== appConfig.gatewayBase ? directBase : undefined)
-        if (!providerEndpoint && group.chunks.every((c) => c.planBackend !== 'direct_sp')) {
+        if (!providerEndpoint && fetchDirectBase && fetchDirectBase === appConfig.gatewayBase) {
           fetchDirectBase = undefined
         }
 
-        for (const c of group.chunks) {
+        for (const c of session.chunks) {
           const fetchReq = {
             manifestRoot,
             owner,
@@ -718,13 +849,21 @@ export function useFetch() {
         receiptsSubmitted,
       }))
 
-      const sessionIds = groups.map((group) => sessionsByProvider.get(group.provider) as Hex)
+      const sessionIds = resolvedSessions.map((s) => s.sessionId)
       const confirmTxData = encodeConfirmRetrievalSessionsData(sessionIds)
+      const confirmGas = await estimateGasWithMargin({ from: fromAddress, to: appConfig.nilstorePrecompile, data: confirmTxData })
       const confirmTxHash = (await ethereum.request({
         method: 'eth_sendTransaction',
-        params: [{ from: address, to: appConfig.nilstorePrecompile, data: confirmTxData, gas: numberToHex(3_000_000) }],
+        params: [
+          {
+            from: fromAddress,
+            to: appConfig.nilstorePrecompile,
+            data: confirmTxData,
+            ...(confirmGas ? { gas: confirmGas } : { gas: numberToHex(3_000_000) }),
+          },
+        ],
       })) as Hex
-      await waitForTransactionReceipt(confirmTxHash)
+      await waitForTransactionReceipt(confirmTxHash, { timeoutMs: 180_000 })
       receiptsSubmitted = 2
 
       setProgress((p) => ({
@@ -733,12 +872,9 @@ export function useFetch() {
         receiptsSubmitted,
       }))
 
-      for (const group of groups) {
-        const provider = group.provider
-        const sessionId = sessionsByProvider.get(provider)
-        if (!sessionId) {
-          throw new Error(`missing session for provider ${provider}`)
-        }
+      for (const session of resolvedSessions) {
+        const provider = session.provider
+        const sessionId = session.sessionId
         // `session-proof` is an internal "user daemon -> provider" forward and requires gateway auth.
         // Even when `serviceBase` points at the provider (direct fetch flows), proof submission must go
         // through the local gateway.
