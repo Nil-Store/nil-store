@@ -327,7 +327,7 @@ test('Deal Explorer: browser Download uses network even if OPFS has only manifes
   await downloadButton.click()
   const dl = await download
   expect(await streamToBuffer(await dl.createReadStream())).toEqual(fileBytes)
-  expect(planCalls).toBeGreaterThan(0)
-  expect(gatewayProofCalls).toBeGreaterThan(0)
+  expect(planCalls).toBe(0)
+  expect(gatewayProofCalls).toBe(0)
   expect(spProofCalls).toBe(0)
 })

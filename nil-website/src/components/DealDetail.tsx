@@ -982,6 +982,7 @@ export function DealDetail({ deal, nilAddress, onFileActivity, topPanel }: DealD
                                               manifestRoot: manifestHex,
                                               owner: nilAddress,
                                               filePath: f.path,
+                                              withReceipt: true,
                                               serviceBase: isMode2 ? undefined : resolveProviderHttpBase(),
                                               rangeStart: safeStart,
                                               rangeLen: safeLen,
