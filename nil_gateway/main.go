@@ -1957,6 +1957,29 @@ func GatewayOpenSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
+		// Anti-replay still requires a nonce/expiry even when request signatures are disabled.
+		// If the client omits these, generate a short-lived session window.
+		if strings.TrimSpace(reqNonceStr) != "" {
+			reqNonce, err = strconv.ParseUint(reqNonceStr, 10, 64)
+			if err != nil {
+				writeJSONError(w, http.StatusBadRequest, "invalid req_nonce", "")
+				return
+			}
+		}
+		if strings.TrimSpace(reqExpiresStr) != "" {
+			reqExpiresAt, err = strconv.ParseUint(reqExpiresStr, 10, 64)
+			if err != nil {
+				writeJSONError(w, http.StatusBadRequest, "invalid req_expires_at", "")
+				return
+			}
+		}
+		if reqNonce == 0 {
+			reqNonce = uint64(time.Now().UnixNano())
+		}
+		if reqExpiresAt == 0 {
+			reqExpiresAt = uint64(time.Now().Add(10 * time.Minute).Unix())
+		}
+
 		// Best-effort parse optional range hints for logging/session metadata only.
 		if strings.TrimSpace(reqRangeStartStr) != "" {
 			if v, perr := strconv.ParseUint(reqRangeStartStr, 10, 64); perr == nil {

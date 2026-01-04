@@ -314,6 +314,10 @@ export function useFetch() {
         }
 
         const signMetaAuth = async () => {
+          if (!address) throw new Error('Connect a wallet to authorize retrieval')
+          if (!ethereum || typeof ethereum.request !== 'function') {
+            throw new Error('Ethereum provider (MetaMask) not available')
+          }
           const now = Math.floor(Date.now() / 1000)
           const reqNonce = Math.floor(Math.random() * 1_000_000_000) + Date.now()
           const reqExpiresAt = now + 9 * 60
@@ -349,20 +353,22 @@ export function useFetch() {
           q.set('deal_id', dealId)
           q.set('owner', owner)
           q.set('file_path', filePath)
+
+          // Anti-replay: open-session requires nonce/expiry even when signatures are disabled.
+          const now = Math.floor(Date.now() / 1000)
+          const reqNonce = auth?.reqNonce ?? Math.floor(Math.random() * 1_000_000_000) + Date.now()
+          const reqExpiresAt = auth?.reqExpiresAt ?? now + 9 * 60
+          const reqRangeStart = auth?.signedRangeStart ?? wantRangeStart
+          const reqRangeLen = auth?.signedRangeLen ?? effectiveRangeLen
+
+          q.set('req_nonce', String(reqNonce))
+          q.set('req_expires_at', String(reqExpiresAt))
+          q.set('req_range_start', String(reqRangeStart))
+          q.set('req_range_len', String(reqRangeLen))
+          if (auth?.reqSig) q.set('req_sig', auth.reqSig)
           const url = `${normalizeBase(base)}/gateway/open-session/${encodeURIComponent(manifestRoot)}?${q.toString()}`
           const res = await fetch(url, {
             method: 'POST',
-            headers: {
-              ...(auth
-                ? {
-                    'X-Nil-Req-Sig': auth.reqSig,
-                    'X-Nil-Req-Nonce': String(auth.reqNonce),
-                    'X-Nil-Req-Expires-At': String(auth.reqExpiresAt),
-                    'X-Nil-Req-Range-Start': String(auth.signedRangeStart),
-                    'X-Nil-Req-Range-Len': String(auth.signedRangeLen),
-                  }
-                : {}),
-            },
           })
           if (!res.ok) {
             const txt = await res.text().catch(() => '')
