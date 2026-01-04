@@ -9,6 +9,8 @@ export interface UpdateDealContentInput {
   dealId: number
   cid: string
   sizeBytes: number
+  totalMdus: number
+  witnessMdus: number
 }
 
 export function useUpdateDealContent() {
@@ -29,7 +31,13 @@ export function useUpdateDealContent() {
       const data = encodeFunctionData({
         abi: NILSTORE_PRECOMPILE_ABI,
         functionName: 'updateDealContent',
-        args: [BigInt(input.dealId), manifestRoot, BigInt(input.sizeBytes)],
+        args: [
+          BigInt(input.dealId),
+          manifestRoot,
+          BigInt(input.sizeBytes),
+          BigInt(input.totalMdus),
+          BigInt(input.witnessMdus),
+        ],
       })
 
       const txHash = (await ethereum.request({

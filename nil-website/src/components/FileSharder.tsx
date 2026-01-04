@@ -99,6 +99,7 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const [mode2UploadError, setMode2UploadError] = useState<string | null>(null)
   const [showLocalImport, setShowLocalImport] = useState(false)
   const [localImportPath, setLocalImportPath] = useState('')
+  const localImportUserToggledRef = useRef(false)
 
   const [isDragging, setIsDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -157,6 +158,12 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
   const isUploadComplete = isMode2
     ? mode2UploadComplete
     : uploadProgress.length > 0 && uploadProgress.every(p => p.status === 'complete');
+
+  useEffect(() => {
+    if (!localImportAvailable) return
+    if (localImportUserToggledRef.current) return
+    setShowLocalImport(true)
+  }, [localImportAvailable])
 
   useEffect(() => {
     let cancelled = false
@@ -758,6 +765,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             size_bytes?: number
             file_size_bytes?: number
             allocated_length?: number
+            total_mdus?: number
+            witness_mdus?: number
           }
         }
 
@@ -778,6 +787,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           const sizeBytes = resultObj ? asNumber(resultObj.size_bytes) : undefined
           const fileSizeBytes = resultObj ? asNumber(resultObj.file_size_bytes) : undefined
           const allocatedLength = resultObj ? asNumber(resultObj.allocated_length) : undefined
+          const totalMdus = resultObj ? asNumber(resultObj.total_mdus) : undefined
+          const witnessMdus = resultObj ? asNumber(resultObj.witness_mdus) : undefined
 
           return {
             status: typeof obj.status === 'string' ? obj.status : undefined,
@@ -789,12 +800,14 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
             steps_done: asNumber(obj.steps_done),
             steps_total: asNumber(obj.steps_total),
             result:
-              manifestRoot || sizeBytes || fileSizeBytes || allocatedLength
+              manifestRoot || sizeBytes || fileSizeBytes || allocatedLength || totalMdus || witnessMdus
                 ? {
                     manifest_root: manifestRoot,
                     size_bytes: sizeBytes,
                     file_size_bytes: fileSizeBytes,
                     allocated_length: allocatedLength,
+                    total_mdus: totalMdus,
+                    witness_mdus: witnessMdus,
                   }
                 : undefined,
           }
@@ -919,6 +932,11 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           if (!root) throw new Error('gateway upload returned no manifest_root')
           const gatewaySizeBytes =
             Number(jobDone?.result?.size_bytes ?? jobDone?.result?.file_size_bytes ?? file.size) || file.size
+          const gatewayTotalMdus =
+            Number(jobDone?.result?.total_mdus ?? jobDone?.result?.allocated_length ?? 0) || 0
+          const gatewayWitnessMdus = Number(jobDone?.result?.witness_mdus ?? 0) || 0
+          const gatewayUserMdus =
+            gatewayTotalMdus > 1 + gatewayWitnessMdus ? gatewayTotalMdus - 1 - gatewayWitnessMdus : 0
 
           setCurrentManifestRoot(root)
         setCurrentManifestBlob(null)
@@ -934,6 +952,8 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
           phase: 'done',
             label: 'Gateway Mode 2 ingest complete. Ready to commit.',
             fileBytesTotal: gatewaySizeBytes,
+            totalUserMdus: gatewayUserMdus,
+            totalWitnessMdus: gatewayWitnessMdus,
             currentOpStartedAtMs: null,
             lastOpMs: performance.now() - startTs,
           }))
@@ -1992,7 +2012,10 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
                     {localImportAvailable ? (
                       <button
                         type="button"
-                        onClick={() => setShowLocalImport((v) => !v)}
+                        onClick={() => {
+                          localImportUserToggledRef.current = true
+                          setShowLocalImport((v) => !v)
+                        }}
                         className="inline-flex w-full items-center justify-center rounded-md border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-secondary/40 sm:w-auto"
                       >
                         {showLocalImport ? 'Hide local import' : 'Import from disk'}
@@ -2178,13 +2201,21 @@ export function FileSharder({ dealId, onCommitSuccess }: FileSharderProps) {
               <div className="flex flex-col gap-2">
                 <button
                   onClick={() => {
-                    const totalSize = isMode2
-                      ? shardProgress.fileBytesTotal
-                      : collectedMdus.reduce((acc, m) => acc + m.data.length, 0);
+                    const sizeBytes = shardProgress.fileBytesTotal
+                    const witnessMdus = shardProgress.totalWitnessMdus
+                    const userMdus = shardProgress.totalUserMdus
+                    const totalMdus =
+                      witnessMdus > 0 && userMdus > 0 ? 1 + witnessMdus + userMdus : 0
+                    if (totalMdus === 0 || witnessMdus === 0) {
+                      addLog('Commit failed: missing slab layout (total_mdus/witness_mdus). Re-upload or use the gateway.')
+                      return
+                    }
                     commitContent({
                       dealId,
                       manifestRoot: currentManifestRoot || '',
-                      fileSize: totalSize,
+                      sizeBytes,
+                      totalMdus,
+                      witnessMdus,
                     });
                   }}
                   disabled={!readyToCommit || isCommitPending || isCommitConfirming || isAlreadyCommitted}

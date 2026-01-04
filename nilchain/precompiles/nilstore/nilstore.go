@@ -44,7 +44,9 @@ const nilstoreABIJSON = `[
     "inputs":[
       {"name":"dealId","type":"uint64"},
       {"name":"manifestRoot","type":"bytes"},
-      {"name":"sizeBytes","type":"uint64"}
+      {"name":"sizeBytes","type":"uint64"},
+      {"name":"totalMdus","type":"uint64"},
+      {"name":"witnessMdus","type":"uint64"}
     ],
     "outputs":[{"name":"ok","type":"bool"}]
   },
@@ -693,6 +695,12 @@ func (p *Precompile) runUpdateDealContent(ctx sdk.Context, evm *vm.EVM, contract
 				witnessMdus = deal.WitnessMdus
 			}
 		}
+	}
+	if totalMdus == 0 {
+		return nil, errors.New("updateDealContent: totalMdus must be > 0")
+	}
+	if witnessMdus == 0 {
+		return nil, errors.New("updateDealContent: witnessMdus must be > 0")
 	}
 
 	caller := contract.Caller()
