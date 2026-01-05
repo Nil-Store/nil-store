@@ -1,6 +1,6 @@
 # RFC: Mode 2 On-Chain State (Slots, Generations, Repairs)
 
-**Status:** Sprint‑0 Frozen (Ready for implementation)
+**Status:** Sprint‑0 Frozen (PARTIAL implemented)
 **Scope:** Chain protocol state (`nilchain/`)
 **Depends on:** `spec.md` §6.2, §8.3–§8.4; `rfcs/rfc-blob-alignment-and-striping.md`
 **Motivation:** Appendix B #2 (Mode 2 encoding), #6 (write semantics beyond append-only; near-term constraints)
@@ -19,6 +19,19 @@ Mainnet requires **explicit typed state** so the chain can:
 - derive deterministic per-slot policy (synthetic challenges, quotas, health)
 
 This RFC freezes a **concrete on-chain representation** for Mode 2 and a minimal lifecycle state machine that is forward-compatible with “pending generation” writes later.
+
+### 0.1 Implementation status (as of Jan 2026)
+The following pieces are implemented in `nilchain/` today:
+
+- `Deal.mode2_profile`, `Deal.mode2_slots`, `Deal.current_gen`, and `DealSlot.status` / `pending_provider` are present in `nilchain/proto/nilchain/nilchain/v1/types.proto` and stored on-chain.
+- `MsgCreateDeal` populates typed Mode 2 slot state when `service_hint` includes `rs=K+M`.
+- Manual slot repair messages exist (`start-slot-repair`, `complete-slot-repair`) and set `SlotStatus` to disable liveness credit during repair.
+
+The following remain mainnet hardening targets and are not fully implemented/enforced yet:
+
+- Make-before-break replacement guarantees (read routing around repairing slots; append-only coordination during repairs).
+- Slab accounting enforcement (`total_mdus`, `witness_mdus`) at content commit (currently tracked by gateway/UI, not required/validated by the chain).
+- Automatic repair triggers, quota-driven challenge demand policy, and eviction/penalty curves (see related RFCs).
 
 ---
 
@@ -88,15 +101,15 @@ message Deal {
   // existing fields...
 
   // --- Mode 2 explicit encoding (new canonical state) ---
-  StripeReplicaProfile mode2_profile = 15; // set iff redundancy_mode == 2
-  repeated DealSlot mode2_slots = 16;      // length N, slot-ordered
+  StripeReplicaProfile mode2_profile = 17; // set iff redundancy_mode == 2
+  repeated DealSlot mode2_slots = 18;      // length N, slot-ordered
 
   // --- Generation / write coordination ---
-  uint64 current_gen = 17; // increments on every manifest_root change
+  uint64 current_gen = 19; // increments on every manifest_root change
 
   // --- Slab accounting (bounds + policy) ---
   uint64 total_mdus = 14;     // already exists; MUST be set on first content commit
-  uint64 witness_mdus = 18;   // NEW; set on first content commit
+  uint64 witness_mdus = 20;   // NEW; set on first content commit
 }
 ```
 
@@ -123,13 +136,15 @@ At `MsgCreateDeal*` time:
 At `MsgUpdateDealContent*` time:
 - Validate `manifest_root` format (already implemented)
 - Require `size_bytes > 0`
-- Require `total_mdus > 0` and `witness_mdus >= 0` (new fields in message; see §4)
+- Require `total_mdus > 0` and `witness_mdus >= 0` (mainnet hardening; see §4)
 - Set:
   - `Deal.manifest_root = new`
   - `Deal.size_bytes = new`
   - `Deal.total_mdus = new_total_mdus`
   - `Deal.witness_mdus = new_witness_mdus`
   - `Deal.current_gen += 1`
+
+**Devnet note:** current devnet code commits `manifest_root` + `size_bytes` and increments `current_gen`, but does not yet require/validate `total_mdus` + `witness_mdus` on-chain. Gateways and clients already compute these values deterministically from the slab layout and SHOULD carry them end-to-end so the chain can enforce bounds once enabled.
 
 ### 3.3 Repair / replacement (make-before-break)
 
@@ -218,4 +233,3 @@ Add a one-time migration that:
    - Ensure `/gateway/upload` returns `total_mdus` and `witness_mdus` (keep legacy alias fields for transition).
 5. Store migration:
    - Add an upgrade handler to backfill typed Mode 2 state for existing deals.
-

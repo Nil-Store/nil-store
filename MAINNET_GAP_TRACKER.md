@@ -3,7 +3,7 @@
 This document tracks **what is missing** between the current implementation in this repo and the **long‑term Mainnet plan** described by `spec.md` (canonical), `rfcs/`, and `notes/`.
 
 **Sources (ordered):**
-- `spec.md` (canonical protocol spec; v2.4 at time of writing)
+- `spec.md` (canonical protocol spec; v2.5 at time of writing)
 - `rfcs/` (design proposals / deep dives; check header status)
 - `notes/roadmap_milestones_strategic.md` (milestone sequencing)
 

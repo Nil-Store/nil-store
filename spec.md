@@ -1,4 +1,4 @@
-# NilStore Core v 2.4
+# NilStore Core v 2.5
 
 ### Cryptographic Primitives & Proof System Specification
 
@@ -23,7 +23,7 @@ NilStore’s protocol design is guided by a small set of architectural tenets:
 
 1.  **Retrieval IS Storage:** completed retrieval sessions count as valid storage proofs.
 2.  **The System is the User of Last Resort:** cold data is maintained via synthetic challenges when organic demand is low.
-3.  **Optimization via Hints:** clients express intent (`Hot`/`Cold`) while the chain enforces system-defined placement and diversity.
+3.  **Optimization via Hints:** clients express intent via `service_hint` (e.g., `General` / `Archive` / `Edge`, with future `Hot`/`Cold` semantics) while the chain enforces system-defined placement and diversity.
 4.  **Elasticity is User-Funded:** bandwidth and replication are increased only when the user’s escrow/budget can pay for it.
 
 ---
@@ -43,7 +43,7 @@ Key fields:
 *   **Placement:** `providers[]` is the assigned provider set.
     *   **Mode 1:** unordered replica set; any single provider can satisfy retrievals.
     *   **Mode 2:** ordered slot list `slot → provider` of length `N = K+M` (§7.1.1, §8.1.3).
-*   **Service Hint:** `Hot | Cold` informs placement/elasticity policy (§6.0.2).
+*   **Service Hint:** `service_hint` is a structured, forward-compatible string. The base hint biases placement (e.g., `General` / `Archive` / `Edge`) and devnet tokens may encode legacy knobs like `replicas` and `rs=K+M` (§6.0.2).
 *   **Economics:** `escrow` (combined storage + bandwidth), plus `max_monthly_spend` for user-funded elasticity (§6.1.2).
 *   **Redundancy Mode:** Mode 1 (FullReplica) or Mode 2 (StripeReplica / RS(K,K+M)) (§6.2, §8).
 
@@ -116,10 +116,19 @@ When registering, SPs declare their intended service mode via `MsgRegisterProvid
 *   **General (Default):** Balanced.
 *   **Edge:** Low capacity, ultra-low latency.
 
-#### 6.0.2 Deal Hints
-`MsgCreateDeal` includes a `ServiceHint`:
-*   **Cold:** Biased towards `Archive` / `General`.
-*   **Hot:** Biased towards `General` / `Edge`.
+#### 6.0.2 Deal Service Hint (Current Encoding)
+
+`MsgCreateDeal` includes a free-form `service_hint` string. In devnet, it is treated as a structured, forward-compatible hint:
+
+*   **Base hint (before the first `:`):** e.g., `General` (default). Other values like `Archive` or `Edge` MAY be used as advisory placement hints.
+*   **Key/value tokens (after `:`):** `key=value` pairs separated by `:`. Unknown keys MUST be ignored; the raw string MUST be preserved on-chain.
+
+Reserved keys (devnet compatibility):
+*   `replicas=<n>`: legacy Mode 1 replication hint.
+*   `rs=<K>+<M>`: legacy Mode 2 RS profile hint. It MUST satisfy `K | 64` and MUST NOT exceed the protocol’s base replication. When both `replicas` and `rs` are provided, `replicas` MUST equal `K+M`.
+*   `owner=<bech32>`: devnet/testing override hook (non-normative; do not rely on this for mainnet policy).
+
+Long-term, semantic `Hot`/`Cold` hints may be standardized to bias placement and synthetic demand policy (Appendix B), but the canonical redundancy configuration for Mode 2 lives in typed on-chain state (`redundancy_mode`, `mode2_profile`, `mode2_slots`).
 
 #### 6.0.3 Deal Sizing (Dynamic)
 NilStore utilizes **Dynamic Thin Provisioning** for all storage deals.
@@ -157,7 +166,11 @@ NilStore supports two redundancy modes at the policy level:
 *   **Mode 1 – FullReplica (Alpha):** Each `Deal` is replicated in full across `CurrentReplication` providers. Scaling simply adds or removes full replicas. Retrieval is satisfied by any single provider in `Deal.providers[]`.
 *   **Mode 2 – StripeReplica (Implemented):** Each `Deal` is encoded per SP‑MDU under **RS(K, K+M)** (K data slots, M parity slots; default `K=8`, `M=4`, with `K | 64`). Providers store per‑slot shard Blobs for each SP‑MDU, and scaling operates at the stripe layer. This mode uses the **Blob‑Aligned Striping** model defined in **§ 8**.
 
-**Profile selection (current implementation):** the RS profile is encoded in `service_hint` as `rs=K+M` (for example, `General:replicas=12,rs=8+4`). If `rs=` is present, the chain treats the deal as **Mode 2** and assigns `N = K+M` ordered providers as slots.
+**Profile selection (devnet compatibility + canonical state):**
+
+* **Input encoding (devnet):** clients MAY still encode the RS profile in `service_hint` as `rs=K+M` (for example, `General:replicas=12,rs=8+4`) for backwards compatibility.
+* **Canonical on-chain representation:** Mode 2 deals are explicitly represented as `redundancy_mode = 2` with a typed `mode2_profile{K,M}` and an ordered `mode2_slots[0..N-1]` mapping (`slot → provider`), where `N = K+M`.
+    * During the migration window, `providers[]` remains populated for LCD/UI convenience and SHOULD match the slot order (`providers[i] == mode2_slots[i].provider`).
 
 To ensure effective throughput scaling, the protocol avoids "bottlenecking" by scaling the entire dataset uniformly.
 
@@ -515,7 +528,7 @@ These evidence types collectively support the retrievability invariant: for each
 The protocol requires an explicit policy for **how often** providers must prove possession and **how retrieval sessions reduce synthetic proof demand**.
 
 This spec intentionally does not lock constants yet, but the target shape is:
-* For each epoch `e` and assignment `(deal_id, provider_id)`, compute a required proof quota `required_e(D,P)` as a function of (at minimum) deal size (`Deal.size` / `Deal.total_mdus`), `ServiceHint` (Hot/Cold), and recent retrieval session volume.
+* For each epoch `e` and assignment `(deal_id, provider_id)`, compute a required proof quota `required_e(D,P)` as a function of (at minimum) deal size (`Deal.size` / `Deal.total_mdus`), the deal’s `service_hint` base policy hint (e.g., Hot/Cold/General), and recent retrieval session volume.
 * **Session credits:** Completed retrieval sessions (and any legacy receipt paths) contribute credits toward `required_e(D,P)`, potentially weighted by `bytes_served` with caps to prevent one large transfer from satisfying an entire epoch indefinitely.
 * **Synthetic fill:** If `credits < required_e(D,P)`, the chain derives and enforces `required_e(D,P) - credits` synthetic challenges for that epoch.
 * **Penalties:** Invalid proofs are slashable immediately; failure to meet quota SHOULD degrade reputation and eventually lead to eviction (a slower penalty path than invalid proof slashing).
@@ -531,7 +544,7 @@ Normative intent:
 * **Client verification is mandatory:** clients MUST verify Merkle/KZG proof material before confirming completion of a Retrieval Session, preventing deputies from serving arbitrary bytes.
 * **Anti-griefing:** retrieval session opens and completion confirmations MUST be replay-protected (nonce/expiry) and SHOULD be rate-limited / optionally funded, so a third party cannot force unbounded work on providers or deputies.
 
-Detailed deputy selection, advertisement, and any explicit on-chain delegation/compensation mechanism is out of scope for v2.4 and should be specified in a dedicated RFC.
+Detailed deputy selection, advertisement, and any explicit on-chain delegation/compensation mechanism is out of scope for v2.5 and should be specified in a dedicated RFC.
 
 ### 7.8 SP Audit Debt & Coverage Scaling (Planned)
 
@@ -562,9 +575,9 @@ Self‑healing can be expressed via per‑assignment and per‑provider health m
 
 ---
 
-## Appendix B: Intentionally Underspecified (v2.4) / RFC Targets
+## Appendix B: Intentionally Underspecified (v2.5) / RFC Targets
 
-This specification defines normative *interfaces* and verification rules but intentionally leaves several “policy” and “parameterization” areas underspecified for v2.4. The following items SHOULD be captured as dedicated RFCs before mainnet hardening:
+This specification defines normative *interfaces* and verification rules but intentionally leaves several “policy” and “parameterization” areas underspecified for v2.5. The following items SHOULD be captured as dedicated RFCs before mainnet hardening:
 
 1. **System Placement Algorithm:** deterministic provider selection/weighting, hint scoring, anti-correlation rules, and upgrade strategy without reshuffling failure domains unexpectedly.
 2. **Mode 2 On-Chain Encoding:** explicit representation of `(K, M)`, ordered `slot → provider` mapping, overlay scaling state, and replacement triggers/authorization. *(See `rfcs/rfc-mode2-onchain-state.md`.)*
@@ -584,7 +597,8 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 
 ### C.1 Guiding constraints
 
-* **Mode 2 available (devnet):** RS(K, K+M) striping is supported when `service_hint` includes `rs=K+M`. Repair/rebalancing remain deferred.
+* **Mode 2 available (devnet):** RS(K, K+M) striping is supported; devnet clients may encode `rs=K+M` in `service_hint`, but the chain persists Mode 2 deals in typed `mode2_profile` + `mode2_slots` state.
+* **Repair is partial:** the chain tracks per-slot status (ACTIVE/REPAIRING) and exposes manual slot repair messages, but automatic make‑before‑break replacement and read routing guarantees are still hardening targets.
 * **Mode 1 replication remains minimal:** Mode 1 is still treated as a single-provider deal unless `replicas=` is specified.
 * **Serving provider is the prover:** bytes and proof material MUST come from the provider that will be named in the session proof (or from an explicit deputy, once specified).
 * **Endpoint discovery is on-chain:** providers advertise transport endpoints as Multiaddrs; HTTP is used initially, libp2p is future-compatible.
@@ -596,7 +610,7 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 | Multiple providers registered | MUST | ≥ 3 providers on the devnet |
 | On-chain provider endpoint discovery | MUST | `Provider.endpoints[]` as Multiaddr strings |
 | HTTP transport | MUST | e.g. `/dns4/sp1.example.com/tcp/8080/http` |
-| libp2p transport | DEFER | Multiaddr format reserved (`/p2p/<peerid>`) |
+| libp2p transport | YES (experimental) | Multiaddr format supported (`/p2p/<peerid>`); devnet stacks may still default to HTTP |
 | Mode 1 replication (`providers[]` length > 1) | NO | Devnet Alpha uses `replicas=1` in `ServiceHint` |
 | Mode 2 RS deals | YES (devnet) | `service_hint` includes `rs=K+M` |
 | Gateway role | OPTIONAL | routing + cache helper; direct‑to‑provider is first‑class and preferred for Mode 2 |
@@ -607,7 +621,7 @@ This appendix defines a pragmatic “Devnet Alpha” scope meant to get a **mult
 | Bundled session proofs | SHOULD | reduce wallet prompts / tx count |
 | Synthetic challenges | DEFER | no hard quotas; sessions are still accepted evidence |
 | Deputy / proxy routing | DEFER | tracked as an RFC / later sprint |
-| Repair / rotation / rebalancing | NO | deferred to Mode 2 + deputy + policy |
+| Repair / rotation / rebalancing | PARTIAL | manual slot repair state exists; make‑before‑break replacement + routing guarantees remain in progress |
 | Docker/devnet orchestration | SHOULD | compose scripts to run 1 gateway + N providers |
 
 ### C.3 Definition of Done (Devnet Alpha)

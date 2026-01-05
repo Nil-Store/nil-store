@@ -1,6 +1,6 @@
 # RFC: Challenge Derivation & Proof Quota Policy (Unified Liveness v1)
 
-**Status:** Sprint‑0 Frozen (Ready for implementation)
+**Status:** Sprint‑0 Frozen (Design frozen; not yet implemented)
 **Scope:** Chain protocol policy (`nilchain/`)
 **Motivation:** `spec.md` §7.6; Appendix B #3 (challenge derivation), #4 (quota + penalty curve)
 **Depends on:** `spec.md`, `rfcs/rfc-mode2-onchain-state.md`, `rfcs/rfc-blob-alignment-and-striping.md`
@@ -20,6 +20,12 @@ This RFC freezes:
 - a quota computation function with explicit parameters
 - an accounting model for credits and synthetic fills
 - enforcement + penalty outcomes (invalid proof slashing vs quota failure health decay)
+
+## 0.1 Implementation status (as of Jan 2026)
+
+- **Chain params/state:** The quota + epoch parameters and per-epoch credit accounting described in this RFC are not yet fully present in `nilchain` params/state.
+- **Challenge derivation:** Consensus does not yet derive or enforce synthetic challenge sets `S_e(deal, assignment)` from epoch randomness.
+- **Current devnet behavior:** Retrieval/session proofs exist and are accepted as evidence paths, but “quota enforcement” and “non-compliance penalties” remain a mainnet-hardening task.
 
 ---
 

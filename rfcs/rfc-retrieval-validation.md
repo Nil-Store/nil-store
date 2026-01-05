@@ -4,6 +4,8 @@
 **Scope:** Retrieval Markets, Proof of Delivery, Dispute Resolution
 **Key Concepts:** Proxy Relay, Audit Debt, Ephemeral Identity
 
+**Implementation status (as of Jan 2026):** `nil_p2p` contains an `AskForProxy` message and handler stubs, but there is no end-to-end deputy selection/relay, audit debt enforcement, compensation, or on-chain failure evidence pipeline yet.
+
 ---
 
 ## 1. The Core Problem: "He Said, She Said"

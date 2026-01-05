@@ -1,6 +1,6 @@
 # RFC: Pricing & Escrow Accounting (Lock-in + Retrieval Fees + Elasticity Caps)
 
-**Status:** Sprint‑0 Frozen (Ready for implementation)
+**Status:** Sprint‑0 Frozen (PARTIAL implemented)
 **Scope:** Chain economics (`nilchain/`) + gateway/UI intent fields
 **Motivation:** `spec.md` §6.1–§6.2, §7.2.1; Appendix B #5
 **Depends on:** `rfcs/rfc-data-granularity-and-economics.md`
@@ -15,6 +15,18 @@ This RFC freezes the **economic accounting contracts** required for mainnet hard
 - **User-funded elasticity caps** enforced via `Deal.max_monthly_spend` and a deterministic spend window
 
 This RFC intentionally does **not** introduce retrieval “credits” for Gamma‑4. Credits may be introduced later once quota enforcement exists (see `rfcs/rfc-challenge-derivation-and-quotas.md`).
+
+### 0.1 Implementation status (as of Jan 2026)
+The following pieces are implemented in `nilchain/` today:
+
+- **Storage lock-in (term deposit):** `UpdateDealContent*` charges for size increases using `storage_price` (per byte per block) over the deal duration and credits the deal escrow balance.
+- **Retrieval session fees:** base fee burn + per-blob variable fee lock at session open; settlement on completion applies `retrieval_burn_bps` and pays the provider.
+- **Elasticity spend window accounting:** deal spend windows track `spend_window_start_height` and `spend_window_spent` against `max_monthly_spend` for scaling-related debits.
+
+The following remain future work / are gated behind other mainnet features:
+
+- Retrieval “credits” reducing synthetic quota demand (depends on quota enforcement).
+- Full mainnet parameterization, governance tuning, and hard bounds enforcement across all flows.
 
 ---
 
@@ -190,4 +202,3 @@ elasticity_cost = base_stripe_cost * delta_replication
 - Storage lock-in: update content with increasing size charges `delta*duration*price` and rejects if insufficient funds.
 - Retrieval fees: open burns base fee, locks variable, completion burns cut + pays provider, cancel refunds variable.
 - Elasticity: scaling denied when exceeding `max_monthly_spend` or `escrow_balance`.
-
