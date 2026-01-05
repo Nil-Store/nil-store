@@ -39,6 +39,11 @@ This repo contains a mix of **normative protocol spec**, **RFC drafts**, **imple
 - `HAPPY_PATH.md`: Local devnet “happy path” runbook.
 - `DEVNET_MULTI_PROVIDER.md`: How to run a multi-provider devnet and join as a remote provider.
 
+## Component Specs (Implementation Contracts)
+
+- `nil_gateway/nil-gateway-spec.md`: Gateway + provider HTTP API surface and NilFS-on-disk contract (devnet + S3 adapter).
+- `nil-website/website-spec.md`: Frontend architecture and UX flows (Deals / Upload / Retrieval Sessions / Proofs).
+
 ## Planning / Tracking
 
 - `MAINNET_GAP_TRACKER.md`: Tracked gaps between current implementation and the long-term Mainnet plan.

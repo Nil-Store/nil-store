@@ -106,10 +106,12 @@ These endpoints support the `nil-website` "Thin Client" flow.
 *   **Role:** Relays user‑signed intents to the chain for clients that cannot call the precompile directly (MetaMask is the preferred path).
     *   **Semantics (target):** Creates a **thin-provisioned** deal (`manifest_root = empty`, `size = 0`, `total_mdus = 0`) until the first `update-deal-content-evm` commit.
         *   **No tiers:** Capacity-tier fields are deprecated and must not be required by the gateway; if accepted during transition they must be ignored.
+    *   **Mode 2 selection (devnet):** include `rs=K+M` in `service_hint` (and keep `replicas=K+M` consistent) to request a StripeReplica deal; the chain persists typed `mode2_profile` + `mode2_slots` state for Mode 2 deals.
 *   **`POST /gateway/update-deal-content-evm`**
     *   **Input:** JSON `{ "intent": { ... }, "evm_signature": "0x..." }`.
 *   **Logic:** Forwards to `nilchaind tx nilchain update-deal-content-evm`.
 *   **Role:** Commits the Deal `manifest_root` (returned from upload) to the on-chain deal when clients opt into the relay.
+    *   **Slab accounting note:** The upload pipeline returns `{ total_mdus, witness_mdus }` deterministically from the slab layout; these values are used for planning/repairs and are expected to become chain-enforced in later mainnet hardening.
 
 #### Data Retrieval & Proofs
 *   **`GET /gateway/plan-retrieval-session/{manifest_root}`**
@@ -208,7 +210,10 @@ To facilitate the "Store Wars" Devnet without a full WASM client, `nil_gateway` 
     *   **Gap:** In a production "Thick Client", the browser would generate or verify these proofs locally. Here, the Gateway can generate and relay them, effectively simulating a "perfect" SP.
 
 3.  **Local Storage:**
-    *   The Gateway currently acts as the *sole* Storage Provider for the devnet web interface. It does not distribute data to other nodes; it merely simulates the lifecycle of a storage deal backed by its local filesystem.
+    *   Devnet deployments commonly split `nil_gateway` into two roles:
+        * **Router mode:** a single process (often `:8080`) that coordinates Mode 2 ingest and routes fetches.
+        * **Provider mode:** N processes (`:8091+`) that persist the deal slab on disk and serve bytes/proof headers for their assigned `(deal_id, slot)` responsibility.
+    *   The router MAY also keep a local slab mirror for caching/diagnostics, but it is not required; the authoritative bytes live on providers.
 
 ## 5. Future Roadmap
 

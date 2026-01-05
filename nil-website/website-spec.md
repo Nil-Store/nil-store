@@ -1,7 +1,7 @@
-# NilStore Website Specification (v2.7)
+# NilStore Website Specification (v2.8)
 
 **Status:** Living Document
-**Last Updated:** Dec 18, 2025
+**Last Updated:** Jan 5, 2026
 
 ## 1. Project Identity & Architecture
 
@@ -10,7 +10,7 @@
 *   **Core Stack:** React 18, Vite, TypeScript, Tailwind CSS.
 *   **Routing:** `react-router-dom` (HashRouter).
 *   **State:** React Context + React Query (via Wagmi).
-*   **Design System:** "Cyberpunk/Scientific" aesthetic (Dark mode default, glassmorphism, neon accents).
+*   **Design System:** Consumer-grade “storage console” aesthetic (clean hierarchy, strong typography, restrained gradients, light + dark mode).
 
 ### 1.1 File Structure
 
@@ -18,8 +18,8 @@
 /src
 ├── assets/                 # Static images (logo variants)
 ├── components/             # Reusable UI modules
-│   ├── Dashboard.tsx       # [Core] Main user interaction hub (Alloc/Content tabs)
-│   ├── DealDetail.tsx      # [Core] Modal for inspecting Deal Manifests & Heatmaps
+│   ├── Dashboard.tsx       # [Core] Deal-centric console (deals list + deal explorer)
+│   ├── DealDetail.tsx      # [Core] Deal Explorer panel (Files / Deal info / Manifest / Heat)
 │   ├── Layout.tsx          # [Shell] Global navigation, footer, and mobile menu
 │   ├── ConnectWallet.tsx   # [Auth] Wallet connection button
 │   ├── StatusBar.tsx       # [Global] Network status indicator
@@ -69,6 +69,10 @@ The application uses Vite for building and handling environment variables. Confi
 | `VITE_LCD_BASE` | `http://localhost:1317` | Cosmos LCD (Light Client Daemon) URL. |
 | `VITE_GATEWAY_BASE` | `http://localhost:8080` | Optional local gateway base (routing + proof relay). |
 | `VITE_SP_BASE` | `http://localhost:8082` | Default Storage Provider base for direct uploads/fetches. |
+| `VITE_DISABLE_GATEWAY` | `0` | When `1`, treat the local gateway as disabled and force direct SP/libp2p routing. |
+| `VITE_P2P_ENABLED` | `0` | When `1`, enable libp2p transport option in the router + UI. |
+| `VITE_P2P_BOOTSTRAP` | *(empty)* | Comma-separated list of bootstrap multiaddrs for libp2p peer discovery. |
+| `VITE_P2P_PROTOCOL` | `/nilstore/http/1.0.0` | Protocol ID used for libp2p range fetch RPC. |
 | `VITE_COSMOS_CHAIN_ID` | `31337` | Chain ID for the Cosmos layer. |
 | `VITE_EVM_RPC` | `http://localhost:8545` | JSON-RPC endpoint for the EVM layer. |
 | `VITE_CHAIN_ID` | `31337` | Chain ID for the EVM layer (default: Localhost). |
@@ -102,7 +106,8 @@ Represents a storage contract between a user and the network.
 ```typescript
 interface Deal {
   id: string;              // Unique identifier (uint64 as string)
-  cid: string;             // Deal.manifest_root (48-byte compressed G1; canonical string is `0x` + 96 lowercase hex; empty if not committed). Legacy alias only; not a file identifier.
+  cid: string;             // Canonical Deal.manifest_root (0x + 96 hex; empty if not committed). Legacy alias only; not a file identifier.
+  manifest_root?: string;  // Raw LCD field (base64 bytes); normalized into `cid` when available.
   size: string;            // Current committed content size in bytes
   owner: string;           // Bech32 address of the creator
   escrow: string;          // Token amount locked
@@ -112,6 +117,19 @@ interface Deal {
   current_replication?: string; // Number of active providers
   max_monthly_spend?: string;   // Cost cap
   providers?: string[];    // List of assigned SP addresses
+
+  // Optional (present on LCD; not required for core UI flows yet)
+  redundancy_mode?: string;
+  current_gen?: string;
+  total_mdus?: string;
+  witness_mdus?: string;
+  mode2_profile?: { k: string; m: string } | null;
+  mode2_slots?: Array<{
+    slot: string;
+    provider: string;
+    status: string;
+    pending_provider?: string;
+  }>;
 }
 ```
 
@@ -222,7 +240,7 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 ### 4.4 `useTransportRouter` (`src/hooks/useTransportRouter.ts`)
 *   **Purpose:** Centralizes routing between local gateway and direct SP endpoints.
 *   **Behavior:** Exposes `listFiles`, `slab`, `plan`, `uploadFile`, `manifestInfo`, `mduKzg` with bounded retries and a `DecisionTrace` for UX.
-*   **Preference:** `auto`, `prefer_gateway`, `prefer_direct_sp` (persisted in localStorage via `TransportContext`).
+*   **Preference:** `auto`, `prefer_gateway`, `prefer_direct_sp`, `prefer_p2p` (persisted in localStorage via `TransportContext`; `prefer_p2p` requires `VITE_P2P_ENABLED=1`).
 
 ### 4.5 `useFetch` (`src/hooks/useFetch.ts`)
 *   **Purpose:** Orchestrates retrieval sessions, byte fetch, and proof submission (Mode 1 + Mode 2).
@@ -252,23 +270,26 @@ This layer encapsulates MetaMask transactions, transport routing, and gateway/SP
 ### 5.2 Dashboard (`src/components/Dashboard.tsx`)
 The central hub for deal management.
 *   **State:**
-    *   `activeTab`: 'alloc' (Allocation), 'content' (Commitment), 'mdu' (Thick client).
+    *   `activeTab`: 'content' (gateway ingest) | 'mdu' (Mode 2 thick client).
     *   `deals`: List of user's deals (fetched from LCD).
     *   `providers`: Active SP list.
     *   `nilAddress`: Derived Cosmos address from connected EVM wallet.
+    *   `targetDealId`: Selected deal; upload/list/download are always scoped to the selected deal.
 *   **Key Interactions:**
-    *   **Allocation:** Form -> `useCreateDeal` (Mode 1 or Mode 2 with RS selector).
-    *   **Commitment (Content tab):** File Input -> `useUpload` -> `useUpdateDealContent`.
+    *   **Deal creation:** “Create deal” form lives inside the Deals sidebar (bucket-first mental model).
+    *   **Upload (Deal-scoped):** File input always targets the selected deal -> `useUpload` -> `useUpdateDealContent`.
     *   **Commitment (MDU tab):** `FileSharder` (WASM) -> uploads metadata + shards -> `useUpdateDealContent`.
-    *   **Inspection:** Clicking a deal row opens `DealDetail`.
+    *   **Inspection:** Selecting a deal shows the in-page Deal Explorer panel (`DealDetail`) with Files first.
 *   **Network Checks:** Warns on Chain ID mismatch or local RPC mismatch.
 
-### 5.3 Deal Detail Modal (`src/components/DealDetail.tsx`)
-*   **Props:** `deal: Deal`, `onClose: () => void`.
-*   **Tabs:**
-    1.  **Overview:** Metadata (ID, Owner, Size, Economics), Provider List, Download Button.
-    2.  **Manifest & MDUs:** Visualizes the Deal *slab layout* (MDU #0 + Witness + User) and provides an educational viewer for roots/commitments.
-    3.  **Heat:** Traffic stats and `DealLivenessHeatmap`.
+### 5.3 Deal Explorer Panel (`src/components/DealDetail.tsx`)
+*   **Role:** Deal-scoped file management (upload/list/download) plus protocol inspection tools.
+*   **Default view:** **Files (NilFS)** + lightweight deal summary (Size, redundancy).
+*   **Tabs (current UI):**
+    1.  **Files:** Authoritative NilFS file list + download actions.
+    2.  **Deal info:** Ownership, economics, providers, low-level identifiers (CID/manifest_root).
+    3.  **Manifest & MDUs:** Visualizes the slab layout (MDU #0 + Witness + User) and provides an educational viewer for roots/commitments.
+    4.  **Heat & Liveness:** Traffic stats and liveness/proof history (where available).
 *   **Key Definitions:**
     *   **Manifest Root:** 48-byte KZG commitment over the ordered vector of **MDU Roots**: `[Root(MDU0), Root(MDU1), ..., Root(MDUN)]`.
     *   **MDU Root:** 32-byte Blake2s Merkle root of the 64 **Blob Commitments** for a single 8 MiB MDU.
