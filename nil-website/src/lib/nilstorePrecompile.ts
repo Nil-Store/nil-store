@@ -24,6 +24,21 @@ export const NILSTORE_PRECOMPILE_ABI = [
     ],
     outputs: [{ name: 'ok', type: 'bool' }],
   },
+  // V2 overload: include slab layout metadata for Mode 2 commits.
+  // Allows the chain to validate/record `totalMdus` and `witnessMdus` explicitly.
+  {
+    type: 'function',
+    name: 'updateDealContent',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'dealId', type: 'uint64' },
+      { name: 'manifestRoot', type: 'bytes' },
+      { name: 'sizeBytes', type: 'uint64' },
+      { name: 'totalMdus', type: 'uint64' },
+      { name: 'witnessMdus', type: 'uint64' },
+    ],
+    outputs: [{ name: 'ok', type: 'bool' }],
+  },
   {
     type: 'function',
     name: 'proveRetrievalBatch',
@@ -273,4 +288,3 @@ export function encodeConfirmRetrievalSessionsData(sessionIds: readonly Hex[]): 
     args: [sessionIds],
   })
 }
-

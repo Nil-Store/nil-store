@@ -9,6 +9,8 @@ export interface UpdateDealContentInput {
   dealId: number
   cid: string
   sizeBytes: number
+  totalMdus?: number
+  witnessMdus?: number
 }
 
 export function useUpdateDealContent() {
@@ -26,11 +28,41 @@ export function useUpdateDealContent() {
         throw new Error('Ethereum provider (MetaMask) not available')
       }
       const manifestRoot = String(input.cid || '').trim() as Hex
-      const data = encodeFunctionData({
+
+      const hasLayout = Number.isFinite(input.totalMdus) && Number.isFinite(input.witnessMdus)
+      const totalMdus = hasLayout ? Math.max(0, Number(input.totalMdus)) : 0
+      const witnessMdus = hasLayout ? Math.max(0, Number(input.witnessMdus)) : 0
+
+      if (hasLayout && totalMdus <= 1 + witnessMdus) {
+        throw new Error('Commit requires totalMdus > 1 + witnessMdus')
+      }
+
+      const dataV1 = encodeFunctionData({
         abi: NILSTORE_PRECOMPILE_ABI,
         functionName: 'updateDealContent',
         args: [BigInt(input.dealId), manifestRoot, BigInt(input.sizeBytes)],
       })
+
+      const dataV2 = hasLayout
+        ? encodeFunctionData({
+            abi: NILSTORE_PRECOMPILE_ABI,
+            functionName: 'updateDealContent',
+            args: [BigInt(input.dealId), manifestRoot, BigInt(input.sizeBytes), BigInt(totalMdus), BigInt(witnessMdus)],
+          })
+        : null
+
+      let data = dataV1
+      if (dataV2) {
+        try {
+          await ethereum.request({
+            method: 'eth_call',
+            params: [{ from: evmAddress, to: appConfig.nilstorePrecompile, data: dataV2 }, 'latest'],
+          })
+          data = dataV2
+        } catch {
+          data = dataV1
+        }
+      }
 
       const txHash = (await ethereum.request({
         method: 'eth_sendTransaction',
