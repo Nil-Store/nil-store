@@ -60,6 +60,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-BOND-002 | done | lock assignment collateral + bond availability tests | fc5e9c8 | -`
 * `2026-01-10 | TASK P0-REPAIR-001 | in progress | start replacement selection cooldown/cap | - | -`
 * `2026-01-10 | TASK P0-REPAIR-001 | done | deterministic replacement selection nonce + cooldown/cap enforcement | 858abf4 | -`
+* `2026-01-10 | TASK P0-MODE2-ROUTING-002 | in progress | start Mode2 routing guard against REPAIRING slots | - | -`
+* `2026-01-10 | TASK P0-MODE2-ROUTING-002 | done | avoid routing reads to repairing slots + active-only selection | 7a030e2 | -`
 
 ---
 
@@ -857,7 +859,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-MODE2-ROUTING-002 — Ensure reads avoid REPAIRING slots (gateway/router)
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nil_gateway/`
 * **Depends on:** `P0-MODE2-MBB-001`, `P0-REPAIR-001`
