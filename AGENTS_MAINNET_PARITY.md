@@ -58,6 +58,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-BOND-001 | done | provider bond state + min bond gating + tests | b3cbab2 | -`
 * `2026-01-10 | TASK P0-BOND-002 | in progress | start assignment collateral lock + unbonding guard | - | -`
 * `2026-01-10 | TASK P0-BOND-002 | done | lock assignment collateral + bond availability tests | fc5e9c8 | -`
+* `2026-01-10 | TASK P0-REPAIR-001 | in progress | start replacement selection cooldown/cap | - | -`
+* `2026-01-10 | TASK P0-REPAIR-001 | done | deterministic replacement selection nonce + cooldown/cap enforcement | 858abf4 | -`
 
 ---
 
@@ -809,7 +811,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-REPAIR-001 — Deterministic replacement selection + churn/griefing controls (cooldown + attempt caps)
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
 * **Depends on:** `P0-MODE2-MBB-001`, `P0-BOND-001`, `P0-BOND-002`, `P0-HEALTH-001`
