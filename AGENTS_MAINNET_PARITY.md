@@ -40,6 +40,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-09 | TASK P0-RETRIEVAL-FEES-001 | done | burn base fee + lock variable fee on open | 65d0ba7 | -`
 * `2026-01-09 | TASK P0-RETRIEVAL-SETTLE-002 | in progress | start settlement burn/payout + cancel/expiry paths | - | -`
 * `2026-01-09 | TASK P0-RETRIEVAL-SETTLE-002 | done | settle burn/payout and expiry refund handling + tests | f4912fa | -`
+* `2026-01-09 | TASK P0-ECON-E2E-001 | in progress | start econ accounting regression script | - | -`
+* `2026-01-09 | TASK P0-ECON-E2E-001 | done | econ parity E2E + confirm CLI + tx polling | 898f141 | -`
 
 ---
 
@@ -373,7 +375,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-ECON-E2E-001 — End-to-end econ accounting regression suite (escrow + burns + payouts + refunds)
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `scripts/`, `tests/` (if present), chain queries/CLI flows
 * **Depends on:** `P0-ECON-LOCKIN-001`, `P0-ECON-SPEND-002`, `P0-RETRIEVAL-FEES-001`, `P0-RETRIEVAL-SETTLE-002`
