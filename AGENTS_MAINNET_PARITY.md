@@ -66,6 +66,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-MODE2-REWARD-003 | done | suppress rewards for repairing slots + reward eligibility test | 23ea526 | -`
 * `2026-01-10 | TASK P0-REPAIR-E2E-002 | in progress | start multi-SP repair e2e script | - | -`
 * `2026-01-10 | TASK P0-REPAIR-E2E-002 | blocked | repair e2e still failing: pending provider fetch 502; slab catch-up incomplete; session proof mismatch on multi-blob attempts | - | -`
+* `2026-01-10 | TASK P0-EVIDENCE-001 | in progress | start hard-fault evidence slash/jail + repair wiring | - | -`
+* `2026-01-10 | TASK P0-EVIDENCE-001 | done | hard-fault evidence penalties + jail tracking + tests | fc890ef | -`
 
 ---
 
@@ -1004,7 +1006,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-EVIDENCE-001 — Evidence taxonomy + verification + replay protection + slash/jail/evict wiring (B1)
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, evidence/proof proto handlers
 * **Depends on:** `P0-PARAMS-001`, `P0-HEALTH-001`, `P0-MODE2-MBB-001`, `P0-REPAIR-001`
