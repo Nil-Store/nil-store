@@ -1,12 +1,14 @@
 package keeper
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 
 	"cosmossdk.io/collections"
+	errorsmod "cosmossdk.io/errors"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 
@@ -23,78 +25,43 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 	if deal.Owner != msg.Creator {
 		return nil, sdkerrors.ErrUnauthorized.Wrap("only deal owner can start slot repair")
 	}
-	if deal.RedundancyMode != 2 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("slot repair is only supported for Mode 2 deals")
-	}
-	if deal.Mode2Profile == nil || len(deal.Mode2Slots) == 0 {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("mode2 slot map is not initialized")
-	}
-
-	slotIdx := int(msg.Slot)
-	if slotIdx < 0 || slotIdx >= len(deal.Mode2Slots) {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid slot %d", msg.Slot)
-	}
-
-	slot := deal.Mode2Slots[slotIdx]
-	if slot == nil {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("mode2 slot %d is nil", msg.Slot)
-	}
-	if slot.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d is not active", msg.Slot)
-	}
-
-	pending := strings.TrimSpace(msg.PendingProvider)
-	if pending == "" {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("pending_provider is required")
-	}
-	if strings.TrimSpace(slot.Provider) == pending {
-		return nil, sdkerrors.ErrInvalidRequest.Wrap("pending_provider must differ from current provider")
-	}
-	if _, err := k.Providers.Get(ctx, pending); err != nil {
-		if errors.Is(err, collections.ErrNotFound) {
-			return nil, sdkerrors.ErrNotFound.Wrapf("pending provider %q not registered", pending)
-		}
-		return nil, fmt.Errorf("failed to load pending provider: %w", err)
-	}
-
-	attempt, windowStart, err := k.prepareMode2RepairStart(ctx, deal.Id, msg.Slot)
-	if err != nil {
+	if err := k.startSlotRepair(ctx, deal, msg.Slot, msg.PendingProvider, "start_slot_repair", nil); err != nil {
 		return nil, err
 	}
-
-	requiredBond, err := k.requiredBondPerSlot(ctx, deal)
-	if err != nil {
-		return nil, err
-	}
-	if err := k.lockProviderBond(ctx, pending, requiredBond); err != nil {
-		return nil, err
-	}
-
-	slot.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
-	slot.PendingProvider = pending
-	slot.StatusSinceHeight = ctx.BlockHeight()
-	slot.RepairTargetGen = deal.CurrentGen
-	deal.Mode2Slots[slotIdx] = slot
-
-	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
-		return nil, fmt.Errorf("failed to update deal: %w", err)
-	}
-	if err := k.recordMode2RepairStart(ctx, deal.Id, msg.Slot, attempt, windowStart); err != nil {
-		return nil, err
-	}
-
-	ctx.EventManager().EmitEvent(
-		sdk.NewEvent(
-			"start_slot_repair",
-			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
-			sdk.NewAttribute("slot", fmt.Sprintf("%d", msg.Slot)),
-			sdk.NewAttribute("provider", slot.Provider),
-			sdk.NewAttribute("pending_provider", slot.PendingProvider),
-			sdk.NewAttribute("repair_target_gen", fmt.Sprintf("%d", slot.RepairTargetGen)),
-		),
-	)
 
 	return &types.MsgStartSlotRepairResponse{Success: true}, nil
+}
+
+func (k msgServer) ForceStartSlotRepair(goCtx context.Context, msg *types.MsgForceStartSlotRepair) (*types.MsgForceStartSlotRepairResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	params := k.GetParams(ctx)
+	if !params.RepairOverrideEnabled {
+		return nil, sdkerrors.ErrUnauthorized.Wrap("repair override disabled")
+	}
+
+	authority, err := k.addressCodec.StringToBytes(msg.Authority)
+	if err != nil {
+		return nil, errorsmod.Wrap(err, "invalid authority address")
+	}
+	if !bytes.Equal(k.GetAuthority(), authority) {
+		expectedAuthorityStr, _ := k.addressCodec.BytesToString(k.GetAuthority())
+		return nil, errorsmod.Wrapf(types.ErrInvalidSigner, "invalid authority; expected %s, got %s", expectedAuthorityStr, msg.Authority)
+	}
+
+	deal, err := k.Deals.Get(ctx, msg.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
+	}
+
+	attrs := []sdk.Attribute{
+		sdk.NewAttribute("authority", msg.Authority),
+	}
+	if err := k.startSlotRepair(ctx, deal, msg.Slot, msg.PendingProvider, "force_start_slot_repair", attrs); err != nil {
+		return nil, err
+	}
+
+	return &types.MsgForceStartSlotRepairResponse{Success: true}, nil
 }
 
 func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompleteSlotRepair) (*types.MsgCompleteSlotRepairResponse, error) {
@@ -184,6 +151,88 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 	)
 
 	return &types.MsgCompleteSlotRepairResponse{Success: true}, nil
+}
+
+func (k msgServer) startSlotRepair(ctx sdk.Context, deal types.Deal, slot uint32, pendingProvider string, eventType string, extraAttrs []sdk.Attribute) error {
+	if deal.RedundancyMode != 2 {
+		return sdkerrors.ErrInvalidRequest.Wrap("slot repair is only supported for Mode 2 deals")
+	}
+	if deal.Mode2Profile == nil || len(deal.Mode2Slots) == 0 {
+		return sdkerrors.ErrInvalidRequest.Wrap("mode2 slot map is not initialized")
+	}
+
+	slotIdx := int(slot)
+	if slotIdx < 0 || slotIdx >= len(deal.Mode2Slots) {
+		return sdkerrors.ErrInvalidRequest.Wrapf("invalid slot %d", slot)
+	}
+
+	entry := deal.Mode2Slots[slotIdx]
+	if entry == nil {
+		return sdkerrors.ErrInvalidRequest.Wrapf("mode2 slot %d is nil", slot)
+	}
+	if entry.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
+		return sdkerrors.ErrInvalidRequest.Wrapf("slot %d is not active", slot)
+	}
+
+	pending := strings.TrimSpace(pendingProvider)
+	if pending == "" {
+		return sdkerrors.ErrInvalidRequest.Wrap("pending_provider is required")
+	}
+	if strings.TrimSpace(entry.Provider) == pending {
+		return sdkerrors.ErrInvalidRequest.Wrap("pending_provider must differ from current provider")
+	}
+	if _, err := k.Providers.Get(ctx, pending); err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return sdkerrors.ErrNotFound.Wrapf("pending provider %q not registered", pending)
+		}
+		return fmt.Errorf("failed to load pending provider: %w", err)
+	}
+
+	attempt, windowStart, err := k.prepareMode2RepairStart(ctx, deal.Id, slot)
+	if err != nil {
+		return err
+	}
+
+	requiredBond, err := k.requiredBondPerSlot(ctx, deal)
+	if err != nil {
+		return err
+	}
+	if err := k.lockProviderBond(ctx, pending, requiredBond); err != nil {
+		return err
+	}
+
+	entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
+	entry.PendingProvider = pending
+	entry.StatusSinceHeight = ctx.BlockHeight()
+	entry.RepairTargetGen = deal.CurrentGen
+	deal.Mode2Slots[slotIdx] = entry
+
+	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
+		return fmt.Errorf("failed to update deal: %w", err)
+	}
+	if err := k.recordMode2RepairStart(ctx, deal.Id, slot, attempt, windowStart); err != nil {
+		return err
+	}
+
+	attrs := []sdk.Attribute{
+		sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+		sdk.NewAttribute("slot", fmt.Sprintf("%d", slot)),
+		sdk.NewAttribute("provider", entry.Provider),
+		sdk.NewAttribute("pending_provider", entry.PendingProvider),
+		sdk.NewAttribute("repair_target_gen", fmt.Sprintf("%d", entry.RepairTargetGen)),
+	}
+	if len(extraAttrs) > 0 {
+		attrs = append(attrs, extraAttrs...)
+	}
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			eventType,
+			attrs...,
+		),
+	)
+
+	return nil
 }
 
 func (k msgServer) slotRepairReady(ctx sdk.Context, deal types.Deal, slot uint32) (bool, error) {

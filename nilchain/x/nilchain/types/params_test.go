@@ -19,6 +19,7 @@ func TestDefaultParamsPolicyDefaults(t *testing.T) {
 	require.EqualValues(t, 6, p.EvictAfterMissedEpochsCold)
 	require.EqualValues(t, 0, p.CreditCapBpsHot)
 	require.EqualValues(t, 0, p.CreditCapBpsCold)
+	require.False(t, p.RepairOverrideEnabled)
 }
 
 func TestParamsValidateRejectsInvalidValues(t *testing.T) {

@@ -295,6 +295,74 @@ func TestMode2SlotRepairLifecycle(t *testing.T) {
 	require.Equal(t, dealAfterStart.CurrentGen+1, dealAfterComplete.CurrentGen)
 }
 
+func TestMode2SlotRepairOverrideAuthority(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	numProviders := 20
+	for i := 0; i < numProviders; i++ {
+		addrBz := []byte(fmt.Sprintf("provider_repair_override_%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		msgReg := &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		}
+		_, err := msgServer.RegisterProvider(f.ctx, msgReg)
+		require.NoError(t, err)
+	}
+
+	userBz := []byte("user_repair_override")
+	user, _ := f.addressCodec.BytesToString(userBz)
+	create := &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      1000,
+		ServiceHint:         "General:rs=8+4",
+		MaxMonthlySpend:     math.NewInt(500000),
+		InitialEscrowAmount: math.NewInt(1000000),
+	}
+	res, err := msgServer.CreateDeal(f.ctx, create)
+	require.NoError(t, err)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	candidate := deal.Mode2Slots[1].Provider
+
+	authorityStr, err := f.addressCodec.BytesToString(f.keeper.GetAuthority())
+	require.NoError(t, err)
+
+	_, err = msgServer.ForceStartSlotRepair(f.ctx, &types.MsgForceStartSlotRepair{
+		Authority:       authorityStr,
+		DealId:          res.DealId,
+		Slot:            0,
+		PendingProvider: candidate,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "repair override disabled")
+
+	params := types.DefaultParams()
+	params.RepairOverrideEnabled = true
+	require.NoError(t, f.keeper.Params.Set(f.ctx, params))
+
+	_, err = msgServer.ForceStartSlotRepair(f.ctx, &types.MsgForceStartSlotRepair{
+		Authority:       user,
+		DealId:          res.DealId,
+		Slot:            0,
+		PendingProvider: candidate,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid authority")
+
+	_, err = msgServer.ForceStartSlotRepair(f.ctx, &types.MsgForceStartSlotRepair{
+		Authority:       authorityStr,
+		DealId:          res.DealId,
+		Slot:            0,
+		PendingProvider: candidate,
+	})
+	require.NoError(t, err)
+}
+
 func TestMode2SlotRepairCooldownAndAttemptCap(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)

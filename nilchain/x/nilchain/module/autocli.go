@@ -21,16 +21,19 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 			},
 		},
 		Tx: &autocliv1.ServiceCommandDescriptor{
-			Service: types.Msg_serviceDesc.ServiceName,
+			Service:              types.Msg_serviceDesc.ServiceName,
 			EnhanceCustomCommand: true, // only required if you want to use the custom command
-						RpcCommandOptions: []*autocliv1.RpcCommandOptions{
-							{
-								RpcMethod: "UpdateParams",
-								Skip:       true, // skipped because authority gated
-							},
-							// this line is used by ignite scaffolding # autocli/tx
-						},
-					},
-				}
-			}
-			
+			RpcCommandOptions: []*autocliv1.RpcCommandOptions{
+				{
+					RpcMethod: "UpdateParams",
+					Skip:      true, // skipped because authority gated
+				},
+				{
+					RpcMethod: "ForceStartSlotRepair",
+					Skip:      true, // skipped because authority gated
+				},
+				// this line is used by ignite scaffolding # autocli/tx
+			},
+		},
+	}
+}

@@ -59,6 +59,7 @@ var (
 	KeyAuditBudgetCarryoverEpochs  = []byte("AuditBudgetCarryoverEpochs")
 	KeyCreditCapBpsHot             = []byte("CreditCapBpsHot")
 	KeyCreditCapBpsCold            = []byte("CreditCapBpsCold")
+	KeyRepairOverrideEnabled       = []byte("RepairOverrideEnabled")
 )
 
 // ParamKeyTable the param key table for launch module
@@ -113,6 +114,7 @@ func NewParams(
 	auditBudgetCarryoverEpochs uint64,
 	creditCapBpsHot uint64,
 	creditCapBpsCold uint64,
+	repairOverrideEnabled bool,
 ) Params {
 	return Params{
 		BaseStripeCost:        baseStripeCost,
@@ -162,6 +164,7 @@ func NewParams(
 		AuditBudgetCarryoverEpochs:  auditBudgetCarryoverEpochs,
 		CreditCapBpsHot:             creditCapBpsHot,
 		CreditCapBpsCold:            creditCapBpsCold,
+		RepairOverrideEnabled:       repairOverrideEnabled,
 	}
 }
 
@@ -207,13 +210,14 @@ func DefaultParams() Params {
 		2000,   // PremiumBps (20%)
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(10000)), // EvidenceBond (0.01 NIL)
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(20000)), // FailureBounty (0.02 NIL)
-		5000, // EvidenceBondBurnBpsOnExpiry (50%)
-		6,    // ProofOfFailureTtlEpochs (default to nonresponse window)
-		200,  // AuditBudgetBps (2%)
-		500,  // AuditBudgetCapBps (5%)
-		2,    // AuditBudgetCarryoverEpochs
-		0,    // CreditCapBpsHot
-		0,    // CreditCapBpsCold
+		5000,  // EvidenceBondBurnBpsOnExpiry (50%)
+		6,     // ProofOfFailureTtlEpochs (default to nonresponse window)
+		200,   // AuditBudgetBps (2%)
+		500,   // AuditBudgetCapBps (5%)
+		2,     // AuditBudgetCarryoverEpochs
+		0,     // CreditCapBpsHot
+		0,     // CreditCapBpsCold
+		false, // RepairOverrideEnabled (mainnet default)
 	)
 }
 
@@ -266,6 +270,7 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyAuditBudgetCarryoverEpochs, &p.AuditBudgetCarryoverEpochs, validateAuditBudgetCarryoverEpochs),
 		paramtypes.NewParamSetPair(KeyCreditCapBpsHot, &p.CreditCapBpsHot, validateCreditCapBpsHot),
 		paramtypes.NewParamSetPair(KeyCreditCapBpsCold, &p.CreditCapBpsCold, validateCreditCapBpsCold),
+		paramtypes.NewParamSetPair(KeyRepairOverrideEnabled, &p.RepairOverrideEnabled, validateRepairOverrideEnabled),
 	}
 }
 
@@ -407,6 +412,9 @@ func (p Params) Validate() error {
 		return err
 	}
 	if err := validateCreditCapBpsCold(p.CreditCapBpsCold); err != nil {
+		return err
+	}
+	if err := validateRepairOverrideEnabled(p.RepairOverrideEnabled); err != nil {
 		return err
 	}
 	return nil
@@ -718,6 +726,14 @@ func validateCreditCapBpsHot(i interface{}) error {
 
 func validateCreditCapBpsCold(i interface{}) error {
 	return validateBps(i, "credit_cap_bps_cold")
+}
+
+func validateRepairOverrideEnabled(i interface{}) error {
+	_, ok := i.(bool)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	return nil
 }
 
 func validateBps(i interface{}, name string) error {

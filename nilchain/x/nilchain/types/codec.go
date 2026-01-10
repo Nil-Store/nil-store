@@ -22,6 +22,7 @@ func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 		&MsgProveLiveness{},
 		&MsgSignalSaturation{},
 		&MsgStartSlotRepair{},
+		&MsgForceStartSlotRepair{},
 		&MsgCompleteSlotRepair{},
 		&MsgAddCredit{},
 		&MsgWithdrawRewards{},

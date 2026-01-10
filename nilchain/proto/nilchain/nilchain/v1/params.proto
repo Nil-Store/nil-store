@@ -108,4 +108,7 @@ message Params {
   // --- Credits phase-in (B6) ---
   uint64 credit_cap_bps_hot = 44;
   uint64 credit_cap_bps_cold = 45;
+
+  // --- Trusted repair override (dev/test only) ---
+  bool repair_override_enabled = 46;
 }

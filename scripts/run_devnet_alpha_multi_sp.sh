@@ -309,6 +309,15 @@ overrides = {
     "audit_budget_cap_bps": os.getenv("NIL_AUDIT_BUDGET_CAP_BPS"),
     "audit_budget_carryover_epochs": os.getenv("NIL_AUDIT_BUDGET_CARRYOVER_EPOCHS"),
 }
+repair_override_raw = os.getenv("NIL_REPAIR_OVERRIDE_ENABLED")
+if repair_override_raw is None or repair_override_raw.strip() == "":
+    params["repair_override_enabled"] = True
+else:
+    val = repair_override_raw.strip().lower()
+    if val in ("1", "true", "yes", "y"):
+        params["repair_override_enabled"] = True
+    elif val in ("0", "false", "no", "n"):
+        params["repair_override_enabled"] = False
 for key, raw in overrides.items():
     if raw is None:
         continue

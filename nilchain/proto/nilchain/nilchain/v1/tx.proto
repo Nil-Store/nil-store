@@ -58,6 +58,9 @@ service Msg {
   // MsgStartSlotRepair marks a Mode 2 slot as repairing and sets a replacement candidate.
   rpc StartSlotRepair(MsgStartSlotRepair) returns (MsgStartSlotRepairResponse);
 
+  // MsgForceStartSlotRepair allows module authority to start slot repair (override).
+  rpc ForceStartSlotRepair(MsgForceStartSlotRepair) returns (MsgForceStartSlotRepairResponse);
+
   // MsgCompleteSlotRepair promotes the pending replacement candidate to active.
   rpc CompleteSlotRepair(MsgCompleteSlotRepair) returns (MsgCompleteSlotRepairResponse);
 
@@ -338,6 +341,22 @@ message MsgStartSlotRepair {
 }
 
 message MsgStartSlotRepairResponse {
+  bool success = 1;
+}
+
+// MsgForceStartSlotRepair starts a make-before-break replacement for a Mode 2 slot
+// using module authority (governance override).
+message MsgForceStartSlotRepair {
+  option (cosmos.msg.v1.signer) = "authority";
+  option (amino.name) = "nilchain/x/nilchain/MsgForceStartSlotRepair";
+
+  string authority = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 deal_id = 2;
+  uint32 slot = 3; // 0..N-1
+  string pending_provider = 4 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+}
+
+message MsgForceStartSlotRepairResponse {
   bool success = 1;
 }
 
