@@ -2015,6 +2015,9 @@ func (k msgServer) ConfirmRetrievalSession(goCtx context.Context, msg *types.Msg
 	if isSessionExpired(ctx, &session) {
 		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_EXPIRED
 		session.UpdatedHeight = ctx.BlockHeight()
+		if err := k.refundLockedRetrievalFee(ctx, &session); err != nil {
+			return nil, err
+		}
 		_ = k.RetrievalSessions.Set(ctx, msg.SessionId, session)
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session expired")
 	}
@@ -2069,7 +2072,8 @@ func (k msgServer) CancelRetrievalSession(goCtx context.Context, msg *types.MsgC
 	}
 
 	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED ||
-		session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED {
+		session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED ||
+		session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_EXPIRED {
 		return &types.MsgCancelRetrievalSessionResponse{Success: true}, nil
 	}
 
@@ -2091,16 +2095,8 @@ func (k msgServer) CancelRetrievalSession(goCtx context.Context, msg *types.MsgC
 		k.trackProviderHealth(ctx, session.DealId, session.Provider, false)
 	}
 
-	if session.LockedFee.IsPositive() {
-		deal, err := k.Deals.Get(ctx, session.DealId)
-		if err != nil {
-			return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", session.DealId)
-		}
-		deal.EscrowBalance = deal.EscrowBalance.Add(session.LockedFee)
-		if err := k.Deals.Set(ctx, session.DealId, deal); err != nil {
-			return nil, fmt.Errorf("failed to refund locked retrieval fees: %w", err)
-		}
-		session.LockedFee = math.ZeroInt()
+	if err := k.refundLockedRetrievalFee(ctx, &session); err != nil {
+		return nil, err
 	}
 
 	session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED
@@ -2143,6 +2139,9 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	if isSessionExpired(ctx, &session) {
 		session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_EXPIRED
 		session.UpdatedHeight = ctx.BlockHeight()
+		if err := k.refundLockedRetrievalFee(ctx, &session); err != nil {
+			return nil, err
+		}
 		_ = k.RetrievalSessions.Set(ctx, msg.SessionId, session)
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("retrieval session expired")
 	}
@@ -2410,6 +2409,22 @@ func (k msgServer) settleRetrievalSession(ctx sdk.Context, session *types.Retrie
 	if sessionID := session.SessionId; len(sessionID) == 32 {
 		_ = k.RetrievalSessionProofProvider.Remove(ctx, sessionID)
 	}
+	return nil
+}
+
+func (k msgServer) refundLockedRetrievalFee(ctx sdk.Context, session *types.RetrievalSession) error {
+	if session == nil || !session.LockedFee.IsPositive() {
+		return nil
+	}
+	deal, err := k.Deals.Get(ctx, session.DealId)
+	if err != nil {
+		return sdkerrors.ErrNotFound.Wrapf("deal %d not found", session.DealId)
+	}
+	deal.EscrowBalance = deal.EscrowBalance.Add(session.LockedFee)
+	if err := k.Deals.Set(ctx, session.DealId, deal); err != nil {
+		return fmt.Errorf("failed to refund locked retrieval fees: %w", err)
+	}
+	session.LockedFee = math.ZeroInt()
 	return nil
 }
 
