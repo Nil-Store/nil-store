@@ -44,6 +44,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-09 | TASK P0-ECON-E2E-001 | done | econ parity E2E + confirm CLI + tx polling | 898f141 | -`
 * `2026-01-09 | TASK P0-QUOTAS-001 | in progress | start deterministic challenge derivation + repairing exclusions | - | -`
 * `2026-01-09 | TASK P0-QUOTAS-001 | done | enforce synthetic challenge exclusions + derivation tests | 1adb0b9 | -`
+* `2026-01-09 | TASK P0-QUOTAS-002 | in progress | start quota accounting + synthetic tracking cleanup | - | -`
+* `2026-01-09 | TASK P0-QUOTAS-002 | done | prune quota accounting + add quota clamp/dedup tests | 67cab32 | -`
 
 ---
 
@@ -471,7 +473,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-QUOTAS-002 — Quota accounting + synthetic fill tracking + end-of-epoch evaluation (quota shortfall is HealthState-only)
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-challenge-derivation-and-quotas.md`
 * **Depends on:** `P0-QUOTAS-001`
