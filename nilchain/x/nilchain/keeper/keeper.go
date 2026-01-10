@@ -75,6 +75,8 @@ type Keeper struct {
 	CreditSeen              collections.Map[[]byte, bool]
 	SyntheticSeen           collections.Map[[]byte, bool]
 	DeputySeen              collections.Map[[]byte, bool]
+	AuditBudgetByEpoch      collections.Map[uint64, math.Int]
+	AuditBudgetAvailable    collections.Item[math.Int]
 }
 
 func NewKeeper(
@@ -242,6 +244,19 @@ func NewKeeper(
 		CreditSeen:    collections.NewMap(sb, types.CreditSeenKey, "credit_seen", collections.BytesKey, collections.BoolValue),
 		SyntheticSeen: collections.NewMap(sb, types.SyntheticSeenKey, "synthetic_seen", collections.BytesKey, collections.BoolValue),
 		DeputySeen:    collections.NewMap(sb, types.DeputySeenKey, "deputy_seen", collections.BytesKey, collections.BoolValue),
+		AuditBudgetByEpoch: collections.NewMap(
+			sb,
+			types.AuditBudgetByEpochKey,
+			"audit_budget_by_epoch",
+			collections.Uint64Key,
+			sdk.IntValue,
+		),
+		AuditBudgetAvailable: collections.NewItem(
+			sb,
+			types.AuditBudgetAvailableKey,
+			"audit_budget_available",
+			sdk.IntValue,
+		),
 	}
 
 	schema, err := sb.Build()
