@@ -278,6 +278,50 @@ func CmdSubmitRetrievalProof() *cobra.Command {
 	return cmd
 }
 
+func CmdSubmitProofOfFailure() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "submit-proof-of-failure [deal-id] [provider-addr] [proof-hash-hex]",
+		Short: "Submit a deputy proof-of-failure report for a provider",
+		Args:  cobra.ExactArgs(3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := client.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			dealID, err := strconv.ParseUint(args[0], 10, 64)
+			if err != nil {
+				return err
+			}
+			providerAddr := strings.TrimSpace(args[1])
+			if providerAddr == "" {
+				return fmt.Errorf("provider address is required")
+			}
+
+			rawHash := strings.TrimSpace(args[2])
+			rawHash = strings.TrimPrefix(rawHash, "0x")
+			proofHash, err := hex.DecodeString(rawHash)
+			if err != nil {
+				return err
+			}
+			if len(proofHash) != 32 {
+				return fmt.Errorf("proof_hash must be 32 bytes")
+			}
+
+			msg := types.MsgSubmitProofOfFailure{
+				Creator:   clientCtx.GetFromAddress().String(),
+				DealId:    dealID,
+				Provider:  providerAddr,
+				ProofHash: proofHash,
+			}
+			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
 func CmdOpenRetrievalSession() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "open-retrieval-session",

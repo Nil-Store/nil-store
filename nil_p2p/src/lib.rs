@@ -6,9 +6,10 @@ use libp2p::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tracing::{info, error};
 
 // --- Messages ---
@@ -21,9 +22,21 @@ pub struct ShardAnnouncement {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AskForProxy {
-    pub cid: String,
-    pub target_peer: String,
+    pub request_id: String,
+    pub deal_id: u64,
+    pub provider: String,
+    pub file_path: String,
+    pub range_start: u64,
+    pub range_len: u64,
     pub max_price: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyOffer {
+    pub request_id: String,
+    pub deputy_peer_id: String,
+    pub deputy_endpoint: String,
+    pub price: u64,
 }
 
 // --- Network Behaviour ---
@@ -39,19 +52,25 @@ struct NilBehaviour {
 pub struct NilNode {
     swarm: Swarm<NilBehaviour>,
     command_rx: mpsc::Receiver<Command>,
+    proxy_endpoint: Option<String>,
+    proxy_price: u64,
+    pending_proxy: HashMap<String, oneshot::Sender<ProxyOffer>>,
 }
 
 pub enum Command {
     AnnounceShard { shard_id: String },
     Dial { addr: Multiaddr },
-    RequestProxy { cid: String, deputy: String },
+    RequestProxy { request: AskForProxy, respond_to: oneshot::Sender<ProxyOffer> },
+    CancelProxy { request_id: String },
 }
 
 impl NilNode {
     pub async fn new(
         _secret_key_seed: u64, // Ignored for now, generating random identity
         port: u16,
-        command_rx: mpsc::Receiver<Command>
+        command_rx: mpsc::Receiver<Command>,
+        proxy_endpoint: Option<String>,
+        proxy_price: u64,
     ) -> Result<Self> {
         
         // 1. Swarm Builder (libp2p v0.53+)
@@ -105,8 +124,16 @@ impl NilNode {
              .map_err(|_| anyhow::anyhow!("Failed to subscribe to nil-shards"))?;
         swarm.behaviour_mut().gossipsub.subscribe(&gossipsub::IdentTopic::new("nil-proxy"))
              .map_err(|_| anyhow::anyhow!("Failed to subscribe to nil-proxy"))?;
+        swarm.behaviour_mut().gossipsub.subscribe(&gossipsub::IdentTopic::new("nil-proxy-resp"))
+             .map_err(|_| anyhow::anyhow!("Failed to subscribe to nil-proxy-resp"))?;
 
-        Ok(Self { swarm, command_rx })
+        Ok(Self {
+            swarm,
+            command_rx,
+            proxy_endpoint,
+            proxy_price,
+            pending_proxy: HashMap::new(),
+        })
     }
 
     pub async fn run(mut self) -> Result<()> {
@@ -136,20 +163,24 @@ impl NilNode {
                                  info!("📞 Dialing {}", addr);
                              }
                         }
-                        Command::RequestProxy { cid, deputy } => {
-                            let msg = AskForProxy {
-                                cid: cid.clone(),
-                                target_peer: deputy.clone(),
-                                max_price: 100,
-                            };
-                            let encoded = serde_json::to_vec(&msg)?;
+                        Command::RequestProxy { request, respond_to } => {
+                            let request_id = request.request_id.clone();
+                            let encoded = serde_json::to_vec(&request)?;
                             let topic = gossipsub::IdentTopic::new("nil-proxy");
-                            
+                            self.pending_proxy.insert(request_id.clone(), respond_to);
+
                             if let Err(e) = self.swarm.behaviour_mut().gossipsub.publish(topic, encoded) {
                                 error!("Publish proxy error: {:?}", e);
+                                self.pending_proxy.remove(&request_id);
                             } else {
-                                info!("🕵️‍♀️ Requested proxy for {} via {}", cid, deputy);
+                                info!(
+                                    "🕵️‍♀️ Requested proxy for deal {} provider {} request {}",
+                                    request.deal_id, request.provider, request_id
+                                );
                             }
+                        }
+                        Command::CancelProxy { request_id } => {
+                            self.pending_proxy.remove(&request_id);
                         }
                     }
                 }
@@ -183,23 +214,34 @@ impl NilNode {
                             }
                             // Try to decode as AskForProxy
                             if let Ok(proxy_req) = serde_json::from_slice::<AskForProxy>(&message.data) {
-                                info!("🕵️‍♀️ Received PROXY REQUEST from {}: Need CID {} via Peer {}", peer_id, proxy_req.cid, proxy_req.target_peer);
-                                
-                                // Logic: Am I the deputy?
-                                let my_id = self.swarm.local_peer_id().to_string();
-                                if proxy_req.target_peer == my_id {
-                                    info!("✅ I am the deputy! Handling proxy request...");
-                                    // 1. "Fetch" data from the *actual* target (not in message, usually implicitly the Deal SP)
-                                    // For Phase 2, we just simulate the fetch delay.
-                                    info!("   Fetching CID {} from network...", proxy_req.cid);
-                                    
-                                    // 2. "Verify" (Simulate KZG check)
-                                    info!("   Verifying KZG proof... OK.");
-                                    
-                                    // 3. "Return" (Simulate sending data back)
-                                    // In a real implementation, we would open a direct stream to 'peer_id' (requester)
-                                    // and pipe the data. For now, we just log.
-                                    info!("   Streaming data back to requester {}.", peer_id);
+                                info!(
+                                    "🕵️‍♀️ Received PROXY REQUEST from {}: deal {} provider {} request {}",
+                                    peer_id, proxy_req.deal_id, proxy_req.provider, proxy_req.request_id
+                                );
+
+                                if let Some(endpoint) = self.proxy_endpoint.clone() {
+                                    if proxy_req.max_price >= self.proxy_price {
+                                        let offer = ProxyOffer {
+                                            request_id: proxy_req.request_id.clone(),
+                                            deputy_peer_id: self.swarm.local_peer_id().to_string(),
+                                            deputy_endpoint: endpoint,
+                                            price: self.proxy_price,
+                                        };
+                                        let encoded = serde_json::to_vec(&offer)?;
+                                        let topic = gossipsub::IdentTopic::new("nil-proxy-resp");
+                                        if let Err(e) = self.swarm.behaviour_mut().gossipsub.publish(topic, encoded) {
+                                            error!("Publish proxy response error: {:?}", e);
+                                        } else {
+                                            info!("✅ Sent proxy offer for request {}", proxy_req.request_id);
+                                        }
+                                    } else {
+                                        info!("🕵️‍♀️ Proxy request {} price too low", proxy_req.request_id);
+                                    }
+                                }
+                            }
+                            if let Ok(proxy_resp) = serde_json::from_slice::<ProxyOffer>(&message.data) {
+                                if let Some(sender) = self.pending_proxy.remove(&proxy_resp.request_id) {
+                                    let _ = sender.send(proxy_resp.clone());
                                 }
                             }
                         }

@@ -34,5 +34,6 @@ func GetTxCmd() *cobra.Command {
 	cmd.AddCommand(CmdSignalSaturation())
 	cmd.AddCommand(CmdAddCredit())
 	cmd.AddCommand(CmdWithdrawRewards())
+	cmd.AddCommand(CmdSubmitProofOfFailure())
 	return cmd
 }

@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -181,6 +184,144 @@ func tryProxyToProviderBaseURL(w http.ResponseWriter, r *http.Request, providerB
 	return true, copyErr
 }
 
+type proxyAskRequest struct {
+	DealID     uint64 `json:"deal_id"`
+	Provider   string `json:"provider"`
+	FilePath   string `json:"file_path"`
+	RangeStart uint64 `json:"range_start"`
+	RangeLen   uint64 `json:"range_len"`
+	MaxPrice   uint64 `json:"max_price"`
+}
+
+type proxyAskResponse struct {
+	RequestID      string `json:"request_id"`
+	DeputyPeerID   string `json:"deputy_peer_id"`
+	DeputyEndpoint string `json:"deputy_endpoint"`
+	Price          uint64 `json:"price"`
+}
+
+var proxyFailureNow = time.Now
+
+func proxyMaxPrice() uint64 {
+	raw := strings.TrimSpace(envDefault("NIL_PROXY_MAX_PRICE", "0"))
+	if raw == "" {
+		return 0
+	}
+	if v, err := strconv.ParseUint(raw, 10, 64); err == nil {
+		return v
+	}
+	return 0
+}
+
+func proxyReportFailuresEnabled() bool {
+	return strings.TrimSpace(envDefault("NIL_PROXY_REPORT_FAILURES", "1")) == "1"
+}
+
+func askForProxyDeputy(ctx context.Context, req proxyAskRequest) (*proxyAskResponse, error) {
+	base := strings.TrimRight(strings.TrimSpace(envDefault("NIL_P2P_PROXY_URL", "")), "/")
+	if base == "" {
+		return nil, errors.New("proxy discovery disabled")
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/proxy/ask", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := routerHTTPClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("proxy discovery %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	var payload proxyAskResponse
+	if err := json.Unmarshal(respBody, &payload); err != nil {
+		return nil, err
+	}
+	payload.DeputyEndpoint = strings.TrimSpace(payload.DeputyEndpoint)
+	if payload.DeputyEndpoint == "" {
+		return nil, fmt.Errorf("proxy discovery returned empty deputy endpoint")
+	}
+	return &payload, nil
+}
+
+func proxyFailureHash(dealID uint64, provider string, filePath string, rangeStart uint64, rangeLen uint64) []byte {
+	now := proxyFailureNow().UnixNano()
+	h := sha256.New()
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], dealID)
+	_, _ = h.Write(buf[:])
+	_, _ = h.Write([]byte(provider))
+	_, _ = h.Write([]byte(filePath))
+	binary.BigEndian.PutUint64(buf[:], rangeStart)
+	_, _ = h.Write(buf[:])
+	binary.BigEndian.PutUint64(buf[:], rangeLen)
+	_, _ = h.Write(buf[:])
+	binary.BigEndian.PutUint64(buf[:], uint64(now))
+	_, _ = h.Write(buf[:])
+	return h.Sum(nil)
+}
+
+func submitProofOfFailure(ctx context.Context, dealID uint64, provider string, proofHash []byte) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if len(proofHash) != 32 {
+		return "", fmt.Errorf("proof hash must be 32 bytes")
+	}
+	providerKeyName := envDefault("NIL_PROVIDER_KEY", "faucet")
+	proofHashHex := "0x" + hex.EncodeToString(proofHash)
+	dealIDStr := strconv.FormatUint(dealID, 10)
+
+	out, err := runTxWithRetry(
+		ctx,
+		"tx", "nilchain", "submit-proof-of-failure",
+		dealIDStr,
+		provider,
+		proofHashHex,
+		"--from", providerKeyName,
+		"--chain-id", chainID,
+		"--home", homeDir,
+		"--keyring-backend", "test",
+		"--yes",
+		"--gas", "auto",
+		"--gas-adjustment", "1.6",
+		"--gas-prices", gasPrices,
+	)
+	outStr := string(out)
+	if err != nil {
+		return "", fmt.Errorf("submit-proof-of-failure failed: %w (%s)", err, outStr)
+	}
+	return extractTxHash(outStr), nil
+}
+
+func proxyRequestRange(r *http.Request) (uint64, uint64) {
+	if r == nil {
+		return 0, 0
+	}
+	rangeHeader := strings.TrimSpace(r.Header.Get("Range"))
+	if rangeHeader == "" {
+		return 0, 0
+	}
+	start, length, err := parseHTTPRange(rangeHeader)
+	if err != nil {
+		return 0, 0
+	}
+	return start, length
+}
+
 func bufferRequestBody(r *http.Request) (*os.File, int64, error) {
 	tmpFile, err := os.CreateTemp("", "nil-router-upload-*")
 	if err != nil {
@@ -326,6 +467,11 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 	// shards and serve the request.
 	isFetch := strings.HasPrefix(r.URL.Path, "/gateway/fetch/")
 	origRawQuery := r.URL.RawQuery
+	primaryProvider := ""
+	if len(providers) > 0 {
+		primaryProvider = providers[0]
+	}
+	rangeStart, rangeLen := proxyRequestRange(r)
 
 	var lastErr error
 	for _, providerAddr := range providers {
@@ -380,6 +526,41 @@ func RouterGatewayFetch(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				lastErr = err
 			}
+		}
+	}
+
+	if isFetch {
+		filePath := strings.TrimSpace(r.URL.Query().Get("file_path"))
+		proxyResp, err := askForProxyDeputy(r.Context(), proxyAskRequest{
+			DealID:     dealID,
+			Provider:   primaryProvider,
+			FilePath:   filePath,
+			RangeStart: rangeStart,
+			RangeLen:   rangeLen,
+			MaxPrice:   proxyMaxPrice(),
+		})
+		if err == nil && proxyResp != nil {
+			q := r.URL.Query()
+			if strings.TrimSpace(q.Get("deputy")) == "" {
+				q.Set("deputy", "1")
+				r.URL.RawQuery = q.Encode()
+			}
+			ok, proxyErr := tryProxyToProviderBaseURL(w, r, proxyResp.DeputyEndpoint)
+			if ok {
+				r.URL.RawQuery = origRawQuery
+				return
+			}
+			if proxyErr != nil {
+				lastErr = proxyErr
+			}
+			if proxyReportFailuresEnabled() && primaryProvider != "" {
+				hash := proxyFailureHash(dealID, primaryProvider, filePath, rangeStart, rangeLen)
+				if _, err := submitProofOfFailure(r.Context(), dealID, primaryProvider, hash); err != nil {
+					lastErr = err
+				}
+			}
+		} else if err != nil {
+			lastErr = err
 		}
 	}
 
