@@ -82,6 +82,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-DEPUTY-003 | done | AskForProxy http bridge + gateway proxy fallback + proof-of-failure CLI/tests | 6106e7a | -`
 * `2026-01-10 | TASK P0-DEPUTY-E2E-002 | in progress | start ghosting-provider deputy E2E gate | - | -`
 * `2026-01-10 | TASK P0-DEPUTY-E2E-002 | done | deputy ghosting CI script + premium/escrow assertions | cb6bdea | -`
+* `2026-01-10 | TASK P0-REPAIR-E2E-002 | in progress | resume repair e2e debugging: pending provider fetch + proof mismatch | - | -`
+* `2026-01-10 | TASK P0-REPAIR-E2E-002 | done | stabilize repair E2E + mode2 reconstruction and proof submission flow | da2c9b7 | -`
 
 ---
 
@@ -946,7 +948,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-REPAIR-E2E-002 — Multi-SP repair e2e: slot failure → catch-up → promotion; reads succeed throughout
 
-* **Status:** `[ ] not started  [ ] in progress  [x] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `scripts/`, `nil_gateway/`, (devnet stack)
 * **Depends on:** `P0-MODE2-MBB-001`, `P0-REPAIR-001`, `P0-MODE2-ROUTING-002`
