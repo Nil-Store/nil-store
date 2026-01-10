@@ -86,6 +86,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-REPAIR-E2E-002 | done | stabilize repair E2E + mode2 reconstruction and proof submission flow | da2c9b7 | -`
 * `2026-01-10 | TASK P1-REPAIR-OVERRIDE-001 | in progress | start authority-only repair override posture | - | -`
 * `2026-01-10 | TASK P1-REPAIR-OVERRIDE-001 | done | authority-only repair override param + msg + tests | 50e64a4 | -`
+* `2026-01-10 | TASK P1-CREDITS-001 | in progress | add organic credit cap and dedupe coverage | - | -`
+* `2026-01-10 | TASK P1-CREDITS-001 | done | add organic credit dedupe + cap tests | 3d9e848 | -`
 
 ---
 
@@ -556,7 +558,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P1-CREDITS-001 — Organic retrieval credits: accrual rules, caps, and phase-in defaults (devnet off, testnet limited, mainnet off at launch)
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-challenge-derivation-and-quotas.md`
 * **Depends on:** `P0-QUOTAS-002`, `P0-RETRIEVAL-SETTLE-002`, `P0-PARAMS-001`
