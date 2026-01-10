@@ -64,6 +64,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-MODE2-ROUTING-002 | done | avoid routing reads to repairing slots + active-only selection | 7a030e2 | -`
 * `2026-01-10 | TASK P0-MODE2-REWARD-003 | in progress | start excluding repairing slots from rewards/challenges | - | -`
 * `2026-01-10 | TASK P0-MODE2-REWARD-003 | done | suppress rewards for repairing slots + reward eligibility test | 23ea526 | -`
+* `2026-01-10 | TASK P0-REPAIR-E2E-002 | in progress | start multi-SP repair e2e script | - | -`
+* `2026-01-10 | TASK P0-REPAIR-E2E-002 | blocked | repair e2e still failing: pending provider fetch 502; slab catch-up incomplete; session proof mismatch on multi-blob attempts | - | -`
 
 ---
 
@@ -928,7 +930,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-REPAIR-E2E-002 — Multi-SP repair e2e: slot failure → catch-up → promotion; reads succeed throughout
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [x] blocked  [ ] done`
 * **Owner:**
 * **Area:** `scripts/`, `nil_gateway/`, (devnet stack)
 * **Depends on:** `P0-MODE2-MBB-001`, `P0-REPAIR-001`, `P0-MODE2-ROUTING-002`
