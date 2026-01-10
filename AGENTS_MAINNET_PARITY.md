@@ -42,6 +42,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-09 | TASK P0-RETRIEVAL-SETTLE-002 | done | settle burn/payout and expiry refund handling + tests | f4912fa | -`
 * `2026-01-09 | TASK P0-ECON-E2E-001 | in progress | start econ accounting regression script | - | -`
 * `2026-01-09 | TASK P0-ECON-E2E-001 | done | econ parity E2E + confirm CLI + tx polling | 898f141 | -`
+* `2026-01-09 | TASK P0-QUOTAS-001 | in progress | start deterministic challenge derivation + repairing exclusions | - | -`
+* `2026-01-09 | TASK P0-QUOTAS-001 | done | enforce synthetic challenge exclusions + derivation tests | 1adb0b9 | -`
 
 ---
 
@@ -426,7 +428,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-QUOTAS-001 — Deterministic challenge derivation (Mode1 + Mode2) with REPAIRING exclusions
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-challenge-derivation-and-quotas.md`
 * **Depends on:** `P0-PARAMS-001`
