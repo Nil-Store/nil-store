@@ -36,6 +36,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-09 | TASK P0-ECON-LOCKIN-001 | done | lock-in deposit accounting + tests | 7ff3382 | -`
 * `2026-01-09 | TASK P0-ECON-SPEND-002 | in progress | start deterministic spend window + elasticity debits | - | -`
 * `2026-01-09 | TASK P0-ECON-SPEND-002 | done | spend window reset + cap enforcement tests | cb6c0c9 | -`
+* `2026-01-09 | TASK P0-RETRIEVAL-FEES-001 | in progress | start session open fee burn + lock | - | -`
+* `2026-01-09 | TASK P0-RETRIEVAL-FEES-001 | done | burn base fee + lock variable fee on open | 65d0ba7 | -`
 
 ---
 
@@ -266,7 +268,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-RETRIEVAL-FEES-001 — Enforce session open: burn base fee + lock variable fee; reject insufficient escrow
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-pricing-and-escrow-accounting.md`
 * **Depends on:** `P0-PARAMS-001`, `P0-ECON-LOCKIN-001`
