@@ -124,6 +124,45 @@ func TestRecordSynthetic_Dedupes(t *testing.T) {
 	require.Equal(t, uint64(1), seen)
 }
 
+func TestRecordCredit_Dedupes(t *testing.T) {
+	f := initQuotaFixture(t)
+	ctx := sdk.UnwrapSDKContext(f.ctx)
+
+	epochID := uint64(1)
+	dealID := uint64(42)
+	assignment := []byte{0x01, 0x02}
+	key := collections.Join(collections.Join(dealID, "provider-1"), epochID)
+
+	require.NoError(t, f.keeper.recordCredit(ctx, epochID, dealID, assignment, key, 7, 11))
+	require.NoError(t, f.keeper.recordCredit(ctx, epochID, dealID, assignment, key, 7, 11))
+	require.NoError(t, f.keeper.recordCredit(ctx, epochID, dealID, assignment, key, 7, 12))
+
+	seen, err := f.keeper.Mode1EpochCredits.Get(ctx, key)
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), seen)
+}
+
+func TestCreditCapBlobs_HotCold(t *testing.T) {
+	params := types.DefaultParams()
+	params.CreditCapBpsHot = 5000
+	params.CreditCapBpsCold = 2500
+
+	quota := uint64(100)
+	hotDeal := types.Deal{ServiceHint: "Hot"}
+	coldDeal := types.Deal{ServiceHint: "Cold"}
+
+	require.Equal(t, uint64(50), creditCapBlobs(params, hotDeal, quota))
+	require.Equal(t, uint64(25), creditCapBlobs(params, coldDeal, quota))
+}
+
+func TestCreditCapBlobs_DefaultZero(t *testing.T) {
+	params := types.DefaultParams()
+	quota := uint64(100)
+	deal := types.Deal{ServiceHint: "Hot"}
+
+	require.Equal(t, uint64(0), creditCapBlobs(params, deal, quota))
+}
+
 func TestCheckMissedProofs_PruningClearsEpochAccounting(t *testing.T) {
 	f := initQuotaFixture(t)
 	ctx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
