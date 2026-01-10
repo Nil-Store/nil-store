@@ -397,6 +397,35 @@ func CmdCancelRetrievalSession() *cobra.Command {
 	return cmd
 }
 
+func CmdConfirmRetrievalSession() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "confirm-retrieval-session [session-id]",
+		Short: "Confirm completion of a retrieval session",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			clientCtx, err := client.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			sessionID, err := decodeSessionID(args[0])
+			if err != nil {
+				return err
+			}
+
+			msg := types.MsgConfirmRetrievalSession{
+				Creator:   clientCtx.GetFromAddress().String(),
+				SessionId: sessionID,
+			}
+
+			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), &msg)
+		},
+	}
+
+	flags.AddTxFlagsToCmd(cmd)
+	return cmd
+}
+
 func decodeHexBytes(value string, expectedLen int) ([]byte, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {

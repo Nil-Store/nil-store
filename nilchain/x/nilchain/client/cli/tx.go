@@ -25,6 +25,7 @@ func GetTxCmd() *cobra.Command {
 	cmd.AddCommand(CmdSubmitRetrievalProof())
 	cmd.AddCommand(CmdOpenRetrievalSession())
 	cmd.AddCommand(CmdCancelRetrievalSession())
+	cmd.AddCommand(CmdConfirmRetrievalSession())
 	cmd.AddCommand(CmdRegisterProvider())
 	cmd.AddCommand(CmdCreateDeal())
 	cmd.AddCommand(CmdUpdateDealContent())
