@@ -102,6 +102,15 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					if err := k.setProviderHealthState(sdkCtx, dealID, provider, state); err != nil {
 						return false, err
 					}
+					sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
+						types.TypeHealthSoftMiss,
+						sdk.NewAttribute(types.AttributeKeyMode, "mode1"),
+						sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+						sdk.NewAttribute(types.AttributeKeyEpochID, strconv.FormatUint(epochID, 10)),
+						sdk.NewAttribute(types.AttributeKeyProvider, provider),
+						sdk.NewAttribute(types.AttributeKeyMissedEpochs, strconv.FormatUint(prev+1, 10)),
+						sdk.NewAttribute(types.AttributeKeyReason, "quota_miss"),
+					))
 					sdkCtx.Logger().Info(
 						"quota missed (mode1)",
 						"epoch", epochID,
@@ -254,6 +263,15 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					if err := k.Mode2DeputyMissedEpochs.Set(ctx, missedKey, nextMissed); err != nil {
 						return false, err
 					}
+					sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
+						types.TypeHealthSoftMiss,
+						sdk.NewAttribute(types.AttributeKeyMode, "mode2"),
+						sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+						sdk.NewAttribute(types.AttributeKeyEpochID, strconv.FormatUint(epochID, 10)),
+						sdk.NewAttribute(types.AttributeKeySlot, strconv.FormatUint(slotIdx, 10)),
+						sdk.NewAttribute(types.AttributeKeyMissedEpochs, strconv.FormatUint(nextMissed, 10)),
+						sdk.NewAttribute(types.AttributeKeyReason, "deputy_miss"),
+					))
 
 					sdkCtx.Logger().Info(
 						"deputy-served slot had zero retrieval service",
@@ -266,6 +284,15 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					)
 
 					if evictAfterMissed > 0 && nextMissed >= evictAfterMissed {
+						sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
+							types.TypeHealthEvictThreshold,
+							sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+							sdk.NewAttribute(types.AttributeKeyEpochID, strconv.FormatUint(epochID, 10)),
+							sdk.NewAttribute(types.AttributeKeySlot, strconv.FormatUint(slotIdx, 10)),
+							sdk.NewAttribute(types.AttributeKeyMissedEpochs, strconv.FormatUint(nextMissed, 10)),
+							sdk.NewAttribute(types.AttributeKeyThreshold, strconv.FormatUint(evictAfterMissed, 10)),
+							sdk.NewAttribute(types.AttributeKeyReason, "deputy_miss"),
+						))
 						if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 || int(slot) >= len(deal.Mode2Slots) {
 							continue
 						}
@@ -296,6 +323,15 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						dealChanged = true
 						_ = k.Mode2DeputyMissedEpochs.Remove(ctx, missedKey)
 						_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
+						sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
+							types.TypeHealthRepairStarted,
+							sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+							sdk.NewAttribute(types.AttributeKeyEpochID, strconv.FormatUint(epochID, 10)),
+							sdk.NewAttribute(types.AttributeKeySlot, strconv.FormatUint(slotIdx, 10)),
+							sdk.NewAttribute(types.AttributeKeyProvider, entry.Provider),
+							sdk.NewAttribute(types.AttributeKeyPendingProvider, entry.PendingProvider),
+							sdk.NewAttribute(types.AttributeKeyReason, "deputy_miss"),
+						))
 
 						extra := make([]byte, 0, 4)
 						extra = binary.BigEndian.AppendUint32(extra, slot)
@@ -338,6 +374,15 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					if err := k.setSlotHealthState(sdkCtx, dealID, slot, state); err != nil {
 						return false, err
 					}
+					sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
+						types.TypeHealthSoftMiss,
+						sdk.NewAttribute(types.AttributeKeyMode, "mode2"),
+						sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+						sdk.NewAttribute(types.AttributeKeyEpochID, strconv.FormatUint(epochID, 10)),
+						sdk.NewAttribute(types.AttributeKeySlot, strconv.FormatUint(slotIdx, 10)),
+						sdk.NewAttribute(types.AttributeKeyMissedEpochs, strconv.FormatUint(nextMissed, 10)),
+						sdk.NewAttribute(types.AttributeKeyReason, "quota_miss"),
+					))
 					sdkCtx.Logger().Info(
 						"quota missed (mode2)",
 						"epoch", epochID,
@@ -361,6 +406,15 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					))
 
 					if evictAfterMissed > 0 && nextMissed >= evictAfterMissed {
+						sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
+							types.TypeHealthEvictThreshold,
+							sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+							sdk.NewAttribute(types.AttributeKeyEpochID, strconv.FormatUint(epochID, 10)),
+							sdk.NewAttribute(types.AttributeKeySlot, strconv.FormatUint(slotIdx, 10)),
+							sdk.NewAttribute(types.AttributeKeyMissedEpochs, strconv.FormatUint(nextMissed, 10)),
+							sdk.NewAttribute(types.AttributeKeyThreshold, strconv.FormatUint(evictAfterMissed, 10)),
+							sdk.NewAttribute(types.AttributeKeyReason, "quota_miss"),
+						))
 						if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 || int(slot) >= len(deal.Mode2Slots) {
 							continue
 						}
@@ -390,6 +444,15 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						deal.Mode2Slots[slot] = entry
 						dealChanged = true
 						_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
+						sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
+							types.TypeHealthRepairStarted,
+							sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+							sdk.NewAttribute(types.AttributeKeyEpochID, strconv.FormatUint(epochID, 10)),
+							sdk.NewAttribute(types.AttributeKeySlot, strconv.FormatUint(slotIdx, 10)),
+							sdk.NewAttribute(types.AttributeKeyProvider, entry.Provider),
+							sdk.NewAttribute(types.AttributeKeyPendingProvider, entry.PendingProvider),
+							sdk.NewAttribute(types.AttributeKeyReason, "quota_miss"),
+						))
 
 						extra := make([]byte, 0, 4)
 						extra = binary.BigEndian.AppendUint32(extra, slot)

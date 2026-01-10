@@ -48,6 +48,26 @@ service Query {
     option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/heat";
   }
 
+  // Queries HealthState for a Deal/provider assignment.
+  rpc GetDealProviderHealth(QueryGetDealProviderHealthRequest) returns (QueryGetDealProviderHealthResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/health/provider/{provider}";
+  }
+
+  // Queries HealthState for a Deal/slot assignment.
+  rpc GetDealSlotHealth(QueryGetDealSlotHealthRequest) returns (QueryGetDealSlotHealthResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/health/slot/{slot}";
+  }
+
+  // Lists HealthState entries for a Deal (providers).
+  rpc ListDealProviderHealth(QueryListDealProviderHealthRequest) returns (QueryListDealProviderHealthResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/health/providers";
+  }
+
+  // Lists HealthState entries for a Deal (slots).
+  rpc ListDealSlotHealth(QueryListDealSlotHealthRequest) returns (QueryListDealSlotHealthResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/health/slots";
+  }
+
   // Queries the last accepted retrieval receipt nonce for a specific (deal_id, file_path).
   rpc GetReceiptNonce(QueryGetReceiptNonceRequest) returns (QueryGetReceiptNonceResponse) {
     option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/receipt-nonce";
@@ -130,6 +150,56 @@ message QueryGetDealHeatRequest {
 
 message QueryGetDealHeatResponse {
   DealHeatState heat = 1 [(gogoproto.nullable) = false];
+}
+
+message QueryGetDealProviderHealthRequest {
+  uint64 deal_id = 1;
+  string provider = 2;
+}
+
+message QueryGetDealProviderHealthResponse {
+  HealthState state = 1 [(gogoproto.nullable) = false];
+}
+
+message QueryGetDealSlotHealthRequest {
+  uint64 deal_id = 1;
+  uint32 slot = 2;
+}
+
+message QueryGetDealSlotHealthResponse {
+  HealthState state = 1 [(gogoproto.nullable) = false];
+}
+
+message DealProviderHealthEntry {
+  uint64 deal_id = 1;
+  string provider = 2;
+  HealthState state = 3 [(gogoproto.nullable) = false];
+}
+
+message DealSlotHealthEntry {
+  uint64 deal_id = 1;
+  uint32 slot = 2;
+  HealthState state = 3 [(gogoproto.nullable) = false];
+}
+
+message QueryListDealProviderHealthRequest {
+  uint64 deal_id = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+message QueryListDealProviderHealthResponse {
+  repeated DealProviderHealthEntry entries = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
+}
+
+message QueryListDealSlotHealthRequest {
+  uint64 deal_id = 1;
+  cosmos.base.query.v1beta1.PageRequest pagination = 2;
+}
+
+message QueryListDealSlotHealthResponse {
+  repeated DealSlotHealthEntry entries = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
 
 message QueryGetReceiptNonceRequest {

@@ -103,4 +103,15 @@ func TestProveLiveness_HealthFailures_StartMode2Repair(t *testing.T) {
 		return false, nil
 	}))
 	require.True(t, foundEvidence)
+
+	events := sdkCtx.EventManager().Events()
+	require.True(t, hasEventWithAttrs(events, types.TypeHealthEvictThreshold, map[string]string{
+		types.AttributeKeyReason:    "hard_failure",
+		types.AttributeKeyProvider:  providerA,
+		types.AttributeKeyThreshold: "3",
+	}))
+	require.True(t, hasEventWithAttrs(events, types.TypeHealthRepairStarted, map[string]string{
+		types.AttributeKeyReason: "hard_failure",
+		types.AttributeKeySlot:   "0",
+	}))
 }

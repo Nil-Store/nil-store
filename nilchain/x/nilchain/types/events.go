@@ -2,12 +2,15 @@ package types
 
 // Event types
 const (
-	TypeMsgRegisterProvider = "register_provider"
-	TypeMsgCreateDeal       = "create_deal"
-	TypeMsgProveLiveness    = "prove_liveness"
-	TypeMsgSignalSaturation = "signal_saturation"
-	TypeLockInDeposit       = "lock_in_deposit"
+	TypeMsgRegisterProvider     = "register_provider"
+	TypeMsgCreateDeal           = "create_deal"
+	TypeMsgProveLiveness        = "prove_liveness"
+	TypeMsgSignalSaturation     = "signal_saturation"
+	TypeLockInDeposit           = "lock_in_deposit"
 	TypeMsgOpenRetrievalSession = "open_retrieval_session"
+	TypeHealthSoftMiss          = "health_soft_miss"
+	TypeHealthEvictThreshold    = "health_evict_threshold"
+	TypeHealthRepairStarted     = "health_repair_started"
 
 	AttributeKeyProvider          = "provider"
 	AttributeKeyCapabilities      = "capabilities"
@@ -29,4 +32,12 @@ const (
 	AttributeKeyVariableFee       = "variable_fee"
 	AttributeKeyTotalFee          = "total_fee"
 	AttributeKeyBlobCount         = "blob_count"
+	AttributeKeySlot              = "slot"
+	AttributeKeyMissedEpochs      = "missed_epochs"
+	AttributeKeyHardFailures      = "hard_failures"
+	AttributeKeyThreshold         = "threshold"
+	AttributeKeyReason            = "reason"
+	AttributeKeyEpochID           = "epoch_id"
+	AttributeKeyMode              = "mode"
+	AttributeKeyPendingProvider   = "pending_provider"
 )

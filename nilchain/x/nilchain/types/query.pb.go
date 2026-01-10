@@ -666,6 +666,526 @@ func (m *QueryGetDealHeatResponse) GetHeat() DealHeatState {
 	return DealHeatState{}
 }
 
+type QueryGetDealProviderHealthRequest struct {
+	DealId   uint64 `protobuf:"varint,1,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
+	Provider string `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
+}
+
+func (m *QueryGetDealProviderHealthRequest) Reset()         { *m = QueryGetDealProviderHealthRequest{} }
+func (m *QueryGetDealProviderHealthRequest) String() string { return proto.CompactTextString(m) }
+func (*QueryGetDealProviderHealthRequest) ProtoMessage()    {}
+func (*QueryGetDealProviderHealthRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{14}
+}
+func (m *QueryGetDealProviderHealthRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryGetDealProviderHealthRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryGetDealProviderHealthRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryGetDealProviderHealthRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryGetDealProviderHealthRequest.Merge(m, src)
+}
+func (m *QueryGetDealProviderHealthRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryGetDealProviderHealthRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryGetDealProviderHealthRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryGetDealProviderHealthRequest proto.InternalMessageInfo
+
+func (m *QueryGetDealProviderHealthRequest) GetDealId() uint64 {
+	if m != nil {
+		return m.DealId
+	}
+	return 0
+}
+
+func (m *QueryGetDealProviderHealthRequest) GetProvider() string {
+	if m != nil {
+		return m.Provider
+	}
+	return ""
+}
+
+type QueryGetDealProviderHealthResponse struct {
+	State HealthState `protobuf:"bytes,1,opt,name=state,proto3" json:"state"`
+}
+
+func (m *QueryGetDealProviderHealthResponse) Reset()         { *m = QueryGetDealProviderHealthResponse{} }
+func (m *QueryGetDealProviderHealthResponse) String() string { return proto.CompactTextString(m) }
+func (*QueryGetDealProviderHealthResponse) ProtoMessage()    {}
+func (*QueryGetDealProviderHealthResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{15}
+}
+func (m *QueryGetDealProviderHealthResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryGetDealProviderHealthResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryGetDealProviderHealthResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryGetDealProviderHealthResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryGetDealProviderHealthResponse.Merge(m, src)
+}
+func (m *QueryGetDealProviderHealthResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryGetDealProviderHealthResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryGetDealProviderHealthResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryGetDealProviderHealthResponse proto.InternalMessageInfo
+
+func (m *QueryGetDealProviderHealthResponse) GetState() HealthState {
+	if m != nil {
+		return m.State
+	}
+	return HealthState{}
+}
+
+type QueryGetDealSlotHealthRequest struct {
+	DealId uint64 `protobuf:"varint,1,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
+	Slot   uint32 `protobuf:"varint,2,opt,name=slot,proto3" json:"slot,omitempty"`
+}
+
+func (m *QueryGetDealSlotHealthRequest) Reset()         { *m = QueryGetDealSlotHealthRequest{} }
+func (m *QueryGetDealSlotHealthRequest) String() string { return proto.CompactTextString(m) }
+func (*QueryGetDealSlotHealthRequest) ProtoMessage()    {}
+func (*QueryGetDealSlotHealthRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{16}
+}
+func (m *QueryGetDealSlotHealthRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryGetDealSlotHealthRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryGetDealSlotHealthRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryGetDealSlotHealthRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryGetDealSlotHealthRequest.Merge(m, src)
+}
+func (m *QueryGetDealSlotHealthRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryGetDealSlotHealthRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryGetDealSlotHealthRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryGetDealSlotHealthRequest proto.InternalMessageInfo
+
+func (m *QueryGetDealSlotHealthRequest) GetDealId() uint64 {
+	if m != nil {
+		return m.DealId
+	}
+	return 0
+}
+
+func (m *QueryGetDealSlotHealthRequest) GetSlot() uint32 {
+	if m != nil {
+		return m.Slot
+	}
+	return 0
+}
+
+type QueryGetDealSlotHealthResponse struct {
+	State HealthState `protobuf:"bytes,1,opt,name=state,proto3" json:"state"`
+}
+
+func (m *QueryGetDealSlotHealthResponse) Reset()         { *m = QueryGetDealSlotHealthResponse{} }
+func (m *QueryGetDealSlotHealthResponse) String() string { return proto.CompactTextString(m) }
+func (*QueryGetDealSlotHealthResponse) ProtoMessage()    {}
+func (*QueryGetDealSlotHealthResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{17}
+}
+func (m *QueryGetDealSlotHealthResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryGetDealSlotHealthResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryGetDealSlotHealthResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryGetDealSlotHealthResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryGetDealSlotHealthResponse.Merge(m, src)
+}
+func (m *QueryGetDealSlotHealthResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryGetDealSlotHealthResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryGetDealSlotHealthResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryGetDealSlotHealthResponse proto.InternalMessageInfo
+
+func (m *QueryGetDealSlotHealthResponse) GetState() HealthState {
+	if m != nil {
+		return m.State
+	}
+	return HealthState{}
+}
+
+type DealProviderHealthEntry struct {
+	DealId   uint64      `protobuf:"varint,1,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
+	Provider string      `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
+	State    HealthState `protobuf:"bytes,3,opt,name=state,proto3" json:"state"`
+}
+
+func (m *DealProviderHealthEntry) Reset()         { *m = DealProviderHealthEntry{} }
+func (m *DealProviderHealthEntry) String() string { return proto.CompactTextString(m) }
+func (*DealProviderHealthEntry) ProtoMessage()    {}
+func (*DealProviderHealthEntry) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{18}
+}
+func (m *DealProviderHealthEntry) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DealProviderHealthEntry) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_DealProviderHealthEntry.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *DealProviderHealthEntry) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DealProviderHealthEntry.Merge(m, src)
+}
+func (m *DealProviderHealthEntry) XXX_Size() int {
+	return m.Size()
+}
+func (m *DealProviderHealthEntry) XXX_DiscardUnknown() {
+	xxx_messageInfo_DealProviderHealthEntry.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DealProviderHealthEntry proto.InternalMessageInfo
+
+func (m *DealProviderHealthEntry) GetDealId() uint64 {
+	if m != nil {
+		return m.DealId
+	}
+	return 0
+}
+
+func (m *DealProviderHealthEntry) GetProvider() string {
+	if m != nil {
+		return m.Provider
+	}
+	return ""
+}
+
+func (m *DealProviderHealthEntry) GetState() HealthState {
+	if m != nil {
+		return m.State
+	}
+	return HealthState{}
+}
+
+type DealSlotHealthEntry struct {
+	DealId uint64      `protobuf:"varint,1,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
+	Slot   uint32      `protobuf:"varint,2,opt,name=slot,proto3" json:"slot,omitempty"`
+	State  HealthState `protobuf:"bytes,3,opt,name=state,proto3" json:"state"`
+}
+
+func (m *DealSlotHealthEntry) Reset()         { *m = DealSlotHealthEntry{} }
+func (m *DealSlotHealthEntry) String() string { return proto.CompactTextString(m) }
+func (*DealSlotHealthEntry) ProtoMessage()    {}
+func (*DealSlotHealthEntry) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{19}
+}
+func (m *DealSlotHealthEntry) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *DealSlotHealthEntry) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_DealSlotHealthEntry.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *DealSlotHealthEntry) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DealSlotHealthEntry.Merge(m, src)
+}
+func (m *DealSlotHealthEntry) XXX_Size() int {
+	return m.Size()
+}
+func (m *DealSlotHealthEntry) XXX_DiscardUnknown() {
+	xxx_messageInfo_DealSlotHealthEntry.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_DealSlotHealthEntry proto.InternalMessageInfo
+
+func (m *DealSlotHealthEntry) GetDealId() uint64 {
+	if m != nil {
+		return m.DealId
+	}
+	return 0
+}
+
+func (m *DealSlotHealthEntry) GetSlot() uint32 {
+	if m != nil {
+		return m.Slot
+	}
+	return 0
+}
+
+func (m *DealSlotHealthEntry) GetState() HealthState {
+	if m != nil {
+		return m.State
+	}
+	return HealthState{}
+}
+
+type QueryListDealProviderHealthRequest struct {
+	DealId     uint64             `protobuf:"varint,1,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
+	Pagination *query.PageRequest `protobuf:"bytes,2,opt,name=pagination,proto3" json:"pagination,omitempty"`
+}
+
+func (m *QueryListDealProviderHealthRequest) Reset()         { *m = QueryListDealProviderHealthRequest{} }
+func (m *QueryListDealProviderHealthRequest) String() string { return proto.CompactTextString(m) }
+func (*QueryListDealProviderHealthRequest) ProtoMessage()    {}
+func (*QueryListDealProviderHealthRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{20}
+}
+func (m *QueryListDealProviderHealthRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryListDealProviderHealthRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryListDealProviderHealthRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryListDealProviderHealthRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryListDealProviderHealthRequest.Merge(m, src)
+}
+func (m *QueryListDealProviderHealthRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryListDealProviderHealthRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryListDealProviderHealthRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryListDealProviderHealthRequest proto.InternalMessageInfo
+
+func (m *QueryListDealProviderHealthRequest) GetDealId() uint64 {
+	if m != nil {
+		return m.DealId
+	}
+	return 0
+}
+
+func (m *QueryListDealProviderHealthRequest) GetPagination() *query.PageRequest {
+	if m != nil {
+		return m.Pagination
+	}
+	return nil
+}
+
+type QueryListDealProviderHealthResponse struct {
+	Entries    []DealProviderHealthEntry `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries"`
+	Pagination *query.PageResponse       `protobuf:"bytes,2,opt,name=pagination,proto3" json:"pagination,omitempty"`
+}
+
+func (m *QueryListDealProviderHealthResponse) Reset()         { *m = QueryListDealProviderHealthResponse{} }
+func (m *QueryListDealProviderHealthResponse) String() string { return proto.CompactTextString(m) }
+func (*QueryListDealProviderHealthResponse) ProtoMessage()    {}
+func (*QueryListDealProviderHealthResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{21}
+}
+func (m *QueryListDealProviderHealthResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryListDealProviderHealthResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryListDealProviderHealthResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryListDealProviderHealthResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryListDealProviderHealthResponse.Merge(m, src)
+}
+func (m *QueryListDealProviderHealthResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryListDealProviderHealthResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryListDealProviderHealthResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryListDealProviderHealthResponse proto.InternalMessageInfo
+
+func (m *QueryListDealProviderHealthResponse) GetEntries() []DealProviderHealthEntry {
+	if m != nil {
+		return m.Entries
+	}
+	return nil
+}
+
+func (m *QueryListDealProviderHealthResponse) GetPagination() *query.PageResponse {
+	if m != nil {
+		return m.Pagination
+	}
+	return nil
+}
+
+type QueryListDealSlotHealthRequest struct {
+	DealId     uint64             `protobuf:"varint,1,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
+	Pagination *query.PageRequest `protobuf:"bytes,2,opt,name=pagination,proto3" json:"pagination,omitempty"`
+}
+
+func (m *QueryListDealSlotHealthRequest) Reset()         { *m = QueryListDealSlotHealthRequest{} }
+func (m *QueryListDealSlotHealthRequest) String() string { return proto.CompactTextString(m) }
+func (*QueryListDealSlotHealthRequest) ProtoMessage()    {}
+func (*QueryListDealSlotHealthRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{22}
+}
+func (m *QueryListDealSlotHealthRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryListDealSlotHealthRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryListDealSlotHealthRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryListDealSlotHealthRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryListDealSlotHealthRequest.Merge(m, src)
+}
+func (m *QueryListDealSlotHealthRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryListDealSlotHealthRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryListDealSlotHealthRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryListDealSlotHealthRequest proto.InternalMessageInfo
+
+func (m *QueryListDealSlotHealthRequest) GetDealId() uint64 {
+	if m != nil {
+		return m.DealId
+	}
+	return 0
+}
+
+func (m *QueryListDealSlotHealthRequest) GetPagination() *query.PageRequest {
+	if m != nil {
+		return m.Pagination
+	}
+	return nil
+}
+
+type QueryListDealSlotHealthResponse struct {
+	Entries    []DealSlotHealthEntry `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries"`
+	Pagination *query.PageResponse   `protobuf:"bytes,2,opt,name=pagination,proto3" json:"pagination,omitempty"`
+}
+
+func (m *QueryListDealSlotHealthResponse) Reset()         { *m = QueryListDealSlotHealthResponse{} }
+func (m *QueryListDealSlotHealthResponse) String() string { return proto.CompactTextString(m) }
+func (*QueryListDealSlotHealthResponse) ProtoMessage()    {}
+func (*QueryListDealSlotHealthResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_02e1757e30754457, []int{23}
+}
+func (m *QueryListDealSlotHealthResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *QueryListDealSlotHealthResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_QueryListDealSlotHealthResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *QueryListDealSlotHealthResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_QueryListDealSlotHealthResponse.Merge(m, src)
+}
+func (m *QueryListDealSlotHealthResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *QueryListDealSlotHealthResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_QueryListDealSlotHealthResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_QueryListDealSlotHealthResponse proto.InternalMessageInfo
+
+func (m *QueryListDealSlotHealthResponse) GetEntries() []DealSlotHealthEntry {
+	if m != nil {
+		return m.Entries
+	}
+	return nil
+}
+
+func (m *QueryListDealSlotHealthResponse) GetPagination() *query.PageResponse {
+	if m != nil {
+		return m.Pagination
+	}
+	return nil
+}
+
 type QueryGetReceiptNonceRequest struct {
 	DealId   uint64 `protobuf:"varint,1,opt,name=deal_id,json=dealId,proto3" json:"deal_id,omitempty"`
 	FilePath string `protobuf:"bytes,2,opt,name=file_path,json=filePath,proto3" json:"file_path,omitempty"`
@@ -675,7 +1195,7 @@ func (m *QueryGetReceiptNonceRequest) Reset()         { *m = QueryGetReceiptNonc
 func (m *QueryGetReceiptNonceRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryGetReceiptNonceRequest) ProtoMessage()    {}
 func (*QueryGetReceiptNonceRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{14}
+	return fileDescriptor_02e1757e30754457, []int{24}
 }
 func (m *QueryGetReceiptNonceRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -726,7 +1246,7 @@ func (m *QueryGetReceiptNonceResponse) Reset()         { *m = QueryGetReceiptNon
 func (m *QueryGetReceiptNonceResponse) String() string { return proto.CompactTextString(m) }
 func (*QueryGetReceiptNonceResponse) ProtoMessage()    {}
 func (*QueryGetReceiptNonceResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{15}
+	return fileDescriptor_02e1757e30754457, []int{25}
 }
 func (m *QueryGetReceiptNonceResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -770,7 +1290,7 @@ func (m *QueryGetRetrievalSessionRequest) Reset()         { *m = QueryGetRetriev
 func (m *QueryGetRetrievalSessionRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryGetRetrievalSessionRequest) ProtoMessage()    {}
 func (*QueryGetRetrievalSessionRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{16}
+	return fileDescriptor_02e1757e30754457, []int{26}
 }
 func (m *QueryGetRetrievalSessionRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -814,7 +1334,7 @@ func (m *QueryGetRetrievalSessionResponse) Reset()         { *m = QueryGetRetrie
 func (m *QueryGetRetrievalSessionResponse) String() string { return proto.CompactTextString(m) }
 func (*QueryGetRetrievalSessionResponse) ProtoMessage()    {}
 func (*QueryGetRetrievalSessionResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{17}
+	return fileDescriptor_02e1757e30754457, []int{27}
 }
 func (m *QueryGetRetrievalSessionResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -861,7 +1381,7 @@ func (m *QueryListRetrievalSessionsByOwnerRequest) Reset() {
 func (m *QueryListRetrievalSessionsByOwnerRequest) String() string { return proto.CompactTextString(m) }
 func (*QueryListRetrievalSessionsByOwnerRequest) ProtoMessage()    {}
 func (*QueryListRetrievalSessionsByOwnerRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{18}
+	return fileDescriptor_02e1757e30754457, []int{28}
 }
 func (m *QueryListRetrievalSessionsByOwnerRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -917,7 +1437,7 @@ func (m *QueryListRetrievalSessionsByOwnerResponse) String() string {
 }
 func (*QueryListRetrievalSessionsByOwnerResponse) ProtoMessage() {}
 func (*QueryListRetrievalSessionsByOwnerResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{19}
+	return fileDescriptor_02e1757e30754457, []int{29}
 }
 func (m *QueryListRetrievalSessionsByOwnerResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -973,7 +1493,7 @@ func (m *QueryListRetrievalSessionsByProviderRequest) String() string {
 }
 func (*QueryListRetrievalSessionsByProviderRequest) ProtoMessage() {}
 func (*QueryListRetrievalSessionsByProviderRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{20}
+	return fileDescriptor_02e1757e30754457, []int{30}
 }
 func (m *QueryListRetrievalSessionsByProviderRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1029,7 +1549,7 @@ func (m *QueryListRetrievalSessionsByProviderResponse) String() string {
 }
 func (*QueryListRetrievalSessionsByProviderResponse) ProtoMessage() {}
 func (*QueryListRetrievalSessionsByProviderResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_02e1757e30754457, []int{21}
+	return fileDescriptor_02e1757e30754457, []int{31}
 }
 func (m *QueryListRetrievalSessionsByProviderResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1087,6 +1607,16 @@ func init() {
 	proto.RegisterType((*QueryGetProviderResponse)(nil), "nilchain.nilchain.v1.QueryGetProviderResponse")
 	proto.RegisterType((*QueryGetDealHeatRequest)(nil), "nilchain.nilchain.v1.QueryGetDealHeatRequest")
 	proto.RegisterType((*QueryGetDealHeatResponse)(nil), "nilchain.nilchain.v1.QueryGetDealHeatResponse")
+	proto.RegisterType((*QueryGetDealProviderHealthRequest)(nil), "nilchain.nilchain.v1.QueryGetDealProviderHealthRequest")
+	proto.RegisterType((*QueryGetDealProviderHealthResponse)(nil), "nilchain.nilchain.v1.QueryGetDealProviderHealthResponse")
+	proto.RegisterType((*QueryGetDealSlotHealthRequest)(nil), "nilchain.nilchain.v1.QueryGetDealSlotHealthRequest")
+	proto.RegisterType((*QueryGetDealSlotHealthResponse)(nil), "nilchain.nilchain.v1.QueryGetDealSlotHealthResponse")
+	proto.RegisterType((*DealProviderHealthEntry)(nil), "nilchain.nilchain.v1.DealProviderHealthEntry")
+	proto.RegisterType((*DealSlotHealthEntry)(nil), "nilchain.nilchain.v1.DealSlotHealthEntry")
+	proto.RegisterType((*QueryListDealProviderHealthRequest)(nil), "nilchain.nilchain.v1.QueryListDealProviderHealthRequest")
+	proto.RegisterType((*QueryListDealProviderHealthResponse)(nil), "nilchain.nilchain.v1.QueryListDealProviderHealthResponse")
+	proto.RegisterType((*QueryListDealSlotHealthRequest)(nil), "nilchain.nilchain.v1.QueryListDealSlotHealthRequest")
+	proto.RegisterType((*QueryListDealSlotHealthResponse)(nil), "nilchain.nilchain.v1.QueryListDealSlotHealthResponse")
 	proto.RegisterType((*QueryGetReceiptNonceRequest)(nil), "nilchain.nilchain.v1.QueryGetReceiptNonceRequest")
 	proto.RegisterType((*QueryGetReceiptNonceResponse)(nil), "nilchain.nilchain.v1.QueryGetReceiptNonceResponse")
 	proto.RegisterType((*QueryGetRetrievalSessionRequest)(nil), "nilchain.nilchain.v1.QueryGetRetrievalSessionRequest")
@@ -1100,79 +1630,98 @@ func init() {
 func init() { proto.RegisterFile("nilchain/nilchain/v1/query.proto", fileDescriptor_02e1757e30754457) }
 
 var fileDescriptor_02e1757e30754457 = []byte{
-	// 1152 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x98, 0xcf, 0x6f, 0xe3, 0x44,
-	0x14, 0xc7, 0x3b, 0xa5, 0xbf, 0xf2, 0x0a, 0x8b, 0x98, 0x2d, 0x6c, 0xd7, 0x6d, 0xd3, 0xae, 0x17,
-	0xd8, 0xf4, 0x47, 0xec, 0x4d, 0xaa, 0x82, 0x60, 0x29, 0xa5, 0x11, 0x6a, 0x77, 0x25, 0x04, 0xc5,
-	0x95, 0x56, 0x82, 0x4b, 0x99, 0x26, 0xb3, 0xa9, 0x51, 0x6a, 0x7b, 0x63, 0x6f, 0xa0, 0x8a, 0x72,
-	0x81, 0x0b, 0x82, 0x03, 0xa0, 0x15, 0x27, 0x0e, 0x20, 0x71, 0xe1, 0xc8, 0x85, 0x2b, 0x12, 0xe2,
-	0xb2, 0xc7, 0x95, 0xb8, 0x70, 0x42, 0xa8, 0x45, 0xe2, 0x8c, 0xc4, 0x1f, 0x80, 0x3c, 0x7e, 0xb6,
-	0x13, 0xd7, 0xb1, 0x9d, 0x25, 0x07, 0x2e, 0xed, 0x78, 0xf2, 0xde, 0x9b, 0xcf, 0xf7, 0xcd, 0x3c,
-	0xcf, 0x93, 0x61, 0xc9, 0xd0, 0x1b, 0xd5, 0x23, 0xa6, 0x1b, 0x6a, 0x30, 0x68, 0x95, 0xd4, 0xbb,
-	0xf7, 0x78, 0xf3, 0x44, 0xb1, 0x9a, 0xa6, 0x63, 0xd2, 0x19, 0xff, 0x07, 0x25, 0x18, 0xb4, 0x4a,
-	0xd2, 0x53, 0xec, 0x58, 0x37, 0x4c, 0x55, 0xfc, 0xf5, 0x0c, 0xa5, 0x99, 0xba, 0x59, 0x37, 0xc5,
-	0x50, 0x75, 0x47, 0x38, 0x3b, 0x5f, 0x37, 0xcd, 0x7a, 0x83, 0xab, 0xcc, 0xd2, 0x55, 0x66, 0x18,
-	0xa6, 0xc3, 0x1c, 0xdd, 0x34, 0x6c, 0xfc, 0x75, 0xa5, 0x6a, 0xda, 0xc7, 0xa6, 0xad, 0x1e, 0x32,
-	0x9b, 0x7b, 0xab, 0xaa, 0xad, 0xd2, 0x21, 0x77, 0x58, 0x49, 0xb5, 0x58, 0x5d, 0x37, 0x84, 0x31,
-	0xda, 0x5e, 0x89, 0x45, 0xb5, 0x58, 0x93, 0x1d, 0xfb, 0xe1, 0xe2, 0xd5, 0x58, 0x4d, 0xd3, 0xbc,
-	0x93, 0x68, 0xe1, 0x9c, 0x58, 0x1c, 0x63, 0xc8, 0x33, 0x40, 0xdf, 0x76, 0x41, 0xf6, 0x44, 0x60,
-	0x8d, 0xdf, 0xbd, 0xc7, 0x6d, 0x47, 0xbe, 0x0d, 0x17, 0x7b, 0x66, 0x6d, 0xcb, 0x34, 0x6c, 0x4e,
-	0xb7, 0x60, 0xc2, 0x03, 0x98, 0x25, 0x4b, 0xa4, 0x30, 0x5d, 0x9e, 0x57, 0xe2, 0xb2, 0xa5, 0x78,
-	0x5e, 0x95, 0xdc, 0x83, 0xdf, 0x17, 0x47, 0xbe, 0xff, 0xeb, 0x87, 0x15, 0xa2, 0xa1, 0x9b, 0xfc,
-	0x1e, 0x3c, 0x23, 0xe2, 0xbe, 0xa1, 0xdb, 0xce, 0x9e, 0xcb, 0xe9, 0xaf, 0x48, 0x77, 0x00, 0xc2,
-	0x14, 0x60, 0xf8, 0xe7, 0x15, 0x2f, 0x5f, 0x8a, 0x9b, 0x2f, 0xc5, 0xdb, 0x25, 0xcc, 0x97, 0xb2,
-	0xc7, 0xea, 0x1c, 0x7d, 0xb5, 0x2e, 0x4f, 0xf9, 0x2b, 0x02, 0x97, 0xce, 0x2d, 0x81, 0xf8, 0x25,
-	0x18, 0x17, 0xc9, 0x99, 0x25, 0x4b, 0x8f, 0x15, 0xa6, 0xcb, 0x73, 0x7d, 0xe8, 0x5d, 0x13, 0xcd,
-	0xb3, 0xa4, 0xbb, 0x3d, 0x58, 0xa3, 0x02, 0xeb, 0x5a, 0x2a, 0x96, 0xb7, 0x5e, 0x0f, 0xd7, 0x01,
-	0x3c, 0x1d, 0x60, 0xbd, 0xce, 0x59, 0x63, 0xe8, 0xc2, 0xef, 0x93, 0xae, 0xdc, 0xe2, 0x0a, 0xa8,
-	0xfb, 0x3a, 0x8c, 0xd7, 0xdc, 0x09, 0xd4, 0x2d, 0xc5, 0xeb, 0x76, 0x7d, 0x34, 0xcf, 0x70, 0x78,
-	0xb2, 0x9f, 0xc3, 0x83, 0xb4, 0xcb, 0x05, 0x93, 0x2f, 0xfa, 0x02, 0x8c, 0xea, 0x35, 0x21, 0x76,
-	0x4c, 0x1b, 0xd5, 0x6b, 0xf2, 0x0e, 0xcc, 0xf4, 0x9a, 0x21, 0xb9, 0x02, 0x63, 0x2e, 0x10, 0xa6,
-	0x25, 0x09, 0x5c, 0xd8, 0xc9, 0x55, 0xb8, 0xdc, 0xbd, 0xf9, 0x2d, 0xbd, 0xc6, 0x9b, 0x43, 0xcf,
-	0xf4, 0x77, 0x04, 0xa4, 0xb8, 0x55, 0x90, 0xf9, 0x15, 0xc8, 0x59, 0xfe, 0x24, 0x66, 0x3c, 0xdf,
-	0xf7, 0xa4, 0x09, 0x33, 0x2d, 0x74, 0x18, 0x5e, 0xe6, 0xd7, 0xb1, 0x0e, 0x76, 0x79, 0xc0, 0xe8,
-	0x27, 0x62, 0x16, 0x26, 0x59, 0xad, 0xd6, 0xe4, 0xb6, 0x57, 0xc7, 0x39, 0xcd, 0x7f, 0x94, 0x6f,
-	0xc3, 0xec, 0x79, 0x27, 0xd4, 0xf5, 0x32, 0x4c, 0xf9, 0x98, 0x98, 0xbc, 0x34, 0x59, 0x81, 0xbd,
-	0x5c, 0x0e, 0x61, 0xdc, 0xdd, 0xba, 0xc9, 0x99, 0xe3, 0xc3, 0x5c, 0x82, 0x49, 0x77, 0xeb, 0x0e,
-	0x82, 0xf3, 0x30, 0xe1, 0x3e, 0xde, 0xaa, 0xc9, 0xef, 0x84, 0x2c, 0xa1, 0x0f, 0xb2, 0x6c, 0xc2,
-	0xd8, 0x11, 0x67, 0x0e, 0x72, 0x5c, 0xed, 0x7f, 0x2e, 0x5c, 0xaf, 0x7d, 0x87, 0x39, 0xbc, 0x32,
-	0xe6, 0xbe, 0x8d, 0x34, 0xe1, 0x26, 0xef, 0xc3, 0x9c, 0x1f, 0x5a, 0xe3, 0x55, 0xae, 0x5b, 0xce,
-	0x9b, 0xa6, 0x51, 0xe5, 0x69, 0x48, 0x74, 0x0e, 0x72, 0x77, 0xf4, 0x06, 0x3f, 0xb0, 0x98, 0x73,
-	0x24, 0xf6, 0x26, 0xa7, 0x4d, 0xb9, 0x13, 0x7b, 0xcc, 0x39, 0x92, 0x37, 0x61, 0x3e, 0x3e, 0x28,
-	0x32, 0x2f, 0x00, 0x34, 0x98, 0xed, 0x1c, 0x18, 0xee, 0x2c, 0x06, 0xce, 0xb9, 0x33, 0xc2, 0x4c,
-	0x7e, 0x0d, 0x16, 0x43, 0x77, 0xa7, 0xa9, 0xf3, 0x16, 0x6b, 0xec, 0x73, 0xdb, 0xd6, 0x4d, 0xc3,
-	0xe7, 0x5a, 0x00, 0xb0, 0xbd, 0x19, 0x1f, 0xed, 0x71, 0x2d, 0x87, 0x33, 0xb7, 0x6a, 0xf2, 0xfb,
-	0xb0, 0xd4, 0x3f, 0x02, 0x42, 0xec, 0xc0, 0x24, 0x3a, 0x04, 0x05, 0x10, 0x9b, 0xbb, 0x68, 0x00,
-	0x4c, 0x9f, 0xef, 0x2c, 0x7f, 0x42, 0xa0, 0x10, 0xd4, 0x40, 0xd4, 0xd8, 0xae, 0x9c, 0xbc, 0xf5,
-	0x81, 0x11, 0x9e, 0xb7, 0x19, 0x18, 0x37, 0xdd, 0x67, 0x3c, 0x6d, 0xde, 0x43, 0xa4, 0x1c, 0x47,
-	0x1f, 0xb9, 0x1c, 0x7f, 0x22, 0xb0, 0x9c, 0x01, 0x05, 0x13, 0x70, 0x13, 0xa6, 0x50, 0x83, 0x5f,
-	0x9c, 0x83, 0x65, 0x20, 0xf0, 0x1e, 0x5e, 0xa5, 0x7e, 0x49, 0x60, 0x35, 0x49, 0x40, 0xb4, 0x7c,
-	0xa5, 0x48, 0x21, 0xe6, 0xc2, 0x42, 0x1b, 0x5a, 0x52, 0x7f, 0x26, 0xb0, 0x96, 0x8d, 0xe9, 0x7f,
-	0x9b, 0xd7, 0xf2, 0x3f, 0x17, 0x60, 0x5c, 0x68, 0xa0, 0x1f, 0x13, 0x98, 0xf0, 0x9a, 0x12, 0x5a,
-	0x88, 0xa7, 0x3a, 0xdf, 0x03, 0x49, 0xcb, 0x19, 0x2c, 0xbd, 0x55, 0xe5, 0x67, 0x3f, 0xfa, 0xf5,
-	0xcf, 0xfb, 0xa3, 0x79, 0x3a, 0xaf, 0x26, 0x34, 0x6d, 0xf4, 0x73, 0x02, 0x10, 0x76, 0x25, 0x74,
-	0x2d, 0x21, 0xfe, 0xb9, 0xfe, 0x48, 0x2a, 0x66, 0xb4, 0xce, 0x48, 0xe4, 0x21, 0x7c, 0x46, 0x20,
-	0x17, 0xb4, 0x0b, 0x74, 0x35, 0x65, 0x89, 0xee, 0xb6, 0x45, 0x5a, 0xcb, 0x66, 0x8c, 0x38, 0x57,
-	0x05, 0xce, 0x02, 0x9d, 0x8b, 0xc7, 0xf1, 0x9a, 0x8e, 0x4f, 0x09, 0x4c, 0xe2, 0xcb, 0x9e, 0x26,
-	0x25, 0xbf, 0xb7, 0x97, 0x90, 0x56, 0xb2, 0x98, 0x22, 0x47, 0x41, 0x70, 0xc8, 0x74, 0x29, 0x81,
-	0x43, 0x6d, 0xeb, 0xb5, 0x0e, 0xfd, 0x9a, 0xc0, 0x13, 0x3d, 0xf7, 0x3b, 0x55, 0xd3, 0x77, 0xa0,
-	0xa7, 0xdf, 0x90, 0xae, 0x67, 0x77, 0x40, 0xbc, 0x6b, 0x02, 0xef, 0x0a, 0x5d, 0xec, 0xbb, 0x6b,
-	0xc8, 0xf2, 0x0d, 0x81, 0xe9, 0xae, 0x3b, 0x9a, 0x16, 0x93, 0x73, 0x10, 0x79, 0x83, 0x48, 0x4a,
-	0x56, 0x73, 0xe4, 0x2a, 0x09, 0xae, 0x55, 0xba, 0x9c, 0xc2, 0xa5, 0xb6, 0xb1, 0x91, 0xe8, 0xd0,
-	0x6f, 0x3d, 0x42, 0xff, 0x0e, 0x4e, 0x23, 0x8c, 0x74, 0x05, 0x69, 0x84, 0xd1, 0x86, 0x40, 0x2e,
-	0x0b, 0xc2, 0x35, 0xba, 0x92, 0xb8, 0xb1, 0x78, 0xab, 0x77, 0x54, 0xb7, 0x0b, 0xa0, 0x3f, 0x12,
-	0x78, 0x32, 0x72, 0x59, 0xd3, 0x52, 0xf2, 0xba, 0x31, 0xdd, 0x82, 0x54, 0x1e, 0xc4, 0x05, 0x71,
-	0x6f, 0x08, 0xdc, 0x0d, 0xba, 0x9e, 0x0d, 0xb7, 0xe9, 0xc5, 0x28, 0x8a, 0xd6, 0x81, 0xfe, 0x42,
-	0xe0, 0x62, 0xcc, 0x1d, 0x4f, 0x37, 0xd2, 0x40, 0x62, 0xbb, 0x0a, 0xe9, 0x85, 0x41, 0xdd, 0x50,
-	0xc3, 0xa6, 0xd0, 0xf0, 0x22, 0xdd, 0x88, 0xd7, 0xd0, 0xf4, 0xfd, 0x8a, 0xfe, 0x9b, 0x5d, 0x6d,
-	0x87, 0xdd, 0x4b, 0x87, 0x9e, 0x12, 0x98, 0x4f, 0xba, 0xb1, 0xe9, 0xab, 0x29, 0xe5, 0x93, 0xd2,
-	0x75, 0x48, 0x5b, 0x8f, 0xec, 0x8f, 0x02, 0xb7, 0x85, 0xc0, 0x1b, 0xf4, 0xa5, 0xcc, 0x02, 0x0f,
-	0x4f, 0x8a, 0xa2, 0xb7, 0x51, 0xdb, 0xe2, 0x5f, 0x87, 0xfe, 0x4d, 0x60, 0x31, 0xe5, 0x06, 0xa5,
-	0xdb, 0x83, 0x73, 0x46, 0xeb, 0xb9, 0xf2, 0x5f, 0x42, 0xa0, 0xda, 0x5d, 0xa1, 0x76, 0x9b, 0x6e,
-	0x0d, 0xa2, 0xd6, 0xaf, 0x7c, 0xb5, 0xed, 0x8f, 0x3a, 0x95, 0xf5, 0x07, 0xa7, 0x79, 0xf2, 0xf0,
-	0x34, 0x4f, 0xfe, 0x38, 0xcd, 0x93, 0x2f, 0xce, 0xf2, 0x23, 0x0f, 0xcf, 0xf2, 0x23, 0xbf, 0x9d,
-	0xe5, 0x47, 0xde, 0xbd, 0x1c, 0x04, 0xfc, 0x30, 0x8c, 0x2d, 0x3e, 0x46, 0x1c, 0x4e, 0x88, 0xaf,
-	0x11, 0xeb, 0xff, 0x06, 0x00, 0x00, 0xff, 0xff, 0x30, 0x4e, 0xbc, 0xed, 0xa1, 0x11, 0x00, 0x00,
+	// 1456 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x99, 0xcf, 0x6f, 0x1b, 0x45,
+	0x14, 0xc7, 0x33, 0x69, 0x7e, 0xd4, 0xaf, 0x14, 0xd4, 0xd7, 0xb4, 0x4d, 0x37, 0x89, 0x93, 0x6c,
+	0x81, 0x26, 0x69, 0xe2, 0xad, 0x9d, 0xa6, 0x4d, 0x5b, 0xfa, 0x2b, 0x82, 0x24, 0x95, 0x0a, 0x04,
+	0x47, 0xaa, 0x80, 0x4b, 0xd8, 0xc4, 0xd3, 0x64, 0x91, 0xbb, 0xeb, 0x7a, 0xb7, 0x81, 0x28, 0xf2,
+	0xa1, 0x20, 0x24, 0x04, 0x42, 0x80, 0x2a, 0x4e, 0x48, 0x80, 0xc4, 0x85, 0x23, 0x97, 0x1e, 0x8b,
+	0x40, 0x5c, 0x7a, 0x41, 0xaa, 0x04, 0x07, 0x4e, 0x08, 0x25, 0x48, 0x9c, 0xf9, 0x0f, 0xd0, 0xce,
+	0xbe, 0x59, 0xff, 0x5a, 0xef, 0x8f, 0xd4, 0x48, 0x5c, 0xec, 0xdd, 0xf1, 0x7b, 0x6f, 0x3e, 0xdf,
+	0x37, 0xb3, 0xb3, 0xef, 0xc9, 0x30, 0x62, 0x1a, 0xc5, 0xb5, 0x0d, 0xdd, 0x30, 0x35, 0xff, 0x62,
+	0x33, 0xab, 0xdd, 0xb9, 0xcb, 0xcb, 0x5b, 0x99, 0x52, 0xd9, 0x72, 0x2c, 0xec, 0x93, 0x3f, 0x64,
+	0xfc, 0x8b, 0xcd, 0xac, 0x72, 0x48, 0xbf, 0x6d, 0x98, 0x96, 0x26, 0x3e, 0x3d, 0x43, 0xa5, 0x6f,
+	0xdd, 0x5a, 0xb7, 0xc4, 0xa5, 0xe6, 0x5e, 0xd1, 0xe8, 0xe0, 0xba, 0x65, 0xad, 0x17, 0xb9, 0xa6,
+	0x97, 0x0c, 0x4d, 0x37, 0x4d, 0xcb, 0xd1, 0x1d, 0xc3, 0x32, 0x6d, 0xfa, 0x75, 0x62, 0xcd, 0xb2,
+	0x6f, 0x5b, 0xb6, 0xb6, 0xaa, 0xdb, 0xdc, 0x9b, 0x55, 0xdb, 0xcc, 0xae, 0x72, 0x47, 0xcf, 0x6a,
+	0x25, 0x7d, 0xdd, 0x30, 0x85, 0x31, 0xd9, 0x8e, 0x06, 0xa2, 0x96, 0xf4, 0xb2, 0x7e, 0x5b, 0x86,
+	0x0b, 0x56, 0x53, 0x2a, 0x5b, 0xd6, 0xad, 0x50, 0x0b, 0x67, 0xab, 0xc4, 0x29, 0x86, 0xda, 0x07,
+	0xf8, 0x9a, 0x0b, 0xb2, 0x24, 0x02, 0xe7, 0xf9, 0x9d, 0xbb, 0xdc, 0x76, 0xd4, 0x9b, 0x70, 0xb8,
+	0x6e, 0xd4, 0x2e, 0x59, 0xa6, 0xcd, 0xf1, 0x0a, 0xf4, 0x78, 0x00, 0xfd, 0x6c, 0x84, 0x8d, 0x1d,
+	0xc8, 0x0d, 0x66, 0x82, 0xb2, 0x95, 0xf1, 0xbc, 0xe6, 0x52, 0x8f, 0xfe, 0x18, 0xee, 0xf8, 0xee,
+	0xef, 0xef, 0x27, 0x58, 0x9e, 0xdc, 0xd4, 0xb7, 0xe0, 0xa8, 0x88, 0x7b, 0xc3, 0xb0, 0x9d, 0x25,
+	0x97, 0x53, 0xce, 0x88, 0xf3, 0x00, 0xd5, 0x14, 0x50, 0xf8, 0xe7, 0x33, 0x5e, 0xbe, 0x32, 0x6e,
+	0xbe, 0x32, 0xde, 0x2a, 0x51, 0xbe, 0x32, 0x4b, 0xfa, 0x3a, 0x27, 0xdf, 0x7c, 0x8d, 0xa7, 0xfa,
+	0x05, 0x83, 0x63, 0x4d, 0x53, 0x10, 0x7e, 0x16, 0xba, 0x45, 0x72, 0xfa, 0xd9, 0xc8, 0xbe, 0xb1,
+	0x03, 0xb9, 0x81, 0x16, 0xf4, 0xae, 0x49, 0xde, 0xb3, 0xc4, 0x85, 0x3a, 0xac, 0x4e, 0x81, 0x75,
+	0x32, 0x12, 0xcb, 0x9b, 0xaf, 0x8e, 0x6b, 0x05, 0x8e, 0xf8, 0x58, 0x2f, 0x72, 0xbd, 0xd8, 0x76,
+	0xe1, 0xf7, 0x59, 0x4d, 0x6e, 0x69, 0x06, 0xd2, 0x7d, 0x1a, 0xba, 0x0b, 0xee, 0x00, 0xe9, 0x56,
+	0x82, 0x75, 0xbb, 0x3e, 0x79, 0xcf, 0xb0, 0x7d, 0xb2, 0x9f, 0xa3, 0x8d, 0xb4, 0xc0, 0x05, 0x93,
+	0x14, 0xfd, 0x34, 0x74, 0x1a, 0x05, 0x21, 0xb6, 0x2b, 0xdf, 0x69, 0x14, 0xd4, 0x79, 0xe8, 0xab,
+	0x37, 0x23, 0xf2, 0x0c, 0x74, 0xb9, 0x40, 0x94, 0x96, 0x30, 0x70, 0x61, 0xa7, 0xae, 0xc1, 0xf1,
+	0xda, 0xc5, 0xdf, 0x34, 0x0a, 0xbc, 0xdc, 0xf6, 0x4c, 0x7f, 0xcb, 0x40, 0x09, 0x9a, 0x85, 0x98,
+	0x5f, 0x80, 0x54, 0x49, 0x0e, 0x52, 0xc6, 0xd3, 0x2d, 0x77, 0x9a, 0x30, 0xcb, 0x57, 0x1d, 0xda,
+	0x97, 0xf9, 0x69, 0x7a, 0x0e, 0x16, 0xb8, 0xcf, 0x28, 0x13, 0xd1, 0x0f, 0xbd, 0x7a, 0xa1, 0x50,
+	0xe6, 0xb6, 0xf7, 0x1c, 0xa7, 0xf2, 0xf2, 0x56, 0xbd, 0x09, 0xfd, 0xcd, 0x4e, 0xa4, 0xeb, 0x02,
+	0xec, 0x97, 0x98, 0x94, 0xbc, 0x28, 0x59, 0xbe, 0xbd, 0x9a, 0xab, 0xc2, 0xb8, 0xab, 0xb5, 0xc8,
+	0x75, 0x47, 0xc2, 0x1c, 0x83, 0x5e, 0x77, 0xe9, 0x56, 0xfc, 0xfd, 0xd0, 0xe3, 0xde, 0x5e, 0x2f,
+	0xa8, 0x6f, 0x54, 0x59, 0xaa, 0x3e, 0xc4, 0x72, 0x09, 0xba, 0x36, 0xb8, 0xee, 0x10, 0xc7, 0x89,
+	0xd6, 0xfb, 0xc2, 0xf5, 0x5a, 0x76, 0x74, 0x87, 0xcf, 0x75, 0xb9, 0xa7, 0x51, 0x5e, 0xb8, 0xa9,
+	0xaf, 0xc3, 0x68, 0x6d, 0x68, 0x09, 0xbc, 0xc8, 0xf5, 0xa2, 0xb3, 0x11, 0x05, 0x86, 0x4a, 0x4d,
+	0x22, 0x3a, 0x45, 0xfe, 0xaa, 0x42, 0xd7, 0x40, 0x0d, 0x8b, 0xec, 0xe3, 0x77, 0xdb, 0x2e, 0x14,
+	0xf1, 0x8f, 0x06, 0xf3, 0x7b, 0x4e, 0xb5, 0xf4, 0x9e, 0x97, 0x7a, 0x03, 0x86, 0x6a, 0x27, 0x59,
+	0x2e, 0x5a, 0x4e, 0x4c, 0x74, 0x84, 0x2e, 0xbb, 0x68, 0x39, 0x02, 0xfb, 0x60, 0x5e, 0x5c, 0xab,
+	0x2b, 0x90, 0x6e, 0x15, 0xad, 0x3d, 0xb8, 0x9f, 0x30, 0x38, 0xd6, 0x9c, 0x8c, 0x97, 0x4c, 0xa7,
+	0xbc, 0xb5, 0xa7, 0x24, 0x57, 0x79, 0xf6, 0xed, 0x89, 0xe7, 0x1e, 0x83, 0xc3, 0xf5, 0x4a, 0x23,
+	0x58, 0x02, 0xb2, 0xf6, 0xa4, 0x0c, 0x1f, 0x30, 0xda, 0x28, 0xf2, 0xb4, 0x4e, 0xb8, 0x07, 0xe7,
+	0x03, 0x8e, 0x89, 0xbd, 0x9c, 0x65, 0x0f, 0x19, 0x9c, 0x08, 0xe5, 0xa0, 0x2d, 0xf0, 0x32, 0xf4,
+	0x72, 0xd3, 0x29, 0x1b, 0x5c, 0x1e, 0x69, 0x53, 0xad, 0x9f, 0xb9, 0x80, 0x75, 0x26, 0xf1, 0x32,
+	0x46, 0xfb, 0x4e, 0xb9, 0x7b, 0x8c, 0x76, 0xaf, 0xe4, 0x4f, 0xf0, 0x30, 0xb4, 0x2b, 0x87, 0x0f,
+	0x18, 0x0c, 0xb7, 0x64, 0xa0, 0xfc, 0x5d, 0x6f, 0xcc, 0xdf, 0x78, 0xeb, 0xfc, 0x35, 0xec, 0xcb,
+	0xff, 0x2c, 0x77, 0xcb, 0x30, 0x20, 0x1f, 0xfc, 0x3c, 0x5f, 0xe3, 0x46, 0xc9, 0x79, 0xc5, 0x32,
+	0xd7, 0x78, 0x64, 0xde, 0x06, 0x20, 0x75, 0xcb, 0x28, 0xf2, 0x95, 0x92, 0xee, 0x6c, 0xc8, 0x67,
+	0xd3, 0x1d, 0x58, 0xd2, 0x9d, 0x0d, 0xf5, 0x12, 0x0c, 0x06, 0x07, 0xa5, 0x44, 0x0c, 0x01, 0x14,
+	0x75, 0xdb, 0x59, 0x31, 0xdd, 0x51, 0x0a, 0x9c, 0x72, 0x47, 0x84, 0x99, 0x7a, 0x95, 0x52, 0x29,
+	0xdc, 0x5d, 0xbd, 0x9b, 0x7a, 0x71, 0x99, 0xdb, 0xb6, 0x61, 0x99, 0x92, 0x6b, 0x08, 0xc0, 0xf6,
+	0x46, 0x24, 0xda, 0x53, 0xf9, 0x14, 0x8d, 0x5c, 0x2f, 0xa8, 0x6f, 0xc3, 0x48, 0xeb, 0x08, 0x04,
+	0x31, 0x0f, 0xbd, 0xe4, 0xe0, 0x97, 0x01, 0x81, 0xab, 0xd1, 0x18, 0x40, 0x2e, 0x05, 0x39, 0xab,
+	0x1f, 0x32, 0x18, 0xf3, 0x57, 0xbe, 0xd1, 0xd8, 0x9e, 0xdb, 0x7a, 0xf5, 0x1d, 0xb3, 0xfa, 0xd6,
+	0xed, 0x83, 0x6e, 0xcb, 0xbd, 0xa7, 0x77, 0xae, 0x77, 0xd3, 0xb6, 0x4d, 0xf8, 0x03, 0x83, 0xf1,
+	0x18, 0x28, 0x94, 0x80, 0x45, 0xd8, 0x4f, 0x1a, 0xe4, 0x7e, 0x4c, 0x96, 0x01, 0xdf, 0xbb, 0x7d,
+	0xbb, 0xf1, 0x73, 0x06, 0xa7, 0xc2, 0x04, 0x34, 0x16, 0x31, 0x4a, 0x43, 0x39, 0x52, 0xfb, 0x82,
+	0x68, 0x57, 0x52, 0x7f, 0x62, 0x30, 0x19, 0x8f, 0xe9, 0x7f, 0x9b, 0xd7, 0xdc, 0x57, 0x47, 0xa0,
+	0x5b, 0x68, 0xc0, 0xf7, 0x19, 0xf4, 0x78, 0xad, 0x19, 0x8e, 0x05, 0x53, 0x35, 0x77, 0x82, 0xca,
+	0x78, 0x0c, 0x4b, 0x6f, 0x56, 0xf5, 0xd9, 0xf7, 0x7e, 0xfd, 0xeb, 0x7e, 0x67, 0x1a, 0x07, 0xb5,
+	0x90, 0xd6, 0x15, 0x3f, 0x65, 0x00, 0xd5, 0xde, 0x0c, 0x27, 0x43, 0xe2, 0x37, 0x75, 0x89, 0xca,
+	0x54, 0x4c, 0xeb, 0x98, 0x44, 0x1e, 0xc2, 0xc7, 0x0c, 0x52, 0x7e, 0xd3, 0x84, 0xa7, 0x22, 0xa6,
+	0xa8, 0x6d, 0xde, 0x94, 0xc9, 0x78, 0xc6, 0x84, 0x73, 0x42, 0xe0, 0x0c, 0xe1, 0x40, 0x30, 0x8e,
+	0xd7, 0x7a, 0x7d, 0xc4, 0xa0, 0x97, 0x4a, 0x31, 0x0c, 0x4b, 0x7e, 0x7d, 0x47, 0xa5, 0x4c, 0xc4,
+	0x31, 0x25, 0x8e, 0x31, 0xc1, 0xa1, 0xe2, 0x48, 0x08, 0x87, 0xb6, 0x6d, 0x14, 0x2a, 0xf8, 0x25,
+	0x83, 0x83, 0x75, 0x5d, 0x0e, 0x6a, 0xd1, 0x2b, 0x50, 0xd7, 0x75, 0x29, 0xa7, 0xe3, 0x3b, 0x10,
+	0xde, 0x49, 0x81, 0x37, 0x8a, 0xc3, 0x2d, 0x57, 0x8d, 0x58, 0xbe, 0x66, 0x70, 0xa0, 0xa6, 0x53,
+	0xc1, 0xa9, 0xf0, 0x1c, 0x34, 0x9c, 0x20, 0x4a, 0x26, 0xae, 0x39, 0x71, 0x65, 0x05, 0xd7, 0x29,
+	0x1c, 0x8f, 0xe0, 0xd2, 0xb6, 0xa9, 0x9d, 0xaa, 0xe0, 0x37, 0x1e, 0xa1, 0xec, 0x44, 0xa2, 0x08,
+	0x1b, 0x7a, 0xa3, 0x28, 0xc2, 0xc6, 0xb6, 0x48, 0xcd, 0x09, 0xc2, 0x49, 0x9c, 0x08, 0x5d, 0x58,
+	0x7a, 0xab, 0x57, 0x34, 0xb7, 0x17, 0xc2, 0xdf, 0x18, 0x1c, 0x09, 0xec, 0x56, 0xf0, 0x5c, 0xf4,
+	0xec, 0x81, 0x55, 0xab, 0x32, 0x9b, 0xdc, 0x91, 0x04, 0x2c, 0x0a, 0x01, 0x73, 0x78, 0x35, 0xb6,
+	0x80, 0xa2, 0xb3, 0xe1, 0x67, 0x5e, 0xdb, 0x96, 0x57, 0x15, 0xfc, 0x91, 0xc1, 0xa1, 0xa6, 0x8e,
+	0x06, 0xa7, 0xa3, 0xc9, 0x9a, 0x0a, 0x48, 0xe5, 0x4c, 0x32, 0x27, 0x92, 0x72, 0x55, 0x48, 0xb9,
+	0x80, 0xb3, 0x89, 0xa4, 0xb8, 0xbd, 0x85, 0xb6, 0xed, 0x7e, 0x56, 0xf0, 0x17, 0x06, 0x47, 0x83,
+	0xcb, 0x72, 0x9c, 0x8d, 0x71, 0xee, 0x04, 0xaf, 0xcd, 0xf9, 0x3d, 0x78, 0x92, 0xa2, 0xcb, 0x42,
+	0xd1, 0x2c, 0x9e, 0xdd, 0xd3, 0xe2, 0xd8, 0xf8, 0x90, 0x01, 0x36, 0x97, 0xc8, 0x78, 0x26, 0x06,
+	0x51, 0xf3, 0xa2, 0xcc, 0x24, 0xf4, 0x22, 0x0d, 0x17, 0x84, 0x86, 0x33, 0x98, 0x4b, 0xbc, 0x2a,
+	0x36, 0x3e, 0x60, 0xf0, 0x4c, 0x43, 0x59, 0x8b, 0xd9, 0xf0, 0xbd, 0x11, 0x50, 0x57, 0x2b, 0xb9,
+	0x24, 0x2e, 0x84, 0x7d, 0x51, 0x60, 0xcf, 0xe0, 0x74, 0x3c, 0xec, 0xb2, 0x17, 0x63, 0x4a, 0x14,
+	0xd9, 0xf8, 0x33, 0x83, 0xc3, 0x01, 0xd5, 0x30, 0xce, 0x44, 0x81, 0x04, 0xd6, 0xdf, 0xca, 0xd9,
+	0xa4, 0x6e, 0xa4, 0xe1, 0x92, 0xd0, 0x70, 0x0e, 0x67, 0x82, 0x35, 0x94, 0xa5, 0xdf, 0x94, 0xac,
+	0x81, 0xb4, 0xed, 0x6a, 0x9d, 0x5f, 0xc1, 0x1d, 0x06, 0x83, 0x61, 0xb5, 0x2d, 0x5e, 0x8e, 0xd8,
+	0x11, 0x11, 0xf5, 0xb9, 0x72, 0x65, 0xcf, 0xfe, 0x24, 0xf0, 0x9a, 0x10, 0x78, 0x11, 0xcf, 0xc7,
+	0x16, 0xb8, 0xba, 0x35, 0x25, 0xba, 0x00, 0x6d, 0x5b, 0x7c, 0x55, 0xf0, 0x1f, 0x06, 0xc3, 0x11,
+	0xb5, 0x26, 0x5e, 0x4b, 0xce, 0xd9, 0xf8, 0xe6, 0x9b, 0x7b, 0x92, 0x10, 0xa4, 0x76, 0x41, 0xa8,
+	0xbd, 0x86, 0x57, 0x92, 0xa8, 0x0d, 0x38, 0xa9, 0xe7, 0xa6, 0x1f, 0xed, 0xa4, 0xd9, 0xe3, 0x9d,
+	0x34, 0xfb, 0x73, 0x27, 0xcd, 0x3e, 0xdb, 0x4d, 0x77, 0x3c, 0xde, 0x4d, 0x77, 0xfc, 0xbe, 0x9b,
+	0xee, 0x78, 0xf3, 0xb8, 0x1f, 0xf0, 0xdd, 0x6a, 0x6c, 0xf1, 0xe7, 0xc5, 0x6a, 0x8f, 0xf8, 0xf7,
+	0x62, 0xfa, 0xdf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x06, 0x0e, 0x21, 0x03, 0xd1, 0x19, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -1201,6 +1750,14 @@ type QueryClient interface {
 	GetProvider(ctx context.Context, in *QueryGetProviderRequest, opts ...grpc.CallOption) (*QueryGetProviderResponse, error)
 	// Queries the Heat State for a Deal.
 	GetDealHeat(ctx context.Context, in *QueryGetDealHeatRequest, opts ...grpc.CallOption) (*QueryGetDealHeatResponse, error)
+	// Queries HealthState for a Deal/provider assignment.
+	GetDealProviderHealth(ctx context.Context, in *QueryGetDealProviderHealthRequest, opts ...grpc.CallOption) (*QueryGetDealProviderHealthResponse, error)
+	// Queries HealthState for a Deal/slot assignment.
+	GetDealSlotHealth(ctx context.Context, in *QueryGetDealSlotHealthRequest, opts ...grpc.CallOption) (*QueryGetDealSlotHealthResponse, error)
+	// Lists HealthState entries for a Deal (providers).
+	ListDealProviderHealth(ctx context.Context, in *QueryListDealProviderHealthRequest, opts ...grpc.CallOption) (*QueryListDealProviderHealthResponse, error)
+	// Lists HealthState entries for a Deal (slots).
+	ListDealSlotHealth(ctx context.Context, in *QueryListDealSlotHealthRequest, opts ...grpc.CallOption) (*QueryListDealSlotHealthResponse, error)
 	// Queries the last accepted retrieval receipt nonce for a specific (deal_id, file_path).
 	GetReceiptNonce(ctx context.Context, in *QueryGetReceiptNonceRequest, opts ...grpc.CallOption) (*QueryGetReceiptNonceResponse, error)
 	// Queries a RetrievalSession by id.
@@ -1282,6 +1839,42 @@ func (c *queryClient) GetDealHeat(ctx context.Context, in *QueryGetDealHeatReque
 	return out, nil
 }
 
+func (c *queryClient) GetDealProviderHealth(ctx context.Context, in *QueryGetDealProviderHealthRequest, opts ...grpc.CallOption) (*QueryGetDealProviderHealthResponse, error) {
+	out := new(QueryGetDealProviderHealthResponse)
+	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Query/GetDealProviderHealth", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queryClient) GetDealSlotHealth(ctx context.Context, in *QueryGetDealSlotHealthRequest, opts ...grpc.CallOption) (*QueryGetDealSlotHealthResponse, error) {
+	out := new(QueryGetDealSlotHealthResponse)
+	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Query/GetDealSlotHealth", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queryClient) ListDealProviderHealth(ctx context.Context, in *QueryListDealProviderHealthRequest, opts ...grpc.CallOption) (*QueryListDealProviderHealthResponse, error) {
+	out := new(QueryListDealProviderHealthResponse)
+	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Query/ListDealProviderHealth", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *queryClient) ListDealSlotHealth(ctx context.Context, in *QueryListDealSlotHealthRequest, opts ...grpc.CallOption) (*QueryListDealSlotHealthResponse, error) {
+	out := new(QueryListDealSlotHealthResponse)
+	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Query/ListDealSlotHealth", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *queryClient) GetReceiptNonce(ctx context.Context, in *QueryGetReceiptNonceRequest, opts ...grpc.CallOption) (*QueryGetReceiptNonceResponse, error) {
 	out := new(QueryGetReceiptNonceResponse)
 	err := c.cc.Invoke(ctx, "/nilchain.nilchain.v1.Query/GetReceiptNonce", in, out, opts...)
@@ -1334,6 +1927,14 @@ type QueryServer interface {
 	GetProvider(context.Context, *QueryGetProviderRequest) (*QueryGetProviderResponse, error)
 	// Queries the Heat State for a Deal.
 	GetDealHeat(context.Context, *QueryGetDealHeatRequest) (*QueryGetDealHeatResponse, error)
+	// Queries HealthState for a Deal/provider assignment.
+	GetDealProviderHealth(context.Context, *QueryGetDealProviderHealthRequest) (*QueryGetDealProviderHealthResponse, error)
+	// Queries HealthState for a Deal/slot assignment.
+	GetDealSlotHealth(context.Context, *QueryGetDealSlotHealthRequest) (*QueryGetDealSlotHealthResponse, error)
+	// Lists HealthState entries for a Deal (providers).
+	ListDealProviderHealth(context.Context, *QueryListDealProviderHealthRequest) (*QueryListDealProviderHealthResponse, error)
+	// Lists HealthState entries for a Deal (slots).
+	ListDealSlotHealth(context.Context, *QueryListDealSlotHealthRequest) (*QueryListDealSlotHealthResponse, error)
 	// Queries the last accepted retrieval receipt nonce for a specific (deal_id, file_path).
 	GetReceiptNonce(context.Context, *QueryGetReceiptNonceRequest) (*QueryGetReceiptNonceResponse, error)
 	// Queries a RetrievalSession by id.
@@ -1368,6 +1969,18 @@ func (*UnimplementedQueryServer) GetProvider(ctx context.Context, req *QueryGetP
 }
 func (*UnimplementedQueryServer) GetDealHeat(ctx context.Context, req *QueryGetDealHeatRequest) (*QueryGetDealHeatResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDealHeat not implemented")
+}
+func (*UnimplementedQueryServer) GetDealProviderHealth(ctx context.Context, req *QueryGetDealProviderHealthRequest) (*QueryGetDealProviderHealthResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDealProviderHealth not implemented")
+}
+func (*UnimplementedQueryServer) GetDealSlotHealth(ctx context.Context, req *QueryGetDealSlotHealthRequest) (*QueryGetDealSlotHealthResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetDealSlotHealth not implemented")
+}
+func (*UnimplementedQueryServer) ListDealProviderHealth(ctx context.Context, req *QueryListDealProviderHealthRequest) (*QueryListDealProviderHealthResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListDealProviderHealth not implemented")
+}
+func (*UnimplementedQueryServer) ListDealSlotHealth(ctx context.Context, req *QueryListDealSlotHealthRequest) (*QueryListDealSlotHealthResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListDealSlotHealth not implemented")
 }
 func (*UnimplementedQueryServer) GetReceiptNonce(ctx context.Context, req *QueryGetReceiptNonceRequest) (*QueryGetReceiptNonceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetReceiptNonce not implemented")
@@ -1512,6 +2125,78 @@ func _Query_GetDealHeat_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Query_GetDealProviderHealth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryGetDealProviderHealthRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).GetDealProviderHealth(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nilchain.nilchain.v1.Query/GetDealProviderHealth",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).GetDealProviderHealth(ctx, req.(*QueryGetDealProviderHealthRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_GetDealSlotHealth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryGetDealSlotHealthRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).GetDealSlotHealth(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nilchain.nilchain.v1.Query/GetDealSlotHealth",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).GetDealSlotHealth(ctx, req.(*QueryGetDealSlotHealthRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_ListDealProviderHealth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryListDealProviderHealthRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).ListDealProviderHealth(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nilchain.nilchain.v1.Query/ListDealProviderHealth",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).ListDealProviderHealth(ctx, req.(*QueryListDealProviderHealthRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Query_ListDealSlotHealth_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryListDealSlotHealthRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(QueryServer).ListDealSlotHealth(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/nilchain.nilchain.v1.Query/ListDealSlotHealth",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(QueryServer).ListDealSlotHealth(ctx, req.(*QueryListDealSlotHealthRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Query_GetReceiptNonce_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(QueryGetReceiptNonceRequest)
 	if err := dec(in); err != nil {
@@ -1616,6 +2301,22 @@ var _Query_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetDealHeat",
 			Handler:    _Query_GetDealHeat_Handler,
+		},
+		{
+			MethodName: "GetDealProviderHealth",
+			Handler:    _Query_GetDealProviderHealth_Handler,
+		},
+		{
+			MethodName: "GetDealSlotHealth",
+			Handler:    _Query_GetDealSlotHealth_Handler,
+		},
+		{
+			MethodName: "ListDealProviderHealth",
+			Handler:    _Query_ListDealProviderHealth_Handler,
+		},
+		{
+			MethodName: "ListDealSlotHealth",
+			Handler:    _Query_ListDealSlotHealth_Handler,
 		},
 		{
 			MethodName: "GetReceiptNonce",
@@ -2135,6 +2836,406 @@ func (m *QueryGetDealHeatResponse) MarshalToSizedBuffer(dAtA []byte) (int, error
 	return len(dAtA) - i, nil
 }
 
+func (m *QueryGetDealProviderHealthRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryGetDealProviderHealthRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryGetDealProviderHealthRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Provider) > 0 {
+		i -= len(m.Provider)
+		copy(dAtA[i:], m.Provider)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.Provider)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.DealId != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.DealId))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryGetDealProviderHealthResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryGetDealProviderHealthResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryGetDealProviderHealthResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.State.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintQuery(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryGetDealSlotHealthRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryGetDealSlotHealthRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryGetDealSlotHealthRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Slot != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.Slot))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.DealId != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.DealId))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryGetDealSlotHealthResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryGetDealSlotHealthResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryGetDealSlotHealthResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.State.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintQuery(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *DealProviderHealthEntry) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DealProviderHealthEntry) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DealProviderHealthEntry) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.State.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintQuery(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	if len(m.Provider) > 0 {
+		i -= len(m.Provider)
+		copy(dAtA[i:], m.Provider)
+		i = encodeVarintQuery(dAtA, i, uint64(len(m.Provider)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.DealId != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.DealId))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *DealSlotHealthEntry) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DealSlotHealthEntry) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *DealSlotHealthEntry) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.State.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintQuery(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	if m.Slot != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.Slot))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.DealId != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.DealId))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryListDealProviderHealthRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryListDealProviderHealthRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryListDealProviderHealthRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Pagination != nil {
+		{
+			size, err := m.Pagination.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.DealId != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.DealId))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryListDealProviderHealthResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryListDealProviderHealthResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryListDealProviderHealthResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Pagination != nil {
+		{
+			size, err := m.Pagination.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Entries) > 0 {
+		for iNdEx := len(m.Entries) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Entries[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintQuery(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryListDealSlotHealthRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryListDealSlotHealthRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryListDealSlotHealthRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Pagination != nil {
+		{
+			size, err := m.Pagination.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.DealId != 0 {
+		i = encodeVarintQuery(dAtA, i, uint64(m.DealId))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *QueryListDealSlotHealthResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *QueryListDealSlotHealthResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *QueryListDealSlotHealthResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Pagination != nil {
+		{
+			size, err := m.Pagination.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintQuery(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Entries) > 0 {
+		for iNdEx := len(m.Entries) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.Entries[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintQuery(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0xa
+		}
+	}
+	return len(dAtA) - i, nil
+}
+
 func (m *QueryGetReceiptNonceRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -2641,6 +3742,164 @@ func (m *QueryGetDealHeatResponse) Size() (n int) {
 	_ = l
 	l = m.Heat.Size()
 	n += 1 + l + sovQuery(uint64(l))
+	return n
+}
+
+func (m *QueryGetDealProviderHealthRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.DealId != 0 {
+		n += 1 + sovQuery(uint64(m.DealId))
+	}
+	l = len(m.Provider)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+
+func (m *QueryGetDealProviderHealthResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.State.Size()
+	n += 1 + l + sovQuery(uint64(l))
+	return n
+}
+
+func (m *QueryGetDealSlotHealthRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.DealId != 0 {
+		n += 1 + sovQuery(uint64(m.DealId))
+	}
+	if m.Slot != 0 {
+		n += 1 + sovQuery(uint64(m.Slot))
+	}
+	return n
+}
+
+func (m *QueryGetDealSlotHealthResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.State.Size()
+	n += 1 + l + sovQuery(uint64(l))
+	return n
+}
+
+func (m *DealProviderHealthEntry) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.DealId != 0 {
+		n += 1 + sovQuery(uint64(m.DealId))
+	}
+	l = len(m.Provider)
+	if l > 0 {
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	l = m.State.Size()
+	n += 1 + l + sovQuery(uint64(l))
+	return n
+}
+
+func (m *DealSlotHealthEntry) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.DealId != 0 {
+		n += 1 + sovQuery(uint64(m.DealId))
+	}
+	if m.Slot != 0 {
+		n += 1 + sovQuery(uint64(m.Slot))
+	}
+	l = m.State.Size()
+	n += 1 + l + sovQuery(uint64(l))
+	return n
+}
+
+func (m *QueryListDealProviderHealthRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.DealId != 0 {
+		n += 1 + sovQuery(uint64(m.DealId))
+	}
+	if m.Pagination != nil {
+		l = m.Pagination.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+
+func (m *QueryListDealProviderHealthResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Entries) > 0 {
+		for _, e := range m.Entries {
+			l = e.Size()
+			n += 1 + l + sovQuery(uint64(l))
+		}
+	}
+	if m.Pagination != nil {
+		l = m.Pagination.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+
+func (m *QueryListDealSlotHealthRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.DealId != 0 {
+		n += 1 + sovQuery(uint64(m.DealId))
+	}
+	if m.Pagination != nil {
+		l = m.Pagination.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
+	return n
+}
+
+func (m *QueryListDealSlotHealthResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Entries) > 0 {
+		for _, e := range m.Entries {
+			l = e.Size()
+			n += 1 + l + sovQuery(uint64(l))
+		}
+	}
+	if m.Pagination != nil {
+		l = m.Pagination.Size()
+		n += 1 + l + sovQuery(uint64(l))
+	}
 	return n
 }
 
@@ -3976,6 +5235,1066 @@ func (m *QueryGetDealHeatResponse) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.Heat.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryGetDealProviderHealthRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryGetDealProviderHealthRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryGetDealProviderHealthRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DealId", wireType)
+			}
+			m.DealId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DealId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Provider", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Provider = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryGetDealProviderHealthResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryGetDealProviderHealthResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryGetDealProviderHealthResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.State.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryGetDealSlotHealthRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryGetDealSlotHealthRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryGetDealSlotHealthRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DealId", wireType)
+			}
+			m.DealId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DealId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Slot", wireType)
+			}
+			m.Slot = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Slot |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryGetDealSlotHealthResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryGetDealSlotHealthResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryGetDealSlotHealthResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.State.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *DealProviderHealthEntry) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DealProviderHealthEntry: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DealProviderHealthEntry: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DealId", wireType)
+			}
+			m.DealId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DealId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Provider", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Provider = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.State.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *DealSlotHealthEntry) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DealSlotHealthEntry: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DealSlotHealthEntry: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DealId", wireType)
+			}
+			m.DealId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DealId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Slot", wireType)
+			}
+			m.Slot = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Slot |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.State.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryListDealProviderHealthRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryListDealProviderHealthRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryListDealProviderHealthRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DealId", wireType)
+			}
+			m.DealId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DealId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Pagination", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Pagination == nil {
+				m.Pagination = &query.PageRequest{}
+			}
+			if err := m.Pagination.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryListDealProviderHealthResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryListDealProviderHealthResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryListDealProviderHealthResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Entries", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Entries = append(m.Entries, DealProviderHealthEntry{})
+			if err := m.Entries[len(m.Entries)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Pagination", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Pagination == nil {
+				m.Pagination = &query.PageResponse{}
+			}
+			if err := m.Pagination.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryListDealSlotHealthRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryListDealSlotHealthRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryListDealSlotHealthRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DealId", wireType)
+			}
+			m.DealId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.DealId |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Pagination", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Pagination == nil {
+				m.Pagination = &query.PageRequest{}
+			}
+			if err := m.Pagination.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipQuery(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *QueryListDealSlotHealthResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowQuery
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: QueryListDealSlotHealthResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: QueryListDealSlotHealthResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Entries", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Entries = append(m.Entries, DealSlotHealthEntry{})
+			if err := m.Entries[len(m.Entries)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Pagination", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowQuery
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthQuery
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthQuery
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Pagination == nil {
+				m.Pagination = &query.PageResponse{}
+			}
+			if err := m.Pagination.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

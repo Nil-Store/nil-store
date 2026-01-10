@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -1526,6 +1527,14 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 	// considered for eviction in a mainnet-grade HealthState implementation.
 	const failureThreshold uint64 = 3
 	if state.HardFailures == failureThreshold {
+		ctx.EventManager().EmitEvent(sdk.NewEvent(
+			types.TypeHealthEvictThreshold,
+			sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+			sdk.NewAttribute(types.AttributeKeyProvider, provider),
+			sdk.NewAttribute(types.AttributeKeyHardFailures, strconv.FormatUint(state.HardFailures, 10)),
+			sdk.NewAttribute(types.AttributeKeyThreshold, strconv.FormatUint(failureThreshold, 10)),
+			sdk.NewAttribute(types.AttributeKeyReason, "hard_failure"),
+		))
 		ctx.Logger().Info(
 			"provider health degraded for deal; would consider eviction in full self-healing mode",
 			"deal", dealID,
@@ -1577,6 +1586,15 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 			return
 		}
 		_ = k.Mode2MissedEpochs.Remove(ctx, collections.Join(dealID, slot))
+		ctx.EventManager().EmitEvent(sdk.NewEvent(
+			types.TypeHealthRepairStarted,
+			sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+			sdk.NewAttribute(types.AttributeKeyEpochID, strconv.FormatUint(epochID, 10)),
+			sdk.NewAttribute(types.AttributeKeySlot, strconv.FormatUint(slotIdxU64, 10)),
+			sdk.NewAttribute(types.AttributeKeyProvider, provider),
+			sdk.NewAttribute(types.AttributeKeyPendingProvider, entry.PendingProvider),
+			sdk.NewAttribute(types.AttributeKeyReason, "hard_failure"),
+		))
 
 		extra := make([]byte, 0, 4)
 		extra = binary.BigEndian.AppendUint32(extra, slot)

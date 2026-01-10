@@ -116,6 +116,20 @@ func TestCheckMissedProofs_StartsMode2SlotRepair(t *testing.T) {
 		return false, nil
 	}))
 	require.True(t, foundEvidence)
+
+	events := sdkCtx.EventManager().Events()
+	require.True(t, hasEventWithAttrs(events, types.TypeHealthSoftMiss, map[string]string{
+		types.AttributeKeyReason: "quota_miss",
+		types.AttributeKeySlot:   "0",
+	}))
+	require.True(t, hasEventWithAttrs(events, types.TypeHealthEvictThreshold, map[string]string{
+		types.AttributeKeyReason:    "quota_miss",
+		types.AttributeKeyThreshold: "1",
+	}))
+	require.True(t, hasEventWithAttrs(events, types.TypeHealthRepairStarted, map[string]string{
+		types.AttributeKeyReason: "quota_miss",
+		types.AttributeKeySlot:   "0",
+	}))
 }
 
 func TestCheckMissedProofs_UsesHotEvictionThreshold(t *testing.T) {
@@ -502,4 +516,27 @@ func TestCheckMissedProofs_DeputyServedTriggersRepairEvenIfQuotaMet(t *testing.T
 		return false, nil
 	}))
 	require.True(t, foundEvidence)
+}
+
+func hasEventWithAttrs(events sdk.Events, eventType string, attrs map[string]string) bool {
+	for _, evt := range events {
+		if evt.Type != eventType {
+			continue
+		}
+		attrMap := make(map[string]string, len(evt.Attributes))
+		for _, attr := range evt.Attributes {
+			attrMap[attr.Key] = attr.Value
+		}
+		matched := true
+		for key, val := range attrs {
+			if attrMap[key] != val {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
 }
