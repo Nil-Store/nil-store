@@ -157,6 +157,10 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 			if quota == 0 {
 				return false, nil
 			}
+			requiredBond, err := k.requiredBondPerSlot(sdkCtx, deal)
+			if err != nil {
+				return false, err
+			}
 			dealChanged := false
 			for slotIdx := uint64(0); slotIdx < stripe.slotCount; slotIdx++ {
 				slot := uint32(slotIdx)
@@ -196,6 +200,10 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						if total >= quota {
 							oldProvider := entry.Provider
 							newProvider := strings.TrimSpace(entry.PendingProvider)
+
+							if err := k.unlockProviderBond(sdkCtx, oldProvider, requiredBond); err != nil {
+								return false, err
+							}
 
 							entry.Provider = newProvider
 							entry.PendingProvider = ""
@@ -313,6 +321,9 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 								"error", err,
 							)
 							continue
+						}
+						if err := k.lockProviderBond(sdkCtx, pending, requiredBond); err != nil {
+							return false, err
 						}
 
 						entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
@@ -435,6 +446,9 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 								"error", err,
 							)
 							continue
+						}
+						if err := k.lockProviderBond(sdkCtx, pending, requiredBond); err != nil {
+							return false, err
 						}
 
 						entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING

@@ -57,6 +57,14 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 		return nil, fmt.Errorf("failed to load pending provider: %w", err)
 	}
 
+	requiredBond, err := k.requiredBondPerSlot(ctx, deal)
+	if err != nil {
+		return nil, err
+	}
+	if err := k.lockProviderBond(ctx, pending, requiredBond); err != nil {
+		return nil, err
+	}
+
 	slot.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
 	slot.PendingProvider = pending
 	slot.StatusSinceHeight = ctx.BlockHeight()
@@ -143,6 +151,14 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 	// Rotate the deterministic challenge set after replacement so a failing provider
 	// cannot keep replaying historical proofs.
 	deal.CurrentGen++
+
+	requiredBond, err := k.requiredBondPerSlot(ctx, deal)
+	if err != nil {
+		return nil, err
+	}
+	if err := k.unlockProviderBond(ctx, oldProvider, requiredBond); err != nil {
+		return nil, err
+	}
 
 	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)

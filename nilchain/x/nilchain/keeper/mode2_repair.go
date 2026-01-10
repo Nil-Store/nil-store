@@ -35,6 +35,10 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 	}
 
 	params := k.GetParams(ctx)
+	requiredBond, err := k.requiredBondPerSlot(ctx, deal)
+	if err != nil {
+		return "", err
+	}
 
 	outgoing := ""
 	if int(slot) >= 0 && int(slot) < len(deal.Mode2Slots) {
@@ -67,6 +71,9 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 		if !k.providerMeetsMinBond(ctx, provider, params) {
 			return false, nil
 		}
+		if !k.providerHasAvailableBond(ctx, provider, requiredBond) {
+			return false, nil
+		}
 		if _, blocked := exclude[strings.TrimSpace(provider.Address)]; blocked {
 			return false, nil
 		}
@@ -89,6 +96,9 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 				return false, nil
 			}
 			if !k.providerMeetsMinBond(ctx, provider, params) {
+				return false, nil
+			}
+			if !k.providerHasAvailableBond(ctx, provider, requiredBond) {
 				return false, nil
 			}
 			cand := strings.TrimSpace(provider.Address)

@@ -228,6 +228,7 @@ func TestGamma4_UpdateDealContent_ChargesTermDepositInBondDenom(t *testing.T) {
 	for i := 0; i < int(types.DealBaseReplication); i++ {
 		addrBz := []byte(fmt.Sprintf("provider_deposit_%02d", i))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
+		bank.setAccountBalance(sdk.AccAddress(addrBz), sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 20_000_000)))
 		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
 			Creator:      addr,
 			Capabilities: "General",
@@ -241,6 +242,8 @@ func TestGamma4_UpdateDealContent_ChargesTermDepositInBondDenom(t *testing.T) {
 	p.StoragePrice = math.LegacyMustNewDecFromStr("1") // 1 stake per byte per block (test-only)
 	p.DealCreationFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)
 	p.MinDurationBlocks = 1
+	p.BondMonths = 1
+	p.MonthLenBlocks = 1
 	require.NoError(t, f.keeper.Params.Set(f.ctx, p))
 
 	userBz := []byte("user_deposit_test__")
@@ -284,6 +287,7 @@ func TestGamma4_UpdateDealContent_LockInDeposit_DeltaOnly(t *testing.T) {
 	for i := 0; i < int(types.DealBaseReplication); i++ {
 		addrBz := []byte(fmt.Sprintf("provider_delta_%02d", i))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
+		bank.setAccountBalance(sdk.AccAddress(addrBz), sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 20_000_000)))
 		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
 			Creator:      addr,
 			Capabilities: "General",
@@ -297,6 +301,8 @@ func TestGamma4_UpdateDealContent_LockInDeposit_DeltaOnly(t *testing.T) {
 	p.StoragePrice = math.LegacyMustNewDecFromStr("1")
 	p.DealCreationFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)
 	p.MinDurationBlocks = 1
+	p.BondMonths = 1
+	p.MonthLenBlocks = 1
 	require.NoError(t, f.keeper.Params.Set(f.ctx, p))
 
 	userBz := []byte("user_delta_deposit")
@@ -363,6 +369,7 @@ func TestGamma4_UpdateDealContent_LockInDeposit_CeilRounding(t *testing.T) {
 	for i := 0; i < int(types.DealBaseReplication); i++ {
 		addrBz := []byte(fmt.Sprintf("provider_round_%02d", i))
 		addr, _ := f.addressCodec.BytesToString(addrBz)
+		bank.setAccountBalance(sdk.AccAddress(addrBz), sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 20_000_000)))
 		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
 			Creator:      addr,
 			Capabilities: "General",
@@ -376,6 +383,8 @@ func TestGamma4_UpdateDealContent_LockInDeposit_CeilRounding(t *testing.T) {
 	p.StoragePrice = math.LegacyMustNewDecFromStr("0.1")
 	p.DealCreationFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)
 	p.MinDurationBlocks = 1
+	p.BondMonths = 1
+	p.MonthLenBlocks = 1
 	require.NoError(t, f.keeper.Params.Set(f.ctx, p))
 
 	userBz := []byte("user_round_deposit")

@@ -202,7 +202,7 @@ func NewKeeper(
 // AssignProviders deterministically assigns providers for a new deal.
 // It uses a hash-based approach to select `types.DealBaseReplication` providers
 // from the active provider list, respecting service hints and diversity constraints.
-func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte, serviceHint string, count uint64) ([]string, error) {
+func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte, serviceHint string, count uint64, requiredBond math.Int) ([]string, error) {
 	var allProviders []types.Provider
 	params := k.GetParams(ctx)
 
@@ -229,15 +229,15 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 
 		// Apply service hint filter
 		if serviceHint == "Hot" && (provider.Capabilities == "General" || provider.Capabilities == "Edge") {
-			if k.providerMeetsMinBond(ctx, provider, params) {
+			if k.providerMeetsMinBond(ctx, provider, params) && k.providerHasAvailableBond(ctx, provider, requiredBond) {
 				candidateProviders = append(candidateProviders, provider)
 			}
 		} else if serviceHint == "Cold" && (provider.Capabilities == "Archive" || provider.Capabilities == "General") {
-			if k.providerMeetsMinBond(ctx, provider, params) {
+			if k.providerMeetsMinBond(ctx, provider, params) && k.providerHasAvailableBond(ctx, provider, requiredBond) {
 				candidateProviders = append(candidateProviders, provider)
 			}
 		} else if serviceHint == "" || serviceHint == "General" { // Default/No specific hint, consider General and above
-			if k.providerMeetsMinBond(ctx, provider, params) {
+			if k.providerMeetsMinBond(ctx, provider, params) && k.providerHasAvailableBond(ctx, provider, requiredBond) {
 				candidateProviders = append(candidateProviders, provider)
 			}
 		}

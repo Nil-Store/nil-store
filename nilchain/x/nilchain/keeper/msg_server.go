@@ -184,7 +184,7 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 	}
 
 	blockHash := ctx.BlockHeader().LastBlockId.Hash
-	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHintBase, requestedReplicas)
+	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHintBase, requestedReplicas, math.ZeroInt())
 	if err != nil {
 		return nil, fmt.Errorf("failed to assign providers: %w", err)
 	}
@@ -232,6 +232,10 @@ func (k msgServer) CreateDealFromEvm(goCtx context.Context, msg *types.MsgCreate
 			})
 		}
 		deal.Mode2Slots = slots
+	}
+
+	if err := k.lockBondForAssignments(ctx, deal, assignedProviders); err != nil {
+		return nil, err
 	}
 
 	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
@@ -414,7 +418,7 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	}
 
 	blockHash := ctx.BlockHeader().LastBlockId.Hash
-	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHintBase, requestedReplicas)
+	assignedProviders, err := k.AssignProviders(ctx, dealID, blockHash, serviceHintBase, requestedReplicas, math.ZeroInt())
 	if err != nil {
 		return nil, fmt.Errorf("failed to assign providers: %w", err)
 	}
@@ -480,6 +484,10 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 		deal.Mode2Slots = slots
 	}
 
+	if err := k.lockBondForAssignments(ctx, deal, assignedProviders); err != nil {
+		return nil, err
+	}
+
 	if err := k.Deals.Set(ctx, dealID, deal); err != nil {
 		return nil, fmt.Errorf("failed to set deal: %w", err)
 	}
@@ -543,6 +551,7 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
 	}
+	prevDeal := deal
 
 	if deal.Owner != msg.Creator {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner %s can update content", deal.Owner)
@@ -599,6 +608,10 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 	deal.Size_ = msg.Size_
 	deal.TotalMdus = msg.TotalMdus
 	deal.WitnessMdus = msg.WitnessMdus
+
+	if err := k.lockBondForDealGrowth(ctx, prevDeal, deal); err != nil {
+		return nil, err
+	}
 
 	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
@@ -720,6 +733,7 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	if err != nil {
 		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", intent.DealId)
 	}
+	prevDeal := deal
 
 	if deal.Owner != ownerAcc.String() {
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner can update content")
@@ -759,6 +773,10 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 	}
 	deal.TotalMdus = intent.TotalMdus
 	deal.WitnessMdus = intent.WitnessMdus
+
+	if err := k.lockBondForDealGrowth(ctx, prevDeal, deal); err != nil {
+		return nil, err
+	}
 
 	if err := k.Deals.Set(ctx, intent.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
@@ -1583,6 +1601,16 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 			return
 		}
 
+		requiredBond, err := k.requiredBondPerSlot(ctx, deal)
+		if err != nil {
+			ctx.Logger().Error("failed to compute required bond for repair", "deal", dealID, "error", err)
+			return
+		}
+		if err := k.lockProviderBond(ctx, pending, requiredBond); err != nil {
+			ctx.Logger().Error("failed to lock bond for pending provider", "deal", dealID, "provider", pending, "error", err)
+			return
+		}
+
 		entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
 		entry.PendingProvider = strings.TrimSpace(pending)
 		entry.StatusSinceHeight = ctx.BlockHeight()
@@ -1670,9 +1698,18 @@ func (k msgServer) SignalSaturation(goCtx context.Context, msg *types.MsgSignalS
 	blockHash := ctx.BlockHeader().LastBlockId.Hash
 	derivedID := deal.Id + (deal.CurrentReplication * 1000)
 
-	newProviders, err := k.AssignProviders(ctx, derivedID, blockHash, "Hot", types.DealBaseReplication)
+	requiredBond, err := k.requiredBondPerSlot(ctx, deal)
+	if err != nil {
+		return nil, err
+	}
+
+	newProviders, err := k.AssignProviders(ctx, derivedID, blockHash, "Hot", types.DealBaseReplication, requiredBond)
 	if err != nil {
 		return nil, fmt.Errorf("failed to assign new hot stripe: %w", err)
+	}
+
+	if err := k.lockBondForAssignments(ctx, deal, newProviders); err != nil {
+		return nil, err
 	}
 
 	deal.Providers = append(deal.Providers, newProviders...)
