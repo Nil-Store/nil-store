@@ -68,6 +68,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-REPAIR-E2E-002 | blocked | repair e2e still failing: pending provider fetch 502; slab catch-up incomplete; session proof mismatch on multi-blob attempts | - | -`
 * `2026-01-10 | TASK P0-EVIDENCE-001 | in progress | start hard-fault evidence slash/jail + repair wiring | - | -`
 * `2026-01-10 | TASK P0-EVIDENCE-001 | done | hard-fault evidence penalties + jail tracking + tests | fc890ef | -`
+* `2026-01-10 | TASK P0-EVIDENCE-E2E-002 | in progress | start evidence e2e script for wrong-data slash/jail/repair | - | -`
+* `2026-01-10 | TASK P0-EVIDENCE-E2E-002 | done | add wrong-data evidence E2E script | 21d013a | -`
 
 ---
 
@@ -1059,7 +1061,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-EVIDENCE-E2E-002 — E2E evidence gate: proven wrong data → slash + jail + repair start
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `scripts/`, provider/gateway test hooks
 * **Depends on:** `P0-EVIDENCE-001`, `P0-REPAIR-E2E-002` (or at least `P0-REPAIR-001`)
