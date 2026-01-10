@@ -48,6 +48,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-09 | TASK P0-QUOTAS-002 | done | prune quota accounting + add quota clamp/dedup tests | 67cab32 | -`
 * `2026-01-09 | TASK P0-QUOTAS-SIM-003 | in progress | start adversarial sim gate for challenge derivation | - | -`
 * `2026-01-09 | TASK P0-QUOTAS-SIM-003 | done | add deterministic challenge derivation sim test | 62492e7 | -`
+* `2026-01-09 | TASK P0-HEALTH-001 | in progress | start HealthState updates + eviction thresholds | - | -`
+* `2026-01-09 | TASK P0-HEALTH-001 | done | add health state tracking + hot/cold eviction tests | 5f63784 | -`
 
 ---
 
@@ -595,7 +597,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-HEALTH-001 — HealthState per (deal, provider/slot): updates from hard/soft failures + hot/cold eviction thresholds
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
 * **Depends on:** `P0-QUOTAS-002`, `P0-PARAMS-001`
