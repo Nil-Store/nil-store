@@ -58,6 +58,7 @@ You will likely be run repeatedly. Your behavior MUST be **idempotent**: each ru
    - After tests pass and commits are made, push the branch to both remotes:
      - `git push origin mainnet_parity`
      - `git push nil-store mainnet_parity`
+   - Note: this repo uses `lefthook` and `git push` may run `nil-website`’s `npm run build` (requires `wasm-pack`). If push is blocked by toolchain issues, still commit locally, record the blocker in `AGENTS_MAINNET_PARITY.md`, and stop.
 
 7) **Stop condition**
    - Prefer completing exactly **one** task per run (unless you are finishing an already in-progress task and can safely complete it).
@@ -72,4 +73,3 @@ You will likely be run repeatedly. Your behavior MUST be **idempotent**: each ru
 Do not invent new economics/security policies. Use:
 - `notes/mainnet_policy_resolution_jan2026.md` (final defaults + monitoring signals)
 - `MAINNET_ECON_PARITY_CHECKLIST.md` and `MAINNET_GAP_TRACKER.md` for sequencing and test gates
-
