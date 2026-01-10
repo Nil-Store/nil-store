@@ -54,6 +54,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-09 | TASK P0-MODE2-MBB-001 | done | gate slot repair promotion on quota readiness + tests | 0746542 | -`
 * `2026-01-09 | TASK P0-HEALTH-002 | in progress | start health observability queries + events | - | -`
 * `2026-01-09 | TASK P0-HEALTH-002 | done | add health queries/events + tests | 06fb3f9 | -`
+* `2026-01-10 | TASK P0-BOND-001 | in progress | start provider bond baseline | - | -`
+* `2026-01-10 | TASK P0-BOND-001 | done | provider bond state + min bond gating + tests | b3cbab2 | -`
 
 ---
 
@@ -731,7 +733,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-BOND-001 — Provider bonding baseline: provider bond state + min_provider_bond enforcement
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, provider registry/activation path
 * **Depends on:** `P0-PARAMS-001`
