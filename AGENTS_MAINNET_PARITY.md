@@ -84,6 +84,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-DEPUTY-E2E-002 | done | deputy ghosting CI script + premium/escrow assertions | cb6bdea | -`
 * `2026-01-10 | TASK P0-REPAIR-E2E-002 | in progress | resume repair e2e debugging: pending provider fetch + proof mismatch | - | -`
 * `2026-01-10 | TASK P0-REPAIR-E2E-002 | done | stabilize repair E2E + mode2 reconstruction and proof submission flow | da2c9b7 | -`
+* `2026-01-10 | TASK P1-REPAIR-OVERRIDE-001 | in progress | start authority-only repair override posture | - | -`
+* `2026-01-10 | TASK P1-REPAIR-OVERRIDE-001 | done | authority-only repair override param + msg + tests | 50e64a4 | -`
 
 ---
 
@@ -985,7 +987,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P1-REPAIR-OVERRIDE-001 — Trusted repair override posture (dev/test enabled if implemented; mainnet disabled by default)
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
 * **Depends on:** `P0-MODE2-MBB-001`, `P0-REPAIR-001`
