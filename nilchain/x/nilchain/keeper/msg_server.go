@@ -491,6 +491,36 @@ func (k msgServer) CreateDeal(goCtx context.Context, msg *types.MsgCreateDeal) (
 	}, nil
 }
 
+func (k msgServer) applyLockInDeposit(ctx sdk.Context, payer sdk.AccAddress, deal *types.Deal, newSize uint64) (uint64, math.Int, uint64, error) {
+	if newSize <= deal.Size_ {
+		return 0, math.ZeroInt(), 0, nil
+	}
+
+	deltaSize := newSize - deal.Size_
+	duration := uint64(0)
+	if deal.EndBlock > deal.StartBlock {
+		duration = deal.EndBlock - deal.StartBlock
+	}
+
+	params := k.GetParams(ctx)
+	price := params.StoragePrice
+	if !price.IsPositive() || duration == 0 {
+		return deltaSize, math.ZeroInt(), duration, nil
+	}
+
+	costDec := price.MulInt64(int64(deltaSize)).MulInt64(int64(duration))
+	cost := costDec.Ceil().TruncateInt()
+	if cost.IsPositive() {
+		coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, payer, types.ModuleName, coins); err != nil {
+			return 0, math.ZeroInt(), duration, fmt.Errorf("failed to pay term deposit: %w", err)
+		}
+		deal.EscrowBalance = deal.EscrowBalance.Add(cost)
+	}
+
+	return deltaSize, cost, duration, nil
+}
+
 // UpdateDealContent allows a user to commit or update the manifest of a deal.
 func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdateDealContent) (*types.MsgUpdateDealContentResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
@@ -509,26 +539,9 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner %s can update content", deal.Owner)
 	}
 
-	params := k.GetParams(ctx)
-
-	// --- TERM DEPOSIT (Storage Lock-in) ---
-	if msg.Size_ > deal.Size_ {
-		deltaSize := msg.Size_ - deal.Size_
-		duration := deal.EndBlock - deal.StartBlock
-
-		price := params.StoragePrice
-		if price.IsPositive() {
-			costDec := price.MulInt64(int64(deltaSize)).MulInt64(int64(duration))
-			cost := costDec.Ceil().TruncateInt()
-
-			if cost.IsPositive() {
-				coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
-				if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, creatorAddr, types.ModuleName, coins); err != nil {
-					return nil, fmt.Errorf("failed to pay term deposit: %w", err)
-				}
-				deal.EscrowBalance = deal.EscrowBalance.Add(cost)
-			}
-		}
+	deltaSize, lockInCost, lockInDuration, err := k.applyLockInDeposit(ctx, creatorAddr, &deal, msg.Size_)
+	if err != nil {
+		return nil, err
 	}
 
 	if strings.TrimSpace(msg.Cid) == "" {
@@ -580,6 +593,18 @@ func (k msgServer) UpdateDealContent(goCtx context.Context, msg *types.MsgUpdate
 
 	if err := k.Deals.Set(ctx, msg.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
+	}
+
+	if deltaSize > 0 {
+		ctx.EventManager().EmitEvent(
+			sdk.NewEvent(
+				types.TypeLockInDeposit,
+				sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+				sdk.NewAttribute(types.AttributeKeyDeltaBytes, fmt.Sprintf("%d", deltaSize)),
+				sdk.NewAttribute(types.AttributeKeyStorageCost, lockInCost.String()),
+				sdk.NewAttribute(types.AttributeKeyDurationBlocks, fmt.Sprintf("%d", lockInDuration)),
+			),
+		)
 	}
 
 	ctx.EventManager().EmitEvent(
@@ -691,29 +716,9 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 		return nil, sdkerrors.ErrUnauthorized.Wrapf("only deal owner can update content")
 	}
 
-	// --- TERM DEPOSIT (Storage Lock-in) ---
-	// Cost = (NewSize - OldSize) * Duration * Price
-	// Only charge for size increase.
-	if intent.SizeBytes > deal.Size_ {
-		deltaSize := intent.SizeBytes - deal.Size_
-		duration := deal.EndBlock - deal.StartBlock
-
-		// price is Dec per byte per block
-		price := params.StoragePrice
-		if price.IsPositive() {
-			costDec := price.MulInt64(int64(deltaSize)).MulInt64(int64(duration))
-			cost := costDec.Ceil().TruncateInt()
-
-			if cost.IsPositive() {
-				coins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, cost))
-				// Deduct from Creator -> Module Account (Escrow)
-				if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, ownerAcc, types.ModuleName, coins); err != nil {
-					return nil, fmt.Errorf("failed to pay term deposit: %w", err)
-				}
-				// Credit the deal's escrow balance (Total Value Locked)
-				deal.EscrowBalance = deal.EscrowBalance.Add(cost)
-			}
-		}
+	deltaSize, lockInCost, lockInDuration, err := k.applyLockInDeposit(ctx, ownerAcc, &deal, intent.SizeBytes)
+	if err != nil {
+		return nil, err
 	}
 
 	manifestRoot, err := hex.DecodeString(strings.TrimPrefix(intent.Cid, "0x"))
@@ -748,6 +753,18 @@ func (k msgServer) UpdateDealContentFromEvm(goCtx context.Context, msg *types.Ms
 
 	if err := k.Deals.Set(ctx, intent.DealId, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
+	}
+
+	if deltaSize > 0 {
+		ctx.EventManager().EmitEvent(
+			sdk.NewEvent(
+				types.TypeLockInDeposit,
+				sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", deal.Id)),
+				sdk.NewAttribute(types.AttributeKeyDeltaBytes, fmt.Sprintf("%d", deltaSize)),
+				sdk.NewAttribute(types.AttributeKeyStorageCost, lockInCost.String()),
+				sdk.NewAttribute(types.AttributeKeyDurationBlocks, fmt.Sprintf("%d", lockInDuration)),
+			),
+		)
 	}
 
 	ctx.EventManager().EmitEvent(

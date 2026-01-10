@@ -276,6 +276,140 @@ func TestGamma4_UpdateDealContent_ChargesTermDepositInBondDenom(t *testing.T) {
 	require.Equal(t, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1000)).String(), bank.moduleBalances[types.ModuleName].String())
 }
 
+func TestGamma4_UpdateDealContent_LockInDeposit_DeltaOnly(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	for i := 0; i < int(types.DealBaseReplication); i++ {
+		addrBz := []byte(fmt.Sprintf("provider_delta_%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	p := types.DefaultParams()
+	p.StoragePrice = math.LegacyMustNewDecFromStr("1")
+	p.DealCreationFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)
+	p.MinDurationBlocks = 1
+	require.NoError(t, f.keeper.Params.Set(f.ctx, p))
+
+	userBz := []byte("user_delta_deposit")
+	user, _ := f.addressCodec.BytesToString(userBz)
+	userAddr, err := sdk.AccAddressFromBech32(user)
+	require.NoError(t, err)
+
+	bank.setAccountBalance(userAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 2000)))
+
+	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      10,
+		ServiceHint:         "General",
+		MaxMonthlySpend:     math.NewInt(0),
+		InitialEscrowAmount: math.NewInt(0),
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator:     user,
+		DealId:      resDeal.DealId,
+		Cid:         validManifestCid,
+		Size_:       100,
+		TotalMdus:   3,
+		WitnessMdus: 1,
+	})
+	require.NoError(t, err)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(1000), deal.EscrowBalance)
+
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator:     user,
+		DealId:      resDeal.DealId,
+		Cid:         validManifestCid,
+		Size_:       100,
+		TotalMdus:   3,
+		WitnessMdus: 1,
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator:     user,
+		DealId:      resDeal.DealId,
+		Cid:         validManifestCid,
+		Size_:       80,
+		TotalMdus:   3,
+		WitnessMdus: 1,
+	})
+	require.NoError(t, err)
+
+	deal, err = f.keeper.Deals.Get(f.ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(1000), deal.EscrowBalance)
+	require.Equal(t, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1000)).String(), bank.moduleBalances[types.ModuleName].String())
+}
+
+func TestGamma4_UpdateDealContent_LockInDeposit_CeilRounding(t *testing.T) {
+	bank := newTrackingBankKeeper()
+	f := initFixtureWithBankKeeper(t, bank)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	for i := 0; i < int(types.DealBaseReplication); i++ {
+		addrBz := []byte(fmt.Sprintf("provider_round_%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		_, err := msgServer.RegisterProvider(f.ctx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+
+	p := types.DefaultParams()
+	p.StoragePrice = math.LegacyMustNewDecFromStr("0.1")
+	p.DealCreationFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 0)
+	p.MinDurationBlocks = 1
+	require.NoError(t, f.keeper.Params.Set(f.ctx, p))
+
+	userBz := []byte("user_round_deposit")
+	user, _ := f.addressCodec.BytesToString(userBz)
+	userAddr, err := sdk.AccAddressFromBech32(user)
+	require.NoError(t, err)
+
+	bank.setAccountBalance(userAddr, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)))
+
+	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      1,
+		ServiceHint:         "General",
+		MaxMonthlySpend:     math.NewInt(0),
+		InitialEscrowAmount: math.NewInt(0),
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator:     user,
+		DealId:      resDeal.DealId,
+		Cid:         validManifestCid,
+		Size_:       1,
+		TotalMdus:   3,
+		WitnessMdus: 1,
+	})
+	require.NoError(t, err)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, resDeal.DealId)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(1), deal.EscrowBalance)
+	require.Equal(t, sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1)).String(), bank.moduleBalances[types.ModuleName].String())
+}
+
 func TestGamma4_CreateDealFromEvm_EnforcesMinDuration(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
