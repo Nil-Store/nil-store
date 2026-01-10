@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"cosmossdk.io/collections"
@@ -102,6 +103,17 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						"synthetic", synth,
 						"missed_epochs", prev+1,
 					)
+					sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
+						"quota_missed",
+						sdk.NewAttribute("mode", "mode1"),
+						sdk.NewAttribute("deal_id", strconv.FormatUint(dealID, 10)),
+						sdk.NewAttribute("epoch_id", strconv.FormatUint(epochID, 10)),
+						sdk.NewAttribute("provider", provider),
+						sdk.NewAttribute("quota", strconv.FormatUint(quota, 10)),
+						sdk.NewAttribute("credits", strconv.FormatUint(credits, 10)),
+						sdk.NewAttribute("synthetic", strconv.FormatUint(synth, 10)),
+						sdk.NewAttribute("missed_epochs", strconv.FormatUint(prev+1, 10)),
+					))
 				} else {
 					if err := k.Mode1MissedEpochs.Remove(ctx, missedKey); err != nil && !errors.Is(err, collections.ErrNotFound) {
 						return false, err
@@ -298,6 +310,17 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						"synthetic", synth,
 						"missed_epochs", nextMissed,
 					)
+					sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
+						"quota_missed",
+						sdk.NewAttribute("mode", "mode2"),
+						sdk.NewAttribute("deal_id", strconv.FormatUint(dealID, 10)),
+						sdk.NewAttribute("epoch_id", strconv.FormatUint(epochID, 10)),
+						sdk.NewAttribute("slot", strconv.FormatUint(slotIdx, 10)),
+						sdk.NewAttribute("quota", strconv.FormatUint(quota, 10)),
+						sdk.NewAttribute("credits", strconv.FormatUint(credits, 10)),
+						sdk.NewAttribute("synthetic", strconv.FormatUint(synth, 10)),
+						sdk.NewAttribute("missed_epochs", strconv.FormatUint(nextMissed, 10)),
+					))
 
 					if evictAfterMissed > 0 && nextMissed >= evictAfterMissed {
 						if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 || int(slot) >= len(deal.Mode2Slots) {
@@ -364,5 +387,55 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 		return false, nil
 	})
 
+	if err == nil {
+		err = k.pruneEpochAccounting(sdkCtx)
+	}
 	return err
+}
+
+func (k Keeper) pruneEpochAccounting(ctx sdk.Context) error {
+	if err := clearMap(ctx, k.Mode1EpochCredits); err != nil {
+		return err
+	}
+	if err := clearMap(ctx, k.Mode1EpochSynthetic); err != nil {
+		return err
+	}
+	if err := clearMap(ctx, k.Mode2EpochCredits); err != nil {
+		return err
+	}
+	if err := clearMap(ctx, k.Mode2EpochSynthetic); err != nil {
+		return err
+	}
+	if err := clearMap(ctx, k.Mode2EpochSlotServed); err != nil {
+		return err
+	}
+	if err := clearMap(ctx, k.Mode2EpochDeputyServed); err != nil {
+		return err
+	}
+	if err := clearMap(ctx, k.CreditSeen); err != nil {
+		return err
+	}
+	if err := clearMap(ctx, k.SyntheticSeen); err != nil {
+		return err
+	}
+	if err := clearMap(ctx, k.DeputySeen); err != nil {
+		return err
+	}
+	return nil
+}
+
+func clearMap[K any, V any](ctx sdk.Context, m collections.Map[K, V]) error {
+	keys := make([]K, 0)
+	if err := m.Walk(ctx, nil, func(key K, _ V) (bool, error) {
+		keys = append(keys, key)
+		return false, nil
+	}); err != nil {
+		return err
+	}
+	for _, key := range keys {
+		if err := m.Remove(ctx, key); err != nil && !errors.Is(err, collections.ErrNotFound) {
+			return err
+		}
+	}
+	return nil
 }
