@@ -11,6 +11,7 @@ const (
 	TypeHealthSoftMiss          = "health_soft_miss"
 	TypeHealthEvictThreshold    = "health_evict_threshold"
 	TypeHealthRepairStarted     = "health_repair_started"
+	TypeRepairRejected          = "repair_rejected"
 
 	AttributeKeyProvider          = "provider"
 	AttributeKeyCapabilities      = "capabilities"

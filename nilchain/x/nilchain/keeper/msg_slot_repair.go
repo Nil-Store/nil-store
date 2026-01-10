@@ -57,6 +57,11 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 		return nil, fmt.Errorf("failed to load pending provider: %w", err)
 	}
 
+	attempt, windowStart, err := k.prepareMode2RepairStart(ctx, deal.Id, msg.Slot)
+	if err != nil {
+		return nil, err
+	}
+
 	requiredBond, err := k.requiredBondPerSlot(ctx, deal)
 	if err != nil {
 		return nil, err
@@ -73,6 +78,9 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 
 	if err := k.Deals.Set(ctx, deal.Id, deal); err != nil {
 		return nil, fmt.Errorf("failed to update deal: %w", err)
+	}
+	if err := k.recordMode2RepairStart(ctx, deal.Id, msg.Slot, attempt, windowStart); err != nil {
+		return nil, err
 	}
 
 	ctx.EventManager().EmitEvent(

@@ -1595,7 +1595,24 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 		params := k.GetParams(ctx)
 		epochID := epochIDAtHeight(ctx.BlockHeight(), params.EpochLenBlocks)
 
-		pending, err := k.selectMode2ReplacementProvider(ctx, deal, slot, epochID)
+		attempt, windowStart, err := k.prepareMode2RepairStart(ctx, dealID, slot)
+		if err != nil {
+			ctx.EventManager().EmitEvent(sdk.NewEvent(
+				types.TypeRepairRejected,
+				sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+				sdk.NewAttribute(types.AttributeKeySlot, strconv.FormatUint(slotIdxU64, 10)),
+				sdk.NewAttribute(types.AttributeKeyReason, err.Error()),
+			))
+			ctx.Logger().Info(
+				"slot repair skipped (health eviction)",
+				"deal", dealID,
+				"slot", slotIdxU64,
+				"reason", err.Error(),
+			)
+			return
+		}
+
+		pending, err := k.selectMode2ReplacementProvider(ctx, deal, slot, epochID, attempt)
 		if err != nil {
 			ctx.Logger().Error("failed to select replacement provider for health eviction", "deal", dealID, "slot", slotIdxU64, "error", err)
 			return
@@ -1619,6 +1636,10 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 
 		if err := k.Deals.Set(ctx, dealID, deal); err != nil {
 			ctx.Logger().Error("failed to persist deal after health eviction", "deal", dealID, "error", err)
+			return
+		}
+		if err := k.recordMode2RepairStart(ctx, dealID, slot, attempt, windowStart); err != nil {
+			ctx.Logger().Error("failed to record repair start", "deal", dealID, "slot", slotIdxU64, "error", err)
 			return
 		}
 		_ = k.Mode2MissedEpochs.Remove(ctx, collections.Join(dealID, slot))

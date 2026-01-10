@@ -312,7 +312,25 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 							continue
 						}
 
-						pending, err := k.selectMode2ReplacementProvider(sdkCtx, deal, slot, epochID)
+						attempt, windowStart, err := k.prepareMode2RepairStart(sdkCtx, dealID, slot)
+						if err != nil {
+							sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
+								types.TypeRepairRejected,
+								sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+								sdk.NewAttribute(types.AttributeKeyEpochID, strconv.FormatUint(epochID, 10)),
+								sdk.NewAttribute(types.AttributeKeySlot, strconv.FormatUint(slotIdx, 10)),
+								sdk.NewAttribute(types.AttributeKeyReason, err.Error()),
+							))
+							sdkCtx.Logger().Info(
+								"slot repair skipped (deputy miss)",
+								"deal", dealID,
+								"slot", slotIdx,
+								"reason", err.Error(),
+							)
+							continue
+						}
+
+						pending, err := k.selectMode2ReplacementProvider(sdkCtx, deal, slot, epochID, attempt)
 						if err != nil {
 							sdkCtx.Logger().Error(
 								"failed to select replacement provider",
@@ -332,6 +350,9 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						entry.RepairTargetGen = deal.CurrentGen
 						deal.Mode2Slots[slot] = entry
 						dealChanged = true
+						if err := k.recordMode2RepairStart(sdkCtx, dealID, slot, attempt, windowStart); err != nil {
+							return false, err
+						}
 						_ = k.Mode2DeputyMissedEpochs.Remove(ctx, missedKey)
 						_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
 						sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
@@ -437,7 +458,25 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 							continue
 						}
 
-						pending, err := k.selectMode2ReplacementProvider(sdkCtx, deal, slot, epochID)
+						attempt, windowStart, err := k.prepareMode2RepairStart(sdkCtx, dealID, slot)
+						if err != nil {
+							sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
+								types.TypeRepairRejected,
+								sdk.NewAttribute(types.AttributeKeyDealID, strconv.FormatUint(dealID, 10)),
+								sdk.NewAttribute(types.AttributeKeyEpochID, strconv.FormatUint(epochID, 10)),
+								sdk.NewAttribute(types.AttributeKeySlot, strconv.FormatUint(slotIdx, 10)),
+								sdk.NewAttribute(types.AttributeKeyReason, err.Error()),
+							))
+							sdkCtx.Logger().Info(
+								"slot repair skipped (quota miss)",
+								"deal", dealID,
+								"slot", slotIdx,
+								"reason", err.Error(),
+							)
+							continue
+						}
+
+						pending, err := k.selectMode2ReplacementProvider(sdkCtx, deal, slot, epochID, attempt)
 						if err != nil {
 							sdkCtx.Logger().Error(
 								"failed to select replacement provider",
@@ -457,6 +496,9 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						entry.RepairTargetGen = deal.CurrentGen
 						deal.Mode2Slots[slot] = entry
 						dealChanged = true
+						if err := k.recordMode2RepairStart(sdkCtx, dealID, slot, attempt, windowStart); err != nil {
+							return false, err
+						}
 						_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
 						sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
 							types.TypeHealthRepairStarted,

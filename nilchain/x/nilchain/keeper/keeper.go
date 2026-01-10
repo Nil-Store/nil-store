@@ -63,6 +63,9 @@ type Keeper struct {
 	Mode2EpochDeputyServed  collections.Map[collections.Pair[collections.Pair[uint64, uint32], uint64], uint64]
 	Mode2MissedEpochs       collections.Map[collections.Pair[uint64, uint32], uint64]
 	Mode2DeputyMissedEpochs collections.Map[collections.Pair[uint64, uint32], uint64]
+	Mode2RepairLastStart    collections.Map[collections.Pair[uint64, uint32], uint64]
+	Mode2RepairWindowStart  collections.Map[collections.Pair[uint64, uint32], uint64]
+	Mode2RepairAttempts     collections.Map[collections.Pair[uint64, uint32], uint64]
 	CreditSeen              collections.Map[[]byte, bool]
 	SyntheticSeen           collections.Map[[]byte, bool]
 	DeputySeen              collections.Map[[]byte, bool]
@@ -182,6 +185,27 @@ func NewKeeper(
 			sb,
 			types.Mode2DeputyMissedEpochsKey,
 			"mode2_deputy_missed_epochs",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
+			collections.Uint64Value,
+		),
+		Mode2RepairLastStart: collections.NewMap(
+			sb,
+			types.Mode2RepairLastStartKey,
+			"mode2_repair_last_start",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
+			collections.Uint64Value,
+		),
+		Mode2RepairWindowStart: collections.NewMap(
+			sb,
+			types.Mode2RepairWindowStartKey,
+			"mode2_repair_window_start",
+			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
+			collections.Uint64Value,
+		),
+		Mode2RepairAttempts: collections.NewMap(
+			sb,
+			types.Mode2RepairAttemptsKey,
+			"mode2_repair_attempts",
 			collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key),
 			collections.Uint64Value,
 		),

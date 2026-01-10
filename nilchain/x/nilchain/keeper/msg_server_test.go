@@ -295,6 +295,116 @@ func TestMode2SlotRepairLifecycle(t *testing.T) {
 	require.Equal(t, dealAfterStart.CurrentGen+1, dealAfterComplete.CurrentGen)
 }
 
+func TestMode2SlotRepairCooldownAndAttemptCap(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	params := types.DefaultParams()
+	params.ReplacementCooldownBlocks = 5
+	params.RepairAttemptsCap = 2
+	params.RepairAttemptWindowBlocks = 100
+	params.EpochLenBlocks = 5
+	require.NoError(t, f.keeper.Params.Set(f.ctx, params))
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(10)
+	f.ctx = sdkCtx
+
+	numProviders := 20
+	for i := 0; i < numProviders; i++ {
+		addrBz := []byte(fmt.Sprintf("provider_repair_cap___%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		msgReg := &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		}
+		_, err := msgServer.RegisterProvider(f.ctx, msgReg)
+		require.NoError(t, err)
+	}
+
+	userBz := []byte("user_repair_cap____")
+	user, _ := f.addressCodec.BytesToString(userBz)
+	create := &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      1000,
+		ServiceHint:         "General:rs=8+4",
+		MaxMonthlySpend:     math.NewInt(500000),
+		InitialEscrowAmount: math.NewInt(1000000),
+	}
+	res, err := msgServer.CreateDeal(f.ctx, create)
+	require.NoError(t, err)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	deal.TotalMdus = 2
+	deal.WitnessMdus = 0
+	require.NoError(t, f.keeper.Deals.Set(f.ctx, deal.Id, deal))
+
+	epochID := uint64((sdkCtx.BlockHeight()-1)/int64(params.EpochLenBlocks)) + 1
+	keyEpoch := collections.Join(collections.Join(deal.Id, uint32(0)), epochID)
+	require.NoError(t, f.keeper.Mode2EpochSynthetic.Set(f.ctx, keyEpoch, 1000))
+
+	candidate1 := deal.Mode2Slots[1].Provider
+	candidate2 := deal.Mode2Slots[2].Provider
+
+	_, err = msgServer.StartSlotRepair(f.ctx, &types.MsgStartSlotRepair{
+		Creator:         user,
+		DealId:          res.DealId,
+		Slot:            0,
+		PendingProvider: candidate1,
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.CompleteSlotRepair(f.ctx, &types.MsgCompleteSlotRepair{
+		Creator: candidate1,
+		DealId:  res.DealId,
+		Slot:    0,
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.StartSlotRepair(f.ctx, &types.MsgStartSlotRepair{
+		Creator:         user,
+		DealId:          res.DealId,
+		Slot:            0,
+		PendingProvider: candidate2,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cooldown")
+
+	sdkCtx = sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(16)
+	f.ctx = sdkCtx
+	epochID = uint64((sdkCtx.BlockHeight()-1)/int64(params.EpochLenBlocks)) + 1
+	keyEpoch = collections.Join(collections.Join(deal.Id, uint32(0)), epochID)
+	require.NoError(t, f.keeper.Mode2EpochSynthetic.Set(f.ctx, keyEpoch, 1000))
+
+	_, err = msgServer.StartSlotRepair(f.ctx, &types.MsgStartSlotRepair{
+		Creator:         user,
+		DealId:          res.DealId,
+		Slot:            0,
+		PendingProvider: candidate2,
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.CompleteSlotRepair(f.ctx, &types.MsgCompleteSlotRepair{
+		Creator: candidate2,
+		DealId:  res.DealId,
+		Slot:    0,
+	})
+	require.NoError(t, err)
+
+	sdkCtx = sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(22)
+	f.ctx = sdkCtx
+	_, err = msgServer.StartSlotRepair(f.ctx, &types.MsgStartSlotRepair{
+		Creator:         user,
+		DealId:          res.DealId,
+		Slot:            0,
+		PendingProvider: candidate1,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "attempts cap")
+}
+
 func TestMode2SlotRepairRequiresQuota(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)
