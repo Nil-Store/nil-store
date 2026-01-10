@@ -3,6 +3,7 @@ package keeper
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -64,6 +65,37 @@ func (k queryServer) GetProvider(goCtx context.Context, req *types.QueryGetProvi
 	}
 
 	return &types.QueryGetProviderResponse{Provider: &val}, nil
+}
+
+func (k queryServer) GetProviderBond(goCtx context.Context, req *types.QueryGetProviderBondRequest) (*types.QueryGetProviderBondResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+	if strings.TrimSpace(req.Address) == "" {
+		return nil, status.Error(codes.InvalidArgument, "address is required")
+	}
+
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if _, err := k.k.Providers.Get(ctx, req.Address); err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "provider not found")
+		}
+		return nil, status.Error(codes.Internal, "internal error")
+	}
+
+	bond, err := k.k.ProviderBonds.Get(ctx, req.Address)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			bond, err = k.k.buildProviderBondState(ctx, req.Address)
+			if err != nil {
+				return nil, status.Error(codes.Internal, err.Error())
+			}
+		} else {
+			return nil, status.Error(codes.Internal, "internal error")
+		}
+	}
+
+	return &types.QueryGetProviderBondResponse{Bond: &bond}, nil
 }
 
 func (k queryServer) ListProviders(goCtx context.Context, req *types.QueryListProvidersRequest) (*types.QueryListProvidersResponse, error) {

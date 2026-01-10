@@ -50,7 +50,7 @@ func (b *trackingBankKeeper) SpendableCoins(_ context.Context, addr sdk.AccAddre
 	if coins, ok := b.accountBalances[addr.String()]; ok {
 		return coins
 	}
-	return sdk.NewCoins()
+	return sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 1_000_000))
 }
 
 func (b *trackingBankKeeper) MintCoins(_ context.Context, moduleName string, amt sdk.Coins) error {

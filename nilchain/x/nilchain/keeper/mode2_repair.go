@@ -34,6 +34,8 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 		return "", fmt.Errorf("mode2 slot map is empty")
 	}
 
+	params := k.GetParams(ctx)
+
 	outgoing := ""
 	if int(slot) >= 0 && int(slot) < len(deal.Mode2Slots) {
 		if s := deal.Mode2Slots[int(slot)]; s != nil {
@@ -62,6 +64,9 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 		if !providerMatchesServiceHint(provider, deal.ServiceHint) {
 			return false, nil
 		}
+		if !k.providerMeetsMinBond(ctx, provider, params) {
+			return false, nil
+		}
 		if _, blocked := exclude[strings.TrimSpace(provider.Address)]; blocked {
 			return false, nil
 		}
@@ -81,6 +86,9 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 				return false, nil
 			}
 			if !providerMatchesServiceHint(provider, deal.ServiceHint) {
+				return false, nil
+			}
+			if !k.providerMeetsMinBond(ctx, provider, params) {
 				return false, nil
 			}
 			cand := strings.TrimSpace(provider.Address)

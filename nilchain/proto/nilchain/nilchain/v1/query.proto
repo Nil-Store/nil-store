@@ -43,6 +43,11 @@ service Query {
     option (google.api.http).get = "/nilchain/nilchain/v1/providers/{address}";
   }
 
+  // Queries bond state for a Provider by address.
+  rpc GetProviderBond(QueryGetProviderBondRequest) returns (QueryGetProviderBondResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/providers/{address}/bond";
+  }
+
   // Queries the Heat State for a Deal.
   rpc GetDealHeat(QueryGetDealHeatRequest) returns (QueryGetDealHeatResponse) {
     option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/heat";
@@ -142,6 +147,14 @@ message QueryGetProviderRequest {
 
 message QueryGetProviderResponse {
   Provider provider = 1;
+}
+
+message QueryGetProviderBondRequest {
+  string address = 1;
+}
+
+message QueryGetProviderBondResponse {
+  ProviderBondState bond = 1;
 }
 
 message QueryGetDealHeatRequest {

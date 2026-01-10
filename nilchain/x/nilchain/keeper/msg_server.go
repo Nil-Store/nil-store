@@ -332,6 +332,14 @@ func (k msgServer) RegisterProvider(goCtx context.Context, msg *types.MsgRegiste
 		return nil, fmt.Errorf("failed to set provider: %w", err)
 	}
 
+	bondState, err := k.buildProviderBondState(ctx, provider.Address)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidAddress.Wrapf("invalid provider address: %s", err)
+	}
+	if err := k.ProviderBonds.Set(ctx, provider.Address, bondState); err != nil {
+		return nil, fmt.Errorf("failed to set provider bond state: %w", err)
+	}
+
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(
 			types.TypeMsgRegisterProvider,

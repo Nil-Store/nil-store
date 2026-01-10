@@ -35,6 +35,7 @@ type Keeper struct {
 	DealCount               collections.Sequence
 	Deals                   collections.Map[uint64, types.Deal]
 	Providers               collections.Map[string, types.Provider] // Key by address string
+	ProviderBonds           collections.Map[string, types.ProviderBondState]
 	DealProviderStatus      collections.Map[collections.Pair[uint64, string], uint64]
 	DealProviderFailures    collections.Map[collections.Pair[uint64, string], uint64]
 	DealProviderHealth      collections.Map[collections.Pair[uint64, string], types.HealthState]
@@ -45,10 +46,10 @@ type Keeper struct {
 	EvmNonces               collections.Map[string, uint64]
 	DealHeatStates          collections.Map[uint64, types.DealHeatState]
 
-	RetrievalSessions           collections.Map[[]byte, types.RetrievalSession]
-	RetrievalSessionsByOwner    collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionsByProvider collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionNonces      collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
+	RetrievalSessions             collections.Map[[]byte, types.RetrievalSession]
+	RetrievalSessionsByOwner      collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionsByProvider   collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionNonces        collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
 	RetrievalSessionProofProvider collections.Map[[]byte, string]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
@@ -97,6 +98,7 @@ func NewKeeper(
 		DealCount:               collections.NewSequence(sb, types.DealCountKey, "deal_count"),
 		Deals:                   collections.NewMap(sb, types.DealsKey, "deals", collections.Uint64Key, codec.CollValue[types.Deal](cdc)),
 		Providers:               collections.NewMap(sb, types.ProvidersKey, "providers", collections.StringKey, codec.CollValue[types.Provider](cdc)),
+		ProviderBonds:           collections.NewMap(sb, types.ProviderBondsKey, "provider_bonds", collections.StringKey, codec.CollValue[types.ProviderBondState](cdc)),
 		DealProviderStatus:      collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		DealProviderFailures:    collections.NewMap(sb, types.DealProviderFailuresKey, "deal_provider_failures", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		DealProviderHealth:      collections.NewMap(sb, types.DealProviderHealthKey, "deal_provider_health", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), codec.CollValue[types.HealthState](cdc)),
@@ -202,6 +204,7 @@ func NewKeeper(
 // from the active provider list, respecting service hints and diversity constraints.
 func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte, serviceHint string, count uint64) ([]string, error) {
 	var allProviders []types.Provider
+	params := k.GetParams(ctx)
 
 	// Collect all providers
 	err := k.Providers.Walk(ctx, nil, func(key string, provider types.Provider) (stop bool, err error) {
@@ -226,11 +229,17 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 
 		// Apply service hint filter
 		if serviceHint == "Hot" && (provider.Capabilities == "General" || provider.Capabilities == "Edge") {
-			candidateProviders = append(candidateProviders, provider)
+			if k.providerMeetsMinBond(ctx, provider, params) {
+				candidateProviders = append(candidateProviders, provider)
+			}
 		} else if serviceHint == "Cold" && (provider.Capabilities == "Archive" || provider.Capabilities == "General") {
-			candidateProviders = append(candidateProviders, provider)
+			if k.providerMeetsMinBond(ctx, provider, params) {
+				candidateProviders = append(candidateProviders, provider)
+			}
 		} else if serviceHint == "" || serviceHint == "General" { // Default/No specific hint, consider General and above
-			candidateProviders = append(candidateProviders, provider)
+			if k.providerMeetsMinBond(ctx, provider, params) {
+				candidateProviders = append(candidateProviders, provider)
+			}
 		}
 	}
 
