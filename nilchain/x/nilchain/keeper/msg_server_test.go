@@ -1095,3 +1095,127 @@ func TestSignalSaturation(t *testing.T) {
 	_, err = msgServer.SignalSaturation(f.ctx, msgSigBad)
 	require.Error(t, err) // Should be unauthorized
 }
+
+func TestSignalSaturationSpendWindowReset(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	params := f.keeper.GetParams(f.ctx)
+	params.MonthLenBlocks = 10
+	require.NoError(t, f.keeper.Params.Set(f.ctx, params))
+
+	// Register Providers
+	numProviders := 30
+	for i := 0; i < numProviders; i++ {
+		addrBz := []byte(fmt.Sprintf("prov_sat_reset_%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		msgReg := &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		}
+		_, err := msgServer.RegisterProvider(f.ctx, msgReg)
+		require.NoError(t, err)
+	}
+
+	// Create Deal
+	userBz := []byte("user_sat_reset____")
+	user, _ := f.addressCodec.BytesToString(userBz)
+	msgDeal := &types.MsgCreateDeal{
+		Creator: user, DurationBlocks: 100, ServiceHint: "General",
+		InitialEscrowAmount: math.NewInt(1000), MaxMonthlySpend: math.NewInt(1000),
+	}
+	resDeal, err := msgServer.CreateDeal(f.ctx, msgDeal)
+	require.NoError(t, err)
+	dealID := resDeal.DealId
+
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator:     user,
+		DealId:      dealID,
+		Cid:         dummyManifestCid,
+		Size_:       100,
+		TotalMdus:   3,
+		WitnessMdus: 1,
+	})
+	require.NoError(t, err)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, dealID)
+	require.NoError(t, err)
+	deal.SpendWindowStartHeight = 1
+	deal.SpendWindowSpent = math.NewInt(999)
+	require.NoError(t, f.keeper.Deals.Set(f.ctx, dealID, deal))
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx)
+	f.ctx = sdkCtx.WithBlockHeight(11)
+
+	assignedProv := resDeal.AssignedProviders[0]
+	msgSig := &types.MsgSignalSaturation{
+		Creator: assignedProv,
+		DealId:  dealID,
+	}
+
+	_, err = msgServer.SignalSaturation(f.ctx, msgSig)
+	require.NoError(t, err)
+
+	deal, err = f.keeper.Deals.Get(f.ctx, dealID)
+	require.NoError(t, err)
+	elasticityCost := math.NewIntFromUint64(params.BaseStripeCost).Mul(math.NewIntFromUint64(types.DealBaseReplication))
+	require.Equal(t, uint64(11), deal.SpendWindowStartHeight)
+	require.Equal(t, elasticityCost, deal.SpendWindowSpent)
+}
+
+func TestSignalSaturationSpendWindowCap(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	// Register Providers
+	numProviders := 30
+	for i := 0; i < numProviders; i++ {
+		addrBz := []byte(fmt.Sprintf("prov_sat_cap_%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		msgReg := &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		}
+		_, err := msgServer.RegisterProvider(f.ctx, msgReg)
+		require.NoError(t, err)
+	}
+
+	// Create Deal with tight cap.
+	userBz := []byte("user_sat_cap______")
+	user, _ := f.addressCodec.BytesToString(userBz)
+	msgDeal := &types.MsgCreateDeal{
+		Creator: user, DurationBlocks: 100, ServiceHint: "General",
+		InitialEscrowAmount: math.NewInt(1000), MaxMonthlySpend: math.NewInt(50),
+	}
+	resDeal, err := msgServer.CreateDeal(f.ctx, msgDeal)
+	require.NoError(t, err)
+	dealID := resDeal.DealId
+
+	_, err = msgServer.UpdateDealContent(f.ctx, &types.MsgUpdateDealContent{
+		Creator:     user,
+		DealId:      dealID,
+		Cid:         dummyManifestCid,
+		Size_:       100,
+		TotalMdus:   3,
+		WitnessMdus: 1,
+	})
+	require.NoError(t, err)
+
+	assignedProv := resDeal.AssignedProviders[0]
+	msgSig := &types.MsgSignalSaturation{
+		Creator: assignedProv,
+		DealId:  dealID,
+	}
+
+	_, err = msgServer.SignalSaturation(f.ctx, msgSig)
+	require.Error(t, err)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, dealID)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(1000), deal.EscrowBalance)
+	require.Equal(t, math.NewInt(0), deal.SpendWindowSpent)
+}
