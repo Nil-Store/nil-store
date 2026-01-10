@@ -78,6 +78,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-AUDIT-001 | done | audit budget minting + carryover/expiry + tests | c318180 | -`
 * `2026-01-10 | TASK P0-AUDIT-002 | in progress | start audit debt tracking + budget spend helper | - | -`
 * `2026-01-10 | TASK P0-AUDIT-002 | done | audit debt state/query + audit budget spend helper + tests | 2368aa9 | -`
+* `2026-01-10 | TASK P0-DEPUTY-003 | in progress | start AskForProxy request/response + gateway proxy fallback integration | - | -`
+* `2026-01-10 | TASK P0-DEPUTY-003 | done | AskForProxy http bridge + gateway proxy fallback + proof-of-failure CLI/tests | 6106e7a | -`
 
 ---
 
@@ -1273,7 +1275,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-DEPUTY-003 — Deputy routing (gateway + p2p): AskForProxy → deputy serves → chain settlement
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nil_p2p/`, `nil_gateway/`
 * **Depends on:** `P0-DEPUTY-001`, `P0-DEPUTY-002`, `P0-AUDIT-001`
