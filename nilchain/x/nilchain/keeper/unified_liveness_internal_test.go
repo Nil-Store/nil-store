@@ -59,3 +59,24 @@ func TestMode2SlotActiveForSynthetic(t *testing.T) {
 	legacy := types.Deal{RedundancyMode: 2}
 	require.True(t, mode2SlotActiveForSynthetic(legacy, 0))
 }
+
+func TestMode2SlotRewardEligible(t *testing.T) {
+	stripe := stripeParams{mode: 2, rows: 4, leafCount: 12, slotCount: 3}
+	deal := types.Deal{
+		RedundancyMode: 2,
+		Mode2Profile:   &types.StripeReplicaProfile{K: 2, M: 1},
+		Mode2Slots: []*types.DealSlot{
+			{Slot: 0, Status: types.SlotStatus_SLOT_STATUS_ACTIVE},
+			{Slot: 1, Status: types.SlotStatus_SLOT_STATUS_REPAIRING},
+			{Slot: 2, Status: types.SlotStatus_SLOT_STATUS_ACTIVE},
+		},
+	}
+
+	eligible, err := mode2SlotRewardEligible(deal, stripe, 0)
+	require.NoError(t, err)
+	require.True(t, eligible)
+
+	eligible, err = mode2SlotRewardEligible(deal, stripe, 4)
+	require.NoError(t, err)
+	require.False(t, eligible)
+}

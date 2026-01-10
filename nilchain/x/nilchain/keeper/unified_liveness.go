@@ -454,6 +454,27 @@ func mode2SlotActiveForSynthetic(deal types.Deal, slot uint32) bool {
 	return entry.Status == types.SlotStatus_SLOT_STATUS_ACTIVE
 }
 
+func mode2SlotRewardEligible(deal types.Deal, stripe stripeParams, blobIndex uint32) (bool, error) {
+	if stripe.mode != 2 || deal.RedundancyMode != 2 {
+		return true, nil
+	}
+	if len(deal.Mode2Slots) == 0 {
+		return true, nil
+	}
+	slot, err := leafSlotIndex(uint64(blobIndex), stripe.rows)
+	if err != nil {
+		return false, err
+	}
+	if int(slot) < 0 || int(slot) >= len(deal.Mode2Slots) {
+		return false, fmt.Errorf("slot %d out of bounds", slot)
+	}
+	entry := deal.Mode2Slots[int(slot)]
+	if entry == nil {
+		return false, fmt.Errorf("slot %d is nil", slot)
+	}
+	return entry.Status == types.SlotStatus_SLOT_STATUS_ACTIVE, nil
+}
+
 func matchesMode2SyntheticChallenge(seed [32]byte, dealID uint64, currentGen uint64, slot uint32, in quotaInputs, stripe stripeParams, required uint64, mduIndex uint64, blobIndex uint32) bool {
 	slotU64 := uint64(slot)
 	for i := uint64(0); i < required; i++ {

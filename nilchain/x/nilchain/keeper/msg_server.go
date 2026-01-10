@@ -1060,6 +1060,21 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	var bandwidthBytes uint64
 	var isUserReceipt bool
+	rewardEligible := true
+	checkRewardEligibility := func(blobIndex uint32) {
+		if !rewardEligible {
+			return
+		}
+		eligible, err := mode2SlotRewardEligible(deal, stripe, blobIndex)
+		if err != nil {
+			ctx.Logger().Error("failed to evaluate reward eligibility", "error", err, "deal", msg.DealId, "blob_index", blobIndex)
+			rewardEligible = false
+			return
+		}
+		if !eligible {
+			rewardEligible = false
+		}
+	}
 
 	verifyRetrievalReceipt := func(receipt *types.RetrievalReceipt) error {
 		if receipt == nil {
@@ -1111,6 +1126,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		if !ok {
 			return sdkerrors.ErrUnauthorized.Wrap("invalid liveness proof")
 		}
+		checkRewardEligibility(receipt.ProofDetails.BlobIndex)
 
 		// Reconstruct signed message buffer (Cosmos signing path).
 		// This is not EIP-712; it exists as a fallback for local keyring flows.
@@ -1255,6 +1271,7 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 				}
 				return nil, err
 			}
+			checkRewardEligibility(pt.SystemProof.BlobIndex)
 		}
 	case *types.MsgProveLiveness_UserReceipt:
 		isUserReceipt = true
@@ -1380,6 +1397,8 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 				return nil, sdkerrors.ErrUnauthorized.Wrap("invalid session chunk merkle proof")
 			}
 
+			checkRewardEligibility(chunk.ProofDetails.BlobIndex)
+
 			if totalBytes > totalBytes+chunk.RangeLen {
 				return nil, sdkerrors.ErrInvalidRequest.Wrap("session bytes overflow")
 			}
@@ -1413,28 +1432,36 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 
 	var bandwidthPayment math.Int
 	if isUserReceipt {
-		// Bandwidth payment (devnet): charge proportional to bytes served so that
-		// chunked (blob-sized) receipts don't exhaust escrow immediately.
-		//
-		// Units are the base denom (micro-NIL). Current placeholder pricing:
-		//   1 unit per KiB (rounded up).
-		const bytesPerUnit = uint64(1024)
-		units := (bandwidthBytes + bytesPerUnit - 1) / bytesPerUnit
-		if units == 0 {
-			units = 1
-		}
-		bandwidthPayment = math.NewIntFromUint64(units)
+		if !rewardEligible {
+			bandwidthPayment = math.ZeroInt()
+		} else {
+			// Bandwidth payment (devnet): charge proportional to bytes served so that
+			// chunked (blob-sized) receipts don't exhaust escrow immediately.
+			//
+			// Units are the base denom (micro-NIL). Current placeholder pricing:
+			//   1 unit per KiB (rounded up).
+			const bytesPerUnit = uint64(1024)
+			units := (bandwidthBytes + bytesPerUnit - 1) / bytesPerUnit
+			if units == 0 {
+				units = 1
+			}
+			bandwidthPayment = math.NewIntFromUint64(units)
 
-		newEscrowBalance := deal.EscrowBalance.Sub(bandwidthPayment)
-		if newEscrowBalance.IsNegative() {
-			return nil, sdkerrors.ErrInsufficientFunds.Wrapf("deal %d escrow exhausted", msg.DealId)
+			newEscrowBalance := deal.EscrowBalance.Sub(bandwidthPayment)
+			if newEscrowBalance.IsNegative() {
+				return nil, sdkerrors.ErrInsufficientFunds.Wrapf("deal %d escrow exhausted", msg.DealId)
+			}
+			deal.EscrowBalance = newEscrowBalance
 		}
-		deal.EscrowBalance = newEscrowBalance
 	} else {
 		bandwidthPayment = math.NewInt(0)
 	}
 
 	totalReward := storageReward.Add(bandwidthPayment)
+	if !rewardEligible {
+		storageReward = math.ZeroInt()
+		totalReward = storageReward.Add(bandwidthPayment)
+	}
 
 	// --- REWARD ACCUMULATION ---
 	if totalReward.IsPositive() {
