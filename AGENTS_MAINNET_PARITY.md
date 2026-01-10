@@ -50,6 +50,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-09 | TASK P0-QUOTAS-SIM-003 | done | add deterministic challenge derivation sim test | 62492e7 | -`
 * `2026-01-09 | TASK P0-HEALTH-001 | in progress | start HealthState updates + eviction thresholds | - | -`
 * `2026-01-09 | TASK P0-HEALTH-001 | done | add health state tracking + hot/cold eviction tests | 5f63784 | -`
+* `2026-01-09 | TASK P0-MODE2-MBB-001 | in progress | start make-before-break repair state machine | - | -`
+* `2026-01-09 | TASK P0-MODE2-MBB-001 | done | gate slot repair promotion on quota readiness + tests | 0746542 | -`
 
 ---
 
@@ -687,7 +689,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-MODE2-MBB-001 — Make-before-break replacement state machine (slot status, catch-up, promotion)
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, `rfcs/rfc-mode2-onchain-state.md`
 * **Depends on:** `P0-PARAMS-001`, `P0-HEALTH-001`
