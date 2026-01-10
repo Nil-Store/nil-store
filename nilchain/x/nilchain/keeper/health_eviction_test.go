@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 
@@ -70,9 +71,9 @@ func TestProveLiveness_HealthFailures_StartMode2Repair(t *testing.T) {
 	// chain should start a Mode 2 repair by attaching a pending provider.
 	for i := 0; i < 3; i++ {
 		res, err := msgServer.ProveLiveness(sdkCtx, &types.MsgProveLiveness{
-			Creator:  providerA,
-			DealId:   dealID,
-			EpochId:  1,
+			Creator:   providerA,
+			DealId:    dealID,
+			EpochId:   1,
 			ProofType: &types.MsgProveLiveness_SystemProof{SystemProof: nil},
 		})
 		require.NoError(t, err)
@@ -88,6 +89,10 @@ func TestProveLiveness_HealthFailures_StartMode2Repair(t *testing.T) {
 	require.Equal(t, types.SlotStatus_SLOT_STATUS_REPAIRING, slot0.Status)
 	require.Equal(t, providerD, slot0.PendingProvider)
 
+	state, err := f.keeper.DealProviderHealth.Get(sdkCtx, collections.Join(dealID, providerA))
+	require.NoError(t, err)
+	require.Equal(t, uint64(3), state.HardFailures)
+
 	var foundEvidence bool
 	require.NoError(t, f.keeper.Proofs.Walk(sdkCtx, nil, func(_ uint64, proof types.Proof) (bool, error) {
 		if strings.Contains(proof.Commitment, "evidence:provider_degraded_repair_started") {
@@ -99,4 +104,3 @@ func TestProveLiveness_HealthFailures_StartMode2Repair(t *testing.T) {
 	}))
 	require.True(t, foundEvidence)
 }
-

@@ -719,9 +719,9 @@ func TestProveLiveness_HappyPath(t *testing.T) {
 	require.Equal(t, uint32(0), res.Tier) // Platinum
 	t.Logf("Proof Accepted! Reward: %s", res.RewardAmount)
 
-	// Health stub: ensure that no failures are recorded for this
+	// Health state: ensure that no failures are recorded for this
 	// (deal, provider) pair after a successful proof.
-	_, err = f.keeper.DealProviderFailures.Get(f.ctx, collections.Join(resDeal.DealId, assignedProvider))
+	_, err = f.keeper.DealProviderHealth.Get(f.ctx, collections.Join(resDeal.DealId, assignedProvider))
 	require.ErrorIs(t, err, collections.ErrNotFound)
 }
 

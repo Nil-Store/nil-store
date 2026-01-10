@@ -93,6 +93,15 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					if err := k.Mode1MissedEpochs.Set(ctx, missedKey, prev+1); err != nil {
 						return false, err
 					}
+					state, _, err := k.getProviderHealthState(sdkCtx, dealID, provider)
+					if err != nil {
+						return false, err
+					}
+					state.MissedEpochs = prev + 1
+					state.LastUpdateHeight = sdkCtx.BlockHeight()
+					if err := k.setProviderHealthState(sdkCtx, dealID, provider, state); err != nil {
+						return false, err
+					}
 					sdkCtx.Logger().Info(
 						"quota missed (mode1)",
 						"epoch", epochID,
@@ -117,6 +126,17 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 				} else {
 					if err := k.Mode1MissedEpochs.Remove(ctx, missedKey); err != nil && !errors.Is(err, collections.ErrNotFound) {
 						return false, err
+					}
+					state, _, err := k.getProviderHealthState(sdkCtx, dealID, provider)
+					if err != nil {
+						return false, err
+					}
+					if state.MissedEpochs != 0 {
+						state.MissedEpochs = 0
+						state.LastUpdateHeight = sdkCtx.BlockHeight()
+						if err := k.setProviderHealthState(sdkCtx, dealID, provider, state); err != nil {
+							return false, err
+						}
 					}
 				}
 			}
@@ -184,6 +204,15 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 							dealChanged = true
 							_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
 							_ = k.Mode2DeputyMissedEpochs.Remove(ctx, missedKey)
+							if state, _, err := k.getSlotHealthState(sdkCtx, dealID, slot); err == nil {
+								state.MissedEpochs = 0
+								state.LastUpdateHeight = sdkCtx.BlockHeight()
+								if err := k.setSlotHealthState(sdkCtx, dealID, slot, state); err != nil {
+									return false, err
+								}
+							} else {
+								return false, err
+							}
 
 							extra := make([]byte, 0, 4)
 							extra = binary.BigEndian.AppendUint32(extra, slot)
@@ -300,6 +329,15 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					if err := k.Mode2MissedEpochs.Set(ctx, missedKey, nextMissed); err != nil {
 						return false, err
 					}
+					state, _, err := k.getSlotHealthState(sdkCtx, dealID, slot)
+					if err != nil {
+						return false, err
+					}
+					state.MissedEpochs = nextMissed
+					state.LastUpdateHeight = sdkCtx.BlockHeight()
+					if err := k.setSlotHealthState(sdkCtx, dealID, slot, state); err != nil {
+						return false, err
+					}
 					sdkCtx.Logger().Info(
 						"quota missed (mode2)",
 						"epoch", epochID,
@@ -372,6 +410,17 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 				} else {
 					if err := k.Mode2MissedEpochs.Remove(ctx, missedKey); err != nil && !errors.Is(err, collections.ErrNotFound) {
 						return false, err
+					}
+					state, _, err := k.getSlotHealthState(sdkCtx, dealID, slot)
+					if err != nil {
+						return false, err
+					}
+					if state.MissedEpochs != 0 {
+						state.MissedEpochs = 0
+						state.LastUpdateHeight = sdkCtx.BlockHeight()
+						if err := k.setSlotHealthState(sdkCtx, dealID, slot, state); err != nil {
+							return false, err
+						}
 					}
 				}
 			}

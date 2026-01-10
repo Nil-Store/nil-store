@@ -27,6 +27,8 @@ var (
 	ProvidersKey                   = collections.NewPrefix("Providers/value/")
 	DealProviderStatusKey          = collections.NewPrefix("DealProviderStatus/value/")
 	DealProviderFailuresKey        = collections.NewPrefix("DealProviderFailures/value/")
+	DealProviderHealthKey          = collections.NewPrefix("DealProviderHealth/value/")
+	DealSlotHealthKey              = collections.NewPrefix("DealSlotHealth/value/")
 	ProviderRewardsKey             = collections.NewPrefix("ProviderRewards/value/")
 	ReceiptNonceKey                = collections.NewPrefix("ReceiptNonce/value/")
 	ReceiptNonceDealFileKey        = collections.NewPrefix("ReceiptNonceDealFile/value/")

@@ -95,9 +95,10 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), heat.FailedChallengesTotal)
 
-	failures, err := f.keeper.DealProviderFailures.Get(ctxExpired, collections.Join(resDeal.DealId, assignedProvider))
+	state, err := f.keeper.DealProviderHealth.Get(ctxExpired, collections.Join(resDeal.DealId, assignedProvider))
 	require.NoError(t, err)
-	require.Equal(t, uint64(1), failures)
+	require.Equal(t, uint64(1), state.HardFailures)
+	require.Equal(t, int64(10), state.LastUpdateHeight)
 
 	var (
 		foundEvidence bool

@@ -1499,24 +1499,25 @@ func (k msgServer) recordProofSummary(ctx sdk.Context, msg *types.MsgProveLivene
 // failure counter and logs when a pair would be considered "degraded" under a
 // full HealthState-based eviction policy.
 func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider string, proofOK bool) {
-	key := collections.Join(dealID, provider)
+	state, _, err := k.getProviderHealthState(ctx, dealID, provider)
+	if err != nil {
+		ctx.Logger().Error("failed to get provider health state", "deal", dealID, "provider", provider, "error", err)
+		return
+	}
 
 	if proofOK {
-		// Reset failure counter on success.
-		if err := k.DealProviderFailures.Remove(ctx, key); err != nil && !errors.Is(err, collections.ErrNotFound) {
-			ctx.Logger().Error("failed to reset provider failure counter", "deal", dealID, "provider", provider, "error", err)
+		state.HardFailures = 0
+		state.LastUpdateHeight = ctx.BlockHeight()
+		if err := k.setProviderHealthState(ctx, dealID, provider, state); err != nil {
+			ctx.Logger().Error("failed to reset provider health state", "deal", dealID, "provider", provider, "error", err)
 		}
 		return
 	}
 
-	// Increment failure counter on invalid proof.
-	current, err := k.DealProviderFailures.Get(ctx, key)
-	if err != nil && !errors.Is(err, collections.ErrNotFound) {
-		ctx.Logger().Error("failed to get provider failure counter", "deal", dealID, "provider", provider, "error", err)
-	}
-	failures := current + 1
-	if err := k.DealProviderFailures.Set(ctx, key, failures); err != nil {
-		ctx.Logger().Error("failed to update provider failure counter", "deal", dealID, "provider", provider, "error", err)
+	state.HardFailures++
+	state.LastUpdateHeight = ctx.BlockHeight()
+	if err := k.setProviderHealthState(ctx, dealID, provider, state); err != nil {
+		ctx.Logger().Error("failed to update provider health state", "deal", dealID, "provider", provider, "error", err)
 		return
 	}
 
@@ -1524,12 +1525,12 @@ func (k msgServer) trackProviderHealth(ctx sdk.Context, dealID uint64, provider 
 	// informational and gives operators a sense of which pairs would be
 	// considered for eviction in a mainnet-grade HealthState implementation.
 	const failureThreshold uint64 = 3
-	if failures == failureThreshold {
+	if state.HardFailures == failureThreshold {
 		ctx.Logger().Info(
 			"provider health degraded for deal; would consider eviction in full self-healing mode",
 			"deal", dealID,
 			"provider", provider,
-			"failures", failures,
+			"failures", state.HardFailures,
 		)
 
 		// PoC eviction outcome for Mode 2: when a provider repeatedly submits bad

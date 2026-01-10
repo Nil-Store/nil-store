@@ -70,6 +70,13 @@ message DealHeatState {
   uint64 successful_retrievals_total = 4;
 }
 
+// HealthState tracks soft/hard failure counters for a deal assignment.
+message HealthState {
+  uint64 missed_epochs = 1;
+  uint64 hard_failures = 2;
+  int64 last_update_height = 3;
+}
+
 // Provider represents a Storage Provider in the network.
 message Provider {
   string address = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];

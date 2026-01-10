@@ -37,6 +37,8 @@ type Keeper struct {
 	Providers               collections.Map[string, types.Provider] // Key by address string
 	DealProviderStatus      collections.Map[collections.Pair[uint64, string], uint64]
 	DealProviderFailures    collections.Map[collections.Pair[uint64, string], uint64]
+	DealProviderHealth      collections.Map[collections.Pair[uint64, string], types.HealthState]
+	DealSlotHealth          collections.Map[collections.Pair[uint64, uint32], types.HealthState]
 	ProviderRewards         collections.Map[string, math.Int]
 	ReceiptNonces           collections.Map[string, uint64]
 	ReceiptNoncesByDealFile collections.Map[collections.Pair[uint64, string], uint64]
@@ -97,6 +99,8 @@ func NewKeeper(
 		Providers:               collections.NewMap(sb, types.ProvidersKey, "providers", collections.StringKey, codec.CollValue[types.Provider](cdc)),
 		DealProviderStatus:      collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		DealProviderFailures:    collections.NewMap(sb, types.DealProviderFailuresKey, "deal_provider_failures", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
+		DealProviderHealth:      collections.NewMap(sb, types.DealProviderHealthKey, "deal_provider_health", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), codec.CollValue[types.HealthState](cdc)),
+		DealSlotHealth:          collections.NewMap(sb, types.DealSlotHealthKey, "deal_slot_health", collections.PairKeyCodec(collections.Uint64Key, collections.Uint32Key), codec.CollValue[types.HealthState](cdc)),
 		ProviderRewards:         collections.NewMap(sb, types.ProviderRewardsKey, "provider_rewards", collections.StringKey, sdk.IntValue),
 		ReceiptNonces:           collections.NewMap(sb, types.ReceiptNonceKey, "receipt_nonces", collections.StringKey, collections.Uint64Value),
 		ReceiptNoncesByDealFile: collections.NewMap(sb, types.ReceiptNonceDealFileKey, "receipt_nonces_by_deal_file", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
