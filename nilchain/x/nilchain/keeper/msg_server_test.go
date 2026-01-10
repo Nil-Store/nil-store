@@ -295,6 +295,87 @@ func TestMode2SlotRepairLifecycle(t *testing.T) {
 	require.Equal(t, dealAfterStart.CurrentGen+1, dealAfterComplete.CurrentGen)
 }
 
+func TestMode2SlotRepairRequiresQuota(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	// Ensure a non-zero block height for epoch computation.
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(1)
+	f.ctx = sdkCtx
+
+	// Register providers.
+	numProviders := 20
+	for i := 0; i < numProviders; i++ {
+		addrBz := []byte(fmt.Sprintf("provider_mode2_quota___%02d", i))
+		addr, _ := f.addressCodec.BytesToString(addrBz)
+		msgReg := &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 100000000000,
+			Endpoints:    testProviderEndpoints,
+		}
+		_, err := msgServer.RegisterProvider(f.ctx, msgReg)
+		require.NoError(t, err)
+	}
+
+	userBz := []byte("user_mode2_quota____")
+	user, _ := f.addressCodec.BytesToString(userBz)
+	create := &types.MsgCreateDeal{
+		Creator:             user,
+		DurationBlocks:      1000,
+		ServiceHint:         "General:rs=8+4",
+		MaxMonthlySpend:     math.NewInt(500000),
+		InitialEscrowAmount: math.NewInt(1000000),
+	}
+	res, err := msgServer.CreateDeal(f.ctx, create)
+	require.NoError(t, err)
+
+	deal, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	require.Len(t, deal.Mode2Slots, int(types.DealBaseReplication))
+
+	deal.TotalMdus = 2
+	deal.WitnessMdus = 0
+	require.NoError(t, f.keeper.Deals.Set(f.ctx, deal.Id, deal))
+
+	oldProvider := deal.Mode2Slots[0].Provider
+	candidate := deal.Mode2Slots[1].Provider
+	require.NotEqual(t, oldProvider, candidate)
+
+	_, err = msgServer.StartSlotRepair(f.ctx, &types.MsgStartSlotRepair{
+		Creator:         user,
+		DealId:          res.DealId,
+		Slot:            0,
+		PendingProvider: candidate,
+	})
+	require.NoError(t, err)
+
+	_, err = msgServer.CompleteSlotRepair(f.ctx, &types.MsgCompleteSlotRepair{
+		Creator: candidate,
+		DealId:  res.DealId,
+		Slot:    0,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "quota not met")
+
+	epochID := uint64(1)
+	keyEpoch := collections.Join(collections.Join(deal.Id, uint32(0)), epochID)
+	require.NoError(t, f.keeper.Mode2EpochSynthetic.Set(f.ctx, keyEpoch, 1000))
+
+	_, err = msgServer.CompleteSlotRepair(f.ctx, &types.MsgCompleteSlotRepair{
+		Creator: candidate,
+		DealId:  res.DealId,
+		Slot:    0,
+	})
+	require.NoError(t, err)
+
+	updated, err := f.keeper.Deals.Get(f.ctx, res.DealId)
+	require.NoError(t, err)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_ACTIVE, updated.Mode2Slots[0].Status)
+	require.Equal(t, candidate, updated.Mode2Slots[0].Provider)
+	require.Equal(t, "", updated.Mode2Slots[0].PendingProvider)
+}
+
 func TestProveLiveness_RepairingSlotRejected(t *testing.T) {
 	f := initFixture(t)
 	msgServer := keeper.NewMsgServerImpl(f.keeper)

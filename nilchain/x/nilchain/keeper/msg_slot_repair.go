@@ -39,8 +39,8 @@ func (k msgServer) StartSlotRepair(goCtx context.Context, msg *types.MsgStartSlo
 	if slot == nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("mode2 slot %d is nil", msg.Slot)
 	}
-	if slot.Status == types.SlotStatus_SLOT_STATUS_REPAIRING {
-		return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d is already repairing", msg.Slot)
+	if slot.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d is not active", msg.Slot)
 	}
 
 	pending := strings.TrimSpace(msg.PendingProvider)
@@ -107,6 +107,9 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 	if slot.Status != types.SlotStatus_SLOT_STATUS_REPAIRING || strings.TrimSpace(slot.PendingProvider) == "" {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("slot %d has no pending repair", msg.Slot)
 	}
+	if slot.RepairTargetGen != deal.CurrentGen {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("slot repair target generation is stale")
+	}
 
 	creator := strings.TrimSpace(msg.Creator)
 	if creator == "" {
@@ -114,6 +117,14 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 	}
 	if creator != deal.Owner && creator != strings.TrimSpace(slot.PendingProvider) {
 		return nil, sdkerrors.ErrUnauthorized.Wrap("only deal owner or pending provider can complete slot repair")
+	}
+
+	ready, err := k.slotRepairReady(ctx, deal, msg.Slot)
+	if err != nil {
+		return nil, err
+	}
+	if !ready {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("slot repair not ready (quota not met)")
 	}
 
 	oldProvider := slot.Provider
@@ -149,4 +160,52 @@ func (k msgServer) CompleteSlotRepair(goCtx context.Context, msg *types.MsgCompl
 	)
 
 	return &types.MsgCompleteSlotRepairResponse{Success: true}, nil
+}
+
+func (k msgServer) slotRepairReady(ctx sdk.Context, deal types.Deal, slot uint32) (bool, error) {
+	params := k.GetParams(ctx)
+	if params.EpochLenBlocks == 0 {
+		return false, sdkerrors.ErrInvalidRequest.Wrap("epoch_len_blocks is 0 (liveness disabled)")
+	}
+
+	epochID := epochIDAtHeight(ctx.BlockHeight(), params.EpochLenBlocks)
+	if epochID == 0 {
+		return false, sdkerrors.ErrInvalidRequest.Wrap("epoch id is 0 (liveness disabled)")
+	}
+
+	in, ok := slabInputs(deal)
+	if !ok {
+		return true, nil
+	}
+
+	stripe, err := stripeParamsForDeal(deal)
+	if err != nil {
+		return false, sdkerrors.ErrInvalidRequest.Wrapf("invalid stripe params: %s", err.Error())
+	}
+	if stripe.mode != 2 {
+		return false, sdkerrors.ErrInvalidRequest.Wrap("slot repair readiness only applies to Mode 2 deals")
+	}
+
+	quota := requiredBlobsMode2(params, deal, stripe, in)
+	if quota == 0 {
+		return true, nil
+	}
+
+	keyEpoch := mode2EpochKey(deal.Id, slot, epochID)
+	creditsRaw, err := k.Mode2EpochCredits.Get(ctx, keyEpoch)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return false, err
+	}
+	synth, err := k.Mode2EpochSynthetic.Get(ctx, keyEpoch)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return false, err
+	}
+
+	creditCap := creditCapBlobs(params, deal, quota)
+	credits := creditsRaw
+	if creditCap < credits {
+		credits = creditCap
+	}
+
+	return credits+synth >= quota, nil
 }
