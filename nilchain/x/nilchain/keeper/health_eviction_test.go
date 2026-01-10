@@ -66,19 +66,17 @@ func TestProveLiveness_HealthFailures_StartMode2Repair(t *testing.T) {
 	}
 	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
 
-	// Submit 3 invalid system proofs. The payload is nil, which is considered invalid
-	// but should not revert the tx (it returns Success=false). After 3 failures, the
-	// chain should start a Mode 2 repair by attaching a pending provider.
-	for i := 0; i < 3; i++ {
-		res, err := msgServer.ProveLiveness(sdkCtx, &types.MsgProveLiveness{
-			Creator:   providerA,
-			DealId:    dealID,
-			EpochId:   1,
-			ProofType: &types.MsgProveLiveness_SystemProof{SystemProof: nil},
-		})
-		require.NoError(t, err)
-		require.False(t, res.Success)
-	}
+	// Submit a single invalid system proof. The payload is nil, which is considered invalid
+	// but should not revert the tx (it returns Success=false). Hard-fault evidence should
+	// start a Mode 2 repair by attaching a pending provider immediately.
+	res, err := msgServer.ProveLiveness(sdkCtx, &types.MsgProveLiveness{
+		Creator:   providerA,
+		DealId:    dealID,
+		EpochId:   1,
+		ProofType: &types.MsgProveLiveness_SystemProof{SystemProof: nil},
+	})
+	require.NoError(t, err)
+	require.False(t, res.Success)
 
 	updated, err := f.keeper.Deals.Get(sdkCtx, dealID)
 	require.NoError(t, err)
@@ -91,11 +89,11 @@ func TestProveLiveness_HealthFailures_StartMode2Repair(t *testing.T) {
 
 	state, err := f.keeper.DealProviderHealth.Get(sdkCtx, collections.Join(dealID, providerA))
 	require.NoError(t, err)
-	require.Equal(t, uint64(3), state.HardFailures)
+	require.Equal(t, uint64(1), state.HardFailures)
 
 	var foundEvidence bool
 	require.NoError(t, f.keeper.Proofs.Walk(sdkCtx, nil, func(_ uint64, proof types.Proof) (bool, error) {
-		if strings.Contains(proof.Commitment, "evidence:provider_degraded_repair_started") {
+		if strings.Contains(proof.Commitment, "evidence:hard_fault_repair_started") {
 			foundEvidence = true
 			require.Equal(t, providerA, proof.Creator)
 			require.False(t, proof.Valid)
@@ -105,13 +103,8 @@ func TestProveLiveness_HealthFailures_StartMode2Repair(t *testing.T) {
 	require.True(t, foundEvidence)
 
 	events := sdkCtx.EventManager().Events()
-	require.True(t, hasEventWithAttrs(events, types.TypeHealthEvictThreshold, map[string]string{
-		types.AttributeKeyReason:    "hard_failure",
-		types.AttributeKeyProvider:  providerA,
-		types.AttributeKeyThreshold: "3",
-	}))
 	require.True(t, hasEventWithAttrs(events, types.TypeHealthRepairStarted, map[string]string{
-		types.AttributeKeyReason: "hard_failure",
+		types.AttributeKeyReason: "invalid_proof",
 		types.AttributeKeySlot:   "0",
 	}))
 }

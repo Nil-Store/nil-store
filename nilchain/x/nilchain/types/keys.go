@@ -29,6 +29,7 @@ var (
 	DealProviderFailuresKey          = collections.NewPrefix("DealProviderFailures/value/")
 	DealProviderHealthKey            = collections.NewPrefix("DealProviderHealth/value/")
 	ProviderBondsKey                 = collections.NewPrefix("ProviderBonds/value/")
+	ProviderJailsKey                 = collections.NewPrefix("ProviderJails/value/")
 	DealSlotHealthKey                = collections.NewPrefix("DealSlotHealth/value/")
 	ProviderRewardsKey               = collections.NewPrefix("ProviderRewards/value/")
 	ReceiptNonceKey                  = collections.NewPrefix("ReceiptNonce/value/")
@@ -40,6 +41,7 @@ var (
 	RetrievalSessionsByProviderKey   = collections.NewPrefix("RetrievalSessionsByProvider/value/")
 	RetrievalSessionNonceKey         = collections.NewPrefix("RetrievalSessionNonce/value/")
 	RetrievalSessionProofProviderKey = collections.NewPrefix("RetrievalSessionProofProvider/value/")
+	EvidenceRecordKey                = collections.NewPrefix("EvidenceRecord/value/")
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeedKey               = collections.NewPrefix("EpochSeed/value/")

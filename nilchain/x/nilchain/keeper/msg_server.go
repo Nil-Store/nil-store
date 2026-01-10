@@ -848,6 +848,16 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		}
 		return nil, err
 	}
+	if jailed, endHeight, err := k.providerIsJailed(ctx, creator); err != nil {
+		return nil, err
+	} else if jailed {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is jailed until height %d", msg.Creator, endHeight)
+	}
+	if jailed, endHeight, err := k.providerIsJailed(ctx, creator); err != nil {
+		return nil, err
+	} else if jailed {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is jailed until height %d", msg.Creator, endHeight)
+	}
 
 	_, isSystemProof := msg.ProofType.(*types.MsgProveLiveness_SystemProof)
 	if isSystemProof {
@@ -1217,13 +1227,21 @@ func (k msgServer) ProveLiveness(goCtx context.Context, msg *types.MsgProveLiven
 		if !ok {
 			// Track health for system proofs that fail verification.
 			k.trackProviderHealth(ctx, msg.DealId, msg.Creator, false)
+			extra := make([]byte, 0, 8+4)
 			if pt.SystemProof != nil {
-				extra := make([]byte, 0, 8+4)
 				extra = binary.BigEndian.AppendUint64(extra, pt.SystemProof.MduIndex)
 				extra = binary.BigEndian.AppendUint32(extra, pt.SystemProof.BlobIndex)
-				kind := "system_proof_invalid"
-				eid := deriveEvidenceID(kind, msg.DealId, msg.EpochId, extra)
-				if err := k.recordEvidenceSummary(ctx, msg.DealId, msg.Creator, kind, eid[:], "chain", false); err != nil {
+			}
+			penalized, err := k.applyHardFaultEvidence(ctx, msg.DealId, msg.Creator, "invalid_proof", msg.EpochId, extra, params.SlashInvalidProofBps, params.JailInvalidProofEpochs)
+			if err != nil {
+				ctx.Logger().Error("failed to apply invalid proof penalty", "error", err)
+			}
+			if penalized {
+				if err := k.triggerHardFaultRepair(ctx, msg.DealId, msg.Creator, "invalid_proof"); err != nil {
+					ctx.Logger().Error("failed to start repair for invalid proof", "error", err)
+				}
+				eid := deriveEvidenceID("invalid_proof", msg.DealId, msg.EpochId, extra)
+				if err := k.recordEvidenceSummary(ctx, msg.DealId, msg.Creator, "invalid_proof", eid[:], "chain", false); err != nil {
 					ctx.Logger().Error("failed to record evidence summary", "error", err)
 				}
 			}
@@ -2269,11 +2287,7 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		if err != nil && !errors.Is(err, collections.ErrNotFound) {
 			return nil, err
 		}
-		if errors.Is(err, collections.ErrNotFound) || strings.TrimSpace(existing) == "" {
-			if err := k.RetrievalSessionProofProvider.Set(ctx, msg.SessionId, creator); err != nil {
-				return nil, err
-			}
-		} else if strings.TrimSpace(existing) != creator {
+		if err == nil && strings.TrimSpace(existing) != "" && strings.TrimSpace(existing) != creator {
 			return nil, sdkerrors.ErrInvalidRequest.Wrap("session proofs already submitted by a different provider")
 		}
 	}
@@ -2357,6 +2371,8 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		return v, nil
 	}
 
+	var invalidProof bool
+	var invalidExtra []byte
 	for i := uint64(0); i < session.BlobCount; i++ {
 		p := msg.Proofs[int(i)]
 
@@ -2365,7 +2381,12 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 		expectedBlob := expectedGlobal % stripe.leafCount
 
 		if p.MduIndex != expectedMdu || uint64(p.BlobIndex) != expectedBlob {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("proof mdu/blob index mismatch for session")
+			invalidProof = true
+			invalidExtra = make([]byte, 0, len(msg.SessionId)+8+4)
+			invalidExtra = append(invalidExtra, msg.SessionId...)
+			invalidExtra = binary.BigEndian.AppendUint64(invalidExtra, expectedMdu)
+			invalidExtra = binary.BigEndian.AppendUint32(invalidExtra, uint32(expectedBlob))
+			break
 		}
 
 		ok, err := verifyChainedProof(&p)
@@ -2373,7 +2394,46 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 			return nil, sdkerrors.ErrUnauthorized.Wrapf("triple proof verification error: %s", err)
 		}
 		if !ok {
-			return nil, sdkerrors.ErrUnauthorized.Wrap("invalid liveness proof")
+			invalidProof = true
+			invalidExtra = make([]byte, 0, len(msg.SessionId)+8+4)
+			invalidExtra = append(invalidExtra, msg.SessionId...)
+			invalidExtra = binary.BigEndian.AppendUint64(invalidExtra, expectedMdu)
+			invalidExtra = binary.BigEndian.AppendUint32(invalidExtra, uint32(expectedBlob))
+			break
+		}
+	}
+	if invalidProof {
+		params := k.GetParams(ctx)
+		epochID := k.currentEpoch(ctx)
+		penalized, err := k.applyHardFaultEvidence(ctx, session.DealId, creator, "wrong_data", epochID, invalidExtra, params.SlashWrongDataBps, params.JailWrongDataEpochs)
+		if err != nil {
+			ctx.Logger().Error("failed to apply wrong-data penalty", "error", err)
+		}
+		if penalized {
+			if err := k.triggerHardFaultRepair(ctx, session.DealId, creator, "wrong_data"); err != nil {
+				ctx.Logger().Error("failed to start repair for wrong data", "error", err)
+			}
+			eid := deriveEvidenceID("wrong_data", session.DealId, epochID, invalidExtra)
+			if err := k.recordEvidenceSummary(ctx, session.DealId, creator, "wrong_data", eid[:], msg.Creator, false); err != nil {
+				ctx.Logger().Error("failed to record evidence summary", "error", err)
+			}
+		}
+		if len(msg.SessionId) == 32 {
+			_ = k.RetrievalSessionProofProvider.Remove(ctx, msg.SessionId)
+		}
+		return &types.MsgSubmitRetrievalSessionProofResponse{Success: false}, nil
+	}
+
+	if session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN ||
+		session.Status == types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_USER_CONFIRMED {
+		existing, err := k.RetrievalSessionProofProvider.Get(ctx, msg.SessionId)
+		if err != nil && !errors.Is(err, collections.ErrNotFound) {
+			return nil, err
+		}
+		if errors.Is(err, collections.ErrNotFound) || strings.TrimSpace(existing) == "" {
+			if err := k.RetrievalSessionProofProvider.Set(ctx, msg.SessionId, creator); err != nil {
+				return nil, err
+			}
 		}
 	}
 

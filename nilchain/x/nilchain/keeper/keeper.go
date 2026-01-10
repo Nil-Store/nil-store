@@ -36,6 +36,7 @@ type Keeper struct {
 	Deals                   collections.Map[uint64, types.Deal]
 	Providers               collections.Map[string, types.Provider] // Key by address string
 	ProviderBonds           collections.Map[string, types.ProviderBondState]
+	ProviderJails           collections.Map[string, int64]
 	DealProviderStatus      collections.Map[collections.Pair[uint64, string], uint64]
 	DealProviderFailures    collections.Map[collections.Pair[uint64, string], uint64]
 	DealProviderHealth      collections.Map[collections.Pair[uint64, string], types.HealthState]
@@ -51,6 +52,7 @@ type Keeper struct {
 	RetrievalSessionsByProvider   collections.Map[collections.Pair[string, []byte], uint64]
 	RetrievalSessionNonces        collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
 	RetrievalSessionProofProvider collections.Map[[]byte, string]
+	EvidenceRecords               collections.Map[[]byte, uint64]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeeds              collections.Map[uint64, []byte]
@@ -102,6 +104,7 @@ func NewKeeper(
 		Deals:                   collections.NewMap(sb, types.DealsKey, "deals", collections.Uint64Key, codec.CollValue[types.Deal](cdc)),
 		Providers:               collections.NewMap(sb, types.ProvidersKey, "providers", collections.StringKey, codec.CollValue[types.Provider](cdc)),
 		ProviderBonds:           collections.NewMap(sb, types.ProviderBondsKey, "provider_bonds", collections.StringKey, codec.CollValue[types.ProviderBondState](cdc)),
+		ProviderJails:           collections.NewMap(sb, types.ProviderJailsKey, "provider_jails", collections.StringKey, collections.Int64Value),
 		DealProviderStatus:      collections.NewMap(sb, types.DealProviderStatusKey, "deal_provider_status", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		DealProviderFailures:    collections.NewMap(sb, types.DealProviderFailuresKey, "deal_provider_failures", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), collections.Uint64Value),
 		DealProviderHealth:      collections.NewMap(sb, types.DealProviderHealthKey, "deal_provider_health", collections.PairKeyCodec(collections.Uint64Key, collections.StringKey), codec.CollValue[types.HealthState](cdc)),
@@ -123,6 +126,7 @@ func NewKeeper(
 			collections.Uint64Value,
 		),
 		RetrievalSessionProofProvider: collections.NewMap(sb, types.RetrievalSessionProofProviderKey, "retrieval_session_proof_provider", collections.BytesKey, collections.StringValue),
+		EvidenceRecords:               collections.NewMap(sb, types.EvidenceRecordKey, "evidence_records", collections.BytesKey, collections.Uint64Value),
 
 		EpochSeeds: collections.NewMap(sb, types.EpochSeedKey, "epoch_seeds", collections.Uint64Key, collections.BytesValue),
 		Mode1EpochCredits: collections.NewMap(
@@ -248,6 +252,13 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 	for _, provider := range allProviders {
 		// Only consider "Active" providers for assignment
 		if provider.Status != "Active" {
+			continue
+		}
+		jailed, _, err := k.providerIsJailed(ctx, provider.Address)
+		if err != nil {
+			return nil, err
+		}
+		if jailed {
 			continue
 		}
 
