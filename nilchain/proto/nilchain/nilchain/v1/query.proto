@@ -48,6 +48,16 @@ service Query {
     option (google.api.http).get = "/nilchain/nilchain/v1/providers/{address}/bond";
   }
 
+  // Queries audit debt state for a provider.
+  rpc GetAuditDebt(QueryGetAuditDebtRequest) returns (QueryGetAuditDebtResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/providers/{provider}/audit-debt";
+  }
+
+  // Lists audit debt states for all providers.
+  rpc ListAuditDebt(QueryListAuditDebtRequest) returns (QueryListAuditDebtResponse) {
+    option (google.api.http).get = "/nilchain/nilchain/v1/audit-debt";
+  }
+
   // Queries the Heat State for a Deal.
   rpc GetDealHeat(QueryGetDealHeatRequest) returns (QueryGetDealHeatResponse) {
     option (google.api.http).get = "/nilchain/nilchain/v1/deals/{deal_id}/heat";
@@ -155,6 +165,24 @@ message QueryGetProviderBondRequest {
 
 message QueryGetProviderBondResponse {
   ProviderBondState bond = 1;
+}
+
+message QueryGetAuditDebtRequest {
+  string provider = 1;
+}
+
+message QueryGetAuditDebtResponse {
+  AuditDebtState state = 1 [(gogoproto.nullable) = false];
+  uint64 outstanding = 2;
+}
+
+message QueryListAuditDebtRequest {
+  cosmos.base.query.v1beta1.PageRequest pagination = 1;
+}
+
+message QueryListAuditDebtResponse {
+  repeated AuditDebtEntry entries = 1 [(gogoproto.nullable) = false];
+  cosmos.base.query.v1beta1.PageResponse pagination = 2;
 }
 
 message QueryGetDealHeatRequest {

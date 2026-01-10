@@ -66,4 +66,5 @@ var (
 	DeputySeenKey              = collections.NewPrefix("DeputySeen/value/")
 	AuditBudgetByEpochKey      = collections.NewPrefix("AuditBudgetByEpoch/value/")
 	AuditBudgetAvailableKey    = collections.NewPrefix("AuditBudgetAvailable/value/")
+	AuditDebtStatesKey         = collections.NewPrefix("AuditDebtStates/value/")
 )

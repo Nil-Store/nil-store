@@ -16,6 +16,7 @@ const (
 	TypeAuditBudgetMint         = "audit_budget_mint"
 	TypeAuditBudgetCarryover    = "audit_budget_carryover"
 	TypeAuditBudgetExpire       = "audit_budget_expire"
+	TypeAuditBudgetSpend        = "audit_budget_spend"
 
 	AttributeKeyProvider          = "provider"
 	AttributeKeyCapabilities      = "capabilities"
@@ -55,4 +56,5 @@ const (
 	AttributeKeyCarryoverEpochs   = "audit_budget_carryover_epochs"
 	AttributeKeyExpiredEpoch      = "expired_epoch"
 	AttributeKeyExpiredAmount     = "expired_amount"
+	AttributeKeyAuditBudgetSpend  = "audit_budget_spend"
 )

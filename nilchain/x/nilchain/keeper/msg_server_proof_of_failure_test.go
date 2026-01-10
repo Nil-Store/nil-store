@@ -63,6 +63,8 @@ func TestSubmitProofOfFailure_ConvictionRefundsAndBounty(t *testing.T) {
 	deputyAAddr := setBalance(t, bank, deputyA, initialCoins)
 	deputyBAddr := setBalance(t, bank, deputyB, initialCoins)
 	setBalance(t, bank, deputyC, initialCoins)
+	require.NoError(t, f.keeper.AuditBudgetAvailable.Set(sdk.UnwrapSDKContext(f.ctx), math.NewInt(1000)))
+	bank.moduleBalances[types.ModuleName] = sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1000)))
 
 	proofHashA := make([]byte, 32)
 	proofHashA[0] = 0xAA

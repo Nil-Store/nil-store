@@ -8,6 +8,7 @@ import (
 	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 
 	"nilchain/x/nilchain/types"
 )
@@ -121,6 +122,56 @@ func (k Keeper) mintAuditBudget(ctx sdk.Context, params types.Params) error {
 			sdk.NewAttribute(types.AttributeKeyEpochID, fmt.Sprintf("%d", epochID)),
 			sdk.NewAttribute(types.AttributeKeyCarryoverEpochs, fmt.Sprintf("%d", params.AuditBudgetCarryoverEpochs)),
 			sdk.NewAttribute(types.AttributeKeyAuditBudgetAvail, available.String()),
+		),
+	)
+
+	return nil
+}
+
+// SpendAuditBudget debits the available audit budget and transfers funds to the recipient.
+func (k Keeper) SpendAuditBudget(ctx sdk.Context, recipient sdk.AccAddress, amount sdk.Coin, reason string) error {
+	if !amount.IsValid() {
+		return sdkerrors.ErrInvalidRequest.Wrapf("invalid audit budget amount: %s", amount)
+	}
+	if !amount.Amount.IsPositive() {
+		return nil
+	}
+	if amount.Denom != sdk.DefaultBondDenom {
+		return sdkerrors.ErrInvalidRequest.Wrapf("invalid audit budget denom: %s", amount.Denom)
+	}
+
+	available, err := k.AuditBudgetAvailable.Get(ctx)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return err
+	}
+	if err != nil && errors.Is(err, collections.ErrNotFound) {
+		available = math.ZeroInt()
+	}
+
+	if available.LT(amount.Amount) {
+		return sdkerrors.ErrInsufficientFunds.Wrapf("audit budget %s < spend %s", available.String(), amount.Amount.String())
+	}
+
+	coins := sdk.NewCoins(amount)
+	if err := k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, recipient, coins); err != nil {
+		return fmt.Errorf("failed to spend audit budget: %w", err)
+	}
+
+	available = available.Sub(amount.Amount)
+	if err := k.AuditBudgetAvailable.Set(ctx, available); err != nil {
+		return fmt.Errorf("failed to update audit budget availability: %w", err)
+	}
+
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "unspecified"
+	}
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeAuditBudgetSpend,
+			sdk.NewAttribute(types.AttributeKeyAuditBudgetSpend, amount.Amount.String()),
+			sdk.NewAttribute(types.AttributeKeyAuditBudgetAvail, available.String()),
+			sdk.NewAttribute(types.AttributeKeyReason, reason),
 		),
 	)
 

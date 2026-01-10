@@ -291,6 +291,19 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						"missed_epochs", nextMissed,
 					)
 
+					provider := ""
+					if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 && int(slot) < len(deal.Mode2Slots) {
+						slotEntry := deal.Mode2Slots[slot]
+						if slotEntry != nil {
+							provider = strings.TrimSpace(slotEntry.Provider)
+						}
+					}
+					if provider != "" {
+						if err := k.IncrementAuditDebtRequired(sdkCtx, provider, deputyServed); err != nil {
+							return false, err
+						}
+					}
+
 					if evictAfterMissed > 0 && nextMissed >= evictAfterMissed {
 						sdkCtx.EventManager().EmitEvent(sdk.NewEvent(
 							types.TypeHealthEvictThreshold,

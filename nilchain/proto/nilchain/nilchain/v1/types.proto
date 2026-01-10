@@ -78,6 +78,18 @@ message HealthState {
   int64 last_update_height = 3;
 }
 
+// AuditDebtState tracks outstanding audit requirements for a provider.
+message AuditDebtState {
+  uint64 required = 1;
+  uint64 completed = 2;
+}
+
+// AuditDebtEntry is a provider-scoped audit debt entry.
+message AuditDebtEntry {
+  string provider = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  AuditDebtState state = 2 [(gogoproto.nullable) = false];
+}
+
 // Provider represents a Storage Provider in the network.
 message Provider {
   string address = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];

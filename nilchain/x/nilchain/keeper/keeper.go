@@ -47,16 +47,16 @@ type Keeper struct {
 	EvmNonces               collections.Map[string, uint64]
 	DealHeatStates          collections.Map[uint64, types.DealHeatState]
 
-	RetrievalSessions             collections.Map[[]byte, types.RetrievalSession]
-	RetrievalSessionsByOwner      collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionsByProvider   collections.Map[collections.Pair[string, []byte], uint64]
-	RetrievalSessionNonces        collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
-	RetrievalSessionProofProvider collections.Map[[]byte, string]
-	EvidenceRecords               collections.Map[[]byte, uint64]
-	ProofOfFailureRecords         collections.Map[[]byte, types.ProofOfFailure]
-	ProofOfFailureByProvider      collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessions              collections.Map[[]byte, types.RetrievalSession]
+	RetrievalSessionsByOwner       collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionsByProvider    collections.Map[collections.Pair[string, []byte], uint64]
+	RetrievalSessionNonces         collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
+	RetrievalSessionProofProvider  collections.Map[[]byte, string]
+	EvidenceRecords                collections.Map[[]byte, uint64]
+	ProofOfFailureRecords          collections.Map[[]byte, types.ProofOfFailure]
+	ProofOfFailureByProvider       collections.Map[collections.Pair[string, []byte], uint64]
 	ProofOfFailureByProviderDeputy collections.Map[collections.Pair[string, string], uint64]
-	ProofOfFailureConvictions     collections.Map[collections.Pair[string, uint64], uint64]
+	ProofOfFailureConvictions      collections.Map[collections.Pair[string, uint64], uint64]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeeds              collections.Map[uint64, []byte]
@@ -77,6 +77,7 @@ type Keeper struct {
 	DeputySeen              collections.Map[[]byte, bool]
 	AuditBudgetByEpoch      collections.Map[uint64, math.Int]
 	AuditBudgetAvailable    collections.Item[math.Int]
+	AuditDebtStates         collections.Map[string, types.AuditDebtState]
 }
 
 func NewKeeper(
@@ -256,6 +257,13 @@ func NewKeeper(
 			types.AuditBudgetAvailableKey,
 			"audit_budget_available",
 			sdk.IntValue,
+		),
+		AuditDebtStates: collections.NewMap(
+			sb,
+			types.AuditDebtStatesKey,
+			"audit_debt_states",
+			collections.StringKey,
+			codec.CollValue[types.AuditDebtState](cdc),
 		),
 	}
 

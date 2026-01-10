@@ -126,11 +126,7 @@ func (k Keeper) settleProofOfFailure(ctx sdk.Context, record types.ProofOfFailur
 	if status == types.ProofOfFailureStatus_PROOF_OF_FAILURE_STATUS_CONVICTED {
 		bounty := params.FailureBounty
 		if bounty.IsValid() && bounty.Amount.IsPositive() {
-			coins := sdk.NewCoins(bounty)
-			if err := k.BankKeeper.MintCoins(ctx, types.ModuleName, coins); err != nil {
-				return fmt.Errorf("failed to mint failure bounty: %w", err)
-			}
-			if err := k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, reporterAddr, coins); err != nil {
+			if err := k.SpendAuditBudget(ctx, reporterAddr, bounty, "failure_bounty"); err != nil {
 				return fmt.Errorf("failed to pay failure bounty: %w", err)
 			}
 		}
