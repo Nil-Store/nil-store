@@ -133,6 +133,13 @@ enum RetrievalSessionStatus {
   RETRIEVAL_SESSION_STATUS_CANCELED = 6;
 }
 
+enum ProofOfFailureStatus {
+  PROOF_OF_FAILURE_STATUS_UNSPECIFIED = 0;
+  PROOF_OF_FAILURE_STATUS_OPEN = 1;
+  PROOF_OF_FAILURE_STATUS_CONVICTED = 2;
+  PROOF_OF_FAILURE_STATUS_EXPIRED = 3;
+}
+
 // RetrievalSession is an on-chain authorization + completion object for a blob-range retrieval.
 // It is provider-bound, deal-bound, and pins the current Deal.manifest_root to avoid ambiguity.
 message RetrievalSession {
@@ -156,6 +163,20 @@ message RetrievalSession {
 
   string locked_fee = 15 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // Locked variable fee (excludes base fee)
   string locked_premium_fee = 16 [(gogoproto.customtype) = "cosmossdk.io/math.Int", (gogoproto.nullable) = false]; // Locked proxy premium fee
+}
+
+// ProofOfFailure is a deputy-submitted attestation that a provider failed to serve data.
+message ProofOfFailure {
+  bytes proof_id = 1; // 32-byte hash of canonical proof fields
+  uint64 deal_id = 2;
+  string provider = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string reporter = 4 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  bytes proof_hash = 5; // Deputy-signed transcript hash
+  uint64 epoch_id = 6;
+  uint64 expires_at_epoch = 7;
+  cosmos.base.v1beta1.Coin bond_amount = 8 [(gogoproto.nullable) = false];
+  int64 submitted_height = 9;
+  ProofOfFailureStatus status = 10;
 }
 
 // RetrievalReceipt represents a user's signed confirmation of data retrieval.

@@ -41,18 +41,20 @@ func (k Keeper) BeginBlock(goCtx context.Context) error {
 	}
 
 	_, err := k.EpochSeeds.Get(goCtx, epochID)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, collections.ErrNotFound) {
-		return err
+	if err != nil {
+		if !errors.Is(err, collections.ErrNotFound) {
+			return err
+		}
+		seed := deriveEpochSeed(ctx.ChainID(), epochID, ctx.HeaderHash())
+		if err := k.EpochSeeds.Set(goCtx, epochID, seed[:]); err != nil {
+			return err
+		}
+		ctx.Logger().Debug("epoch seed set", "epoch_id", epochID, "height", height)
 	}
 
-	seed := deriveEpochSeed(ctx.ChainID(), epochID, ctx.HeaderHash())
-	if err := k.EpochSeeds.Set(goCtx, epochID, seed[:]); err != nil {
+	if err := k.expireProofsOfFailure(ctx, epochID); err != nil {
 		return err
 	}
-	ctx.Logger().Debug("epoch seed set", "epoch_id", epochID, "height", height)
 	return nil
 }
 

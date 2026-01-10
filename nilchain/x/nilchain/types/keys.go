@@ -42,6 +42,10 @@ var (
 	RetrievalSessionNonceKey         = collections.NewPrefix("RetrievalSessionNonce/value/")
 	RetrievalSessionProofProviderKey = collections.NewPrefix("RetrievalSessionProofProvider/value/")
 	EvidenceRecordKey                = collections.NewPrefix("EvidenceRecord/value/")
+	ProofOfFailureRecordsKey         = collections.NewPrefix("ProofOfFailureRecords/value/")
+	ProofOfFailureByProviderKey      = collections.NewPrefix("ProofOfFailureByProvider/value/")
+	ProofOfFailureByProviderDeputyKey = collections.NewPrefix("ProofOfFailureByProviderDeputy/value/")
+	ProofOfFailureConvictionsKey     = collections.NewPrefix("ProofOfFailureConvictions/value/")
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeedKey               = collections.NewPrefix("EpochSeed/value/")

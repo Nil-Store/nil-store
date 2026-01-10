@@ -2506,6 +2506,160 @@ func (k msgServer) SubmitRetrievalSessionProof(goCtx context.Context, msg *types
 	return &types.MsgSubmitRetrievalSessionProofResponse{Success: true}, nil
 }
 
+func (k msgServer) SubmitProofOfFailure(goCtx context.Context, msg *types.MsgSubmitProofOfFailure) (*types.MsgSubmitProofOfFailureResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+	if msg == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid request")
+	}
+
+	creator := strings.TrimSpace(msg.Creator)
+	if creator == "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("creator is required")
+	}
+	provider := strings.TrimSpace(msg.Provider)
+	if provider == "" {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("provider is required")
+	}
+	if creator == provider {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("reporter must differ from provider")
+	}
+	if len(msg.ProofHash) != 32 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("proof_hash must be 32 bytes")
+	}
+
+	if _, err := k.Providers.Get(ctx, creator); err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, sdkerrors.ErrUnauthorized.Wrapf("reporter %s is not registered", msg.Creator)
+		}
+		return nil, err
+	}
+	if _, err := k.Providers.Get(ctx, provider); err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil, sdkerrors.ErrNotFound.Wrapf("provider %s not found", msg.Provider)
+		}
+		return nil, err
+	}
+
+	deal, err := k.Deals.Get(ctx, msg.DealId)
+	if err != nil {
+		return nil, sdkerrors.ErrNotFound.Wrapf("deal %d not found", msg.DealId)
+	}
+
+	isAssignedProvider := false
+	if deal.RedundancyMode == 2 && len(deal.Mode2Slots) > 0 {
+		for _, slot := range deal.Mode2Slots {
+			if slot == nil {
+				continue
+			}
+			if strings.TrimSpace(slot.Provider) == provider {
+				isAssignedProvider = true
+				break
+			}
+			if strings.TrimSpace(slot.PendingProvider) != "" && strings.TrimSpace(slot.PendingProvider) == provider {
+				isAssignedProvider = true
+				break
+			}
+		}
+	} else {
+		for _, p := range deal.Providers {
+			if strings.TrimSpace(p) == provider {
+				isAssignedProvider = true
+				break
+			}
+		}
+	}
+	if !isAssignedProvider {
+		return nil, sdkerrors.ErrUnauthorized.Wrapf("provider %s is not assigned to deal %d", provider, msg.DealId)
+	}
+
+	params := k.GetParams(ctx)
+	if params.EpochLenBlocks == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("epoch_len_blocks is 0")
+	}
+	currentEpoch := epochIDAtHeight(ctx.BlockHeight(), params.EpochLenBlocks)
+	if currentEpoch == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("invalid current epoch")
+	}
+
+	windowStart := nonresponseWindowStart(currentEpoch, params.NonresponseWindowEpochs)
+	convictionKey := collections.Join(provider, windowStart)
+	if _, err := k.ProofOfFailureConvictions.Get(ctx, convictionKey); err == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("nonresponse already convicted in window")
+	} else if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, err
+	}
+
+	if lastEpoch, err := k.ProofOfFailureByProviderDeputy.Get(ctx, collections.Join(provider, creator)); err == nil {
+		if lastEpoch >= windowStart {
+			return nil, sdkerrors.ErrInvalidRequest.Wrap("deputy already reported provider in window")
+		}
+	} else if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, err
+	}
+
+	proofID := deriveProofOfFailureID(provider, creator, msg.DealId, msg.ProofHash)
+	if _, err := k.ProofOfFailureRecords.Get(ctx, proofID[:]); err == nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("proof already recorded")
+	} else if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, err
+	}
+
+	ttl := params.ProofOfFailureTtlEpochs
+	if ttl == 0 {
+		ttl = params.NonresponseWindowEpochs
+	}
+	expiresAt := currentEpoch + ttl
+
+	bond := params.EvidenceBond
+	if bond.IsValid() && bond.Amount.IsPositive() {
+		reporterAddr, err := sdk.AccAddressFromBech32(creator)
+		if err != nil {
+			return nil, sdkerrors.ErrInvalidAddress.Wrap("invalid reporter address")
+		}
+		coins := sdk.NewCoins(bond)
+		if err := k.BankKeeper.SendCoinsFromAccountToModule(ctx, reporterAddr, types.ModuleName, coins); err != nil {
+			return nil, fmt.Errorf("failed to lock evidence bond: %w", err)
+		}
+	}
+
+	record := types.ProofOfFailure{
+		ProofId:         proofID[:],
+		DealId:          msg.DealId,
+		Provider:        provider,
+		Reporter:        creator,
+		ProofHash:       msg.ProofHash,
+		EpochId:         currentEpoch,
+		ExpiresAtEpoch:  expiresAt,
+		BondAmount:      bond,
+		SubmittedHeight: ctx.BlockHeight(),
+		Status:          types.ProofOfFailureStatus_PROOF_OF_FAILURE_STATUS_OPEN,
+	}
+	if err := k.ProofOfFailureRecords.Set(ctx, proofID[:], record); err != nil {
+		return nil, err
+	}
+	if err := k.ProofOfFailureByProvider.Set(ctx, collections.Join(provider, proofID[:]), currentEpoch); err != nil {
+		return nil, err
+	}
+	if err := k.ProofOfFailureByProviderDeputy.Set(ctx, collections.Join(provider, creator), currentEpoch); err != nil {
+		return nil, err
+	}
+
+	if err := k.aggregateProofOfFailure(ctx, provider, currentEpoch); err != nil {
+		return nil, err
+	}
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			"submit_proof_of_failure",
+			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", msg.DealId)),
+			sdk.NewAttribute(types.AttributeKeyProvider, provider),
+			sdk.NewAttribute(types.AttributeKeyEpochID, fmt.Sprintf("%d", currentEpoch)),
+		),
+	)
+
+	return &types.MsgSubmitProofOfFailureResponse{Success: true, ProofId: proofID[:]}, nil
+}
+
 // recoverEvmAddressFromDigest recovers the EVM address from a signature over a digest.
 func recoverEvmAddressFromDigest(digest []byte, sig []byte) (gethCommon.Address, error) {
 	var zero gethCommon.Address

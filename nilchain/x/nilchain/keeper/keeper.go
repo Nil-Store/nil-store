@@ -53,6 +53,10 @@ type Keeper struct {
 	RetrievalSessionNonces        collections.Map[collections.Pair[collections.Pair[string, uint64], string], uint64]
 	RetrievalSessionProofProvider collections.Map[[]byte, string]
 	EvidenceRecords               collections.Map[[]byte, uint64]
+	ProofOfFailureRecords         collections.Map[[]byte, types.ProofOfFailure]
+	ProofOfFailureByProvider      collections.Map[collections.Pair[string, []byte], uint64]
+	ProofOfFailureByProviderDeputy collections.Map[collections.Pair[string, string], uint64]
+	ProofOfFailureConvictions     collections.Map[collections.Pair[string, uint64], uint64]
 
 	// --- Unified Liveness v1 (epoch + quotas) ---
 	EpochSeeds              collections.Map[uint64, []byte]
@@ -127,6 +131,28 @@ func NewKeeper(
 		),
 		RetrievalSessionProofProvider: collections.NewMap(sb, types.RetrievalSessionProofProviderKey, "retrieval_session_proof_provider", collections.BytesKey, collections.StringValue),
 		EvidenceRecords:               collections.NewMap(sb, types.EvidenceRecordKey, "evidence_records", collections.BytesKey, collections.Uint64Value),
+		ProofOfFailureRecords:         collections.NewMap(sb, types.ProofOfFailureRecordsKey, "proof_of_failure_records", collections.BytesKey, codec.CollValue[types.ProofOfFailure](cdc)),
+		ProofOfFailureByProvider: collections.NewMap(
+			sb,
+			types.ProofOfFailureByProviderKey,
+			"proof_of_failure_by_provider",
+			collections.PairKeyCodec(collections.StringKey, collections.BytesKey),
+			collections.Uint64Value,
+		),
+		ProofOfFailureByProviderDeputy: collections.NewMap(
+			sb,
+			types.ProofOfFailureByProviderDeputyKey,
+			"proof_of_failure_by_provider_deputy",
+			collections.PairKeyCodec(collections.StringKey, collections.StringKey),
+			collections.Uint64Value,
+		),
+		ProofOfFailureConvictions: collections.NewMap(
+			sb,
+			types.ProofOfFailureConvictionsKey,
+			"proof_of_failure_convictions",
+			collections.PairKeyCodec(collections.StringKey, collections.Uint64Key),
+			collections.Uint64Value,
+		),
 
 		EpochSeeds: collections.NewMap(sb, types.EpochSeedKey, "epoch_seeds", collections.Uint64Key, collections.BytesValue),
 		Mode1EpochCredits: collections.NewMap(

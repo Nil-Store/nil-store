@@ -46,6 +46,8 @@ service Msg {
 
   // MsgSubmitRetrievalSessionProof submits proof-of-retrieval for a session (provider action).
   rpc SubmitRetrievalSessionProof(MsgSubmitRetrievalSessionProof) returns (MsgSubmitRetrievalSessionProofResponse);
+  // MsgSubmitProofOfFailure submits deputy evidence that a provider failed to serve data.
+  rpc SubmitProofOfFailure(MsgSubmitProofOfFailure) returns (MsgSubmitProofOfFailureResponse);
 
   // MsgProveLiveness allows a Storage Provider to submit a proof of data liveness.
   rpc ProveLiveness(MsgProveLiveness) returns (MsgProveLivenessResponse);
@@ -266,6 +268,22 @@ message MsgSubmitRetrievalSessionProof {
 
 message MsgSubmitRetrievalSessionProofResponse {
   bool success = 1;
+}
+
+// MsgSubmitProofOfFailure submits deputy evidence that a provider failed to serve data.
+message MsgSubmitProofOfFailure {
+  option (cosmos.msg.v1.signer) = "creator";
+  option (amino.name) = "nilchain/x/nilchain/MsgSubmitProofOfFailure";
+
+  string creator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  uint64 deal_id = 2;
+  string provider = 3 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  bytes proof_hash = 4;
+}
+
+message MsgSubmitProofOfFailureResponse {
+  bool success = 1;
+  bytes proof_id = 2;
 }
 
 // MsgProveLiveness allows a Storage Provider to submit a proof of data liveness.

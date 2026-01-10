@@ -18,6 +18,7 @@ func RegisterInterfaces(registrar codectypes.InterfaceRegistry) {
 		&MsgConfirmRetrievalSession{},
 		&MsgCancelRetrievalSession{},
 		&MsgSubmitRetrievalSessionProof{},
+		&MsgSubmitProofOfFailure{},
 		&MsgProveLiveness{},
 		&MsgSignalSaturation{},
 		&MsgStartSlotRepair{},
