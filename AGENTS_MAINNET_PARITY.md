@@ -80,6 +80,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-AUDIT-002 | done | audit debt state/query + audit budget spend helper + tests | 2368aa9 | -`
 * `2026-01-10 | TASK P0-DEPUTY-003 | in progress | start AskForProxy request/response + gateway proxy fallback integration | - | -`
 * `2026-01-10 | TASK P0-DEPUTY-003 | done | AskForProxy http bridge + gateway proxy fallback + proof-of-failure CLI/tests | 6106e7a | -`
+* `2026-01-10 | TASK P0-DEPUTY-E2E-002 | in progress | start ghosting-provider deputy E2E gate | - | -`
+* `2026-01-10 | TASK P0-DEPUTY-E2E-002 | done | deputy ghosting CI script + premium/escrow assertions | cb6bdea | -`
 
 ---
 
@@ -1312,7 +1314,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-DEPUTY-E2E-002 — Ghosting-provider E2E: proxy retrieval succeeds + evidence recorded
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `scripts/`
 * **Depends on:** `P0-DEPUTY-003`, `P0-DEPUTY-001`, `P0-DEPUTY-002`
