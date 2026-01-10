@@ -76,6 +76,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-DEPUTY-002 | done | proof-of-failure submit + aggregation + expiry handling + tests | 550f123 | -`
 * `2026-01-10 | TASK P0-AUDIT-001 | in progress | start audit budget minting + carryover logic | - | -`
 * `2026-01-10 | TASK P0-AUDIT-001 | done | audit budget minting + carryover/expiry + tests | c318180 | -`
+* `2026-01-10 | TASK P0-AUDIT-002 | in progress | start audit debt tracking + budget spend helper | - | -`
+* `2026-01-10 | TASK P0-AUDIT-002 | done | audit debt state/query + audit budget spend helper + tests | 2368aa9 | -`
 
 ---
 
@@ -1235,7 +1237,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-AUDIT-002 — Audit debt tracking + budget spend path (MVP)
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
 * **Depends on:** `P0-AUDIT-001`, `P0-DEPUTY-002`
