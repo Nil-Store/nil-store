@@ -70,6 +70,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-EVIDENCE-001 | done | hard-fault evidence penalties + jail tracking + tests | fc890ef | -`
 * `2026-01-10 | TASK P0-EVIDENCE-E2E-002 | in progress | start evidence e2e script for wrong-data slash/jail/repair | - | -`
 * `2026-01-10 | TASK P0-EVIDENCE-E2E-002 | done | add wrong-data evidence E2E script | 21d013a | -`
+* `2026-01-10 | TASK P0-DEPUTY-001 | in progress | start proxy retrieval premium lock/payout accounting | - | -`
+* `2026-01-10 | TASK P0-DEPUTY-001 | done | lock proxy premium fees + payout on deputy success | 4f6a07a | -`
 
 ---
 
@@ -1097,7 +1099,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-DEPUTY-001 — Proxy retrieval economics (chain): premium lock + premium payout on success
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
 * **Depends on:** `P0-PARAMS-001`, `P0-RETRIEVAL-SETTLE-002`
