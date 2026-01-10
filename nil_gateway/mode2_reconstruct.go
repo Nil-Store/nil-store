@@ -57,22 +57,17 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 	}
 
 	activeSlots := make([]uint64, 0, stripe.slotCount)
-	unknownSlots := make([]uint64, 0, stripe.slotCount)
-	repairingSlots := make([]uint64, 0, stripe.slotCount)
 	for slot := uint64(0); slot < stripe.slotCount; slot++ {
 		switch slots[slot].Status {
 		case 1:
 			activeSlots = append(activeSlots, slot)
-		case 2:
-			repairingSlots = append(repairingSlots, slot)
-		default:
-			unknownSlots = append(unknownSlots, slot)
 		}
 	}
-	orderedSlots := make([]uint64, 0, stripe.slotCount)
+	if len(activeSlots) < int(stripe.k) {
+		return "", fmt.Errorf("not enough ACTIVE slots for reconstruction (need %d, got %d)", stripe.k, len(activeSlots))
+	}
+	orderedSlots := make([]uint64, 0, len(activeSlots))
 	orderedSlots = append(orderedSlots, activeSlots...)
-	orderedSlots = append(orderedSlots, unknownSlots...)
-	orderedSlots = append(orderedSlots, repairingSlots...)
 
 	shards := make([][]byte, stripe.slotCount)
 	present := make([]bool, stripe.slotCount)
@@ -93,14 +88,10 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		}
 
 		assign := slots[slot]
-		providers := make([]string, 0, 2)
-		if assign.Status == 2 {
-			// Route reads around repairing slots: prefer the pending provider, and only fall
-			// back to the outgoing provider when necessary.
-			if p := strings.TrimSpace(assign.PendingProvider); p != "" {
-				providers = append(providers, p)
-			}
+		if assign.Status != 1 {
+			return fmt.Errorf("slot %d is not ACTIVE", slot)
 		}
+		providers := make([]string, 0, 1)
 		if p := strings.TrimSpace(assign.Provider); p != "" {
 			providers = append(providers, p)
 		}

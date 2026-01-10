@@ -208,8 +208,7 @@ func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, er
 
 			if len(payload.Deal.Mode2Slots) > 0 {
 				active := make([]string, 0, len(payload.Deal.Mode2Slots))
-				repairing := make([]string, 0, len(payload.Deal.Mode2Slots))
-				unknown := make([]string, 0, len(payload.Deal.Mode2Slots))
+				slotProviders := make(map[string]struct{}, len(payload.Deal.Mode2Slots)*2)
 
 				for _, slot := range payload.Deal.Mode2Slots {
 					p := strings.TrimSpace(slot.Provider)
@@ -217,29 +216,22 @@ func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, er
 					if p == "" && pending == "" {
 						continue
 					}
+					if p != "" {
+						slotProviders[p] = struct{}{}
+					}
+					if pending != "" {
+						slotProviders[pending] = struct{}{}
+					}
 					switch parseMode2SlotStatus(slot.Status) {
 					case 1:
 						if p != "" {
 							active = append(active, p)
 						}
-					case 2:
-						// When a slot is repairing, prefer routing to the pending provider
-						// (make-before-break) and de-prioritize the outgoing provider.
-						if pending != "" {
-							active = append(active, pending)
-						}
-						if p != "" {
-							repairing = append(repairing, p)
-						}
-					default:
-						if p != "" {
-							unknown = append(unknown, p)
-						}
 					}
 				}
 
-				ordered := make([]string, 0, len(active)+len(unknown)+len(repairing)+len(out))
-				seen := make(map[string]bool, len(active)+len(unknown)+len(repairing)+len(out))
+				ordered := make([]string, 0, len(active)+len(out))
+				seen := make(map[string]bool, len(active)+len(out))
 				appendUnique := func(values []string) {
 					for _, v := range values {
 						if v == "" || seen[v] {
@@ -250,15 +242,21 @@ func fetchDealProvidersFromLCD(ctx context.Context, dealID uint64) ([]string, er
 					}
 				}
 				appendUnique(active)
-				appendUnique(unknown)
-				appendUnique(repairing)
 
 				// Preserve any legacy providers that are not in mode2_slots (e.g. pre-migration deals).
-				appendUnique(out)
+				legacy := make([]string, 0, len(out))
+				for _, p := range out {
+					if _, ok := slotProviders[p]; ok {
+						continue
+					}
+					legacy = append(legacy, p)
+				}
+				appendUnique(legacy)
 
 				if len(ordered) > 0 {
 					return ordered, nil
 				}
+				return nil, fmt.Errorf("no ACTIVE mode2 slot providers available")
 			}
 			return out, nil
 		}

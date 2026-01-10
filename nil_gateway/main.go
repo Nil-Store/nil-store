@@ -2587,27 +2587,19 @@ func GatewayFetch(w http.ResponseWriter, r *http.Request) {
 		}
 		if !allowDeputy {
 			assign := slots[slot]
-			expectedActive := strings.TrimSpace(assign.Provider)
-			expectedPending := ""
-			if assign.Status == 2 {
-				expectedPending = strings.TrimSpace(assign.PendingProvider)
+			if assign.Status != 1 {
+				writeJSONError(w, http.StatusConflict, "slot not ACTIVE", fmt.Sprintf("slot %d status %d", slot, assign.Status))
+				return
 			}
-
+			expectedActive := strings.TrimSpace(assign.Provider)
 			localProvider := strings.TrimSpace(providerAddr)
 			allowed := false
-			if expectedPending != "" && localProvider == expectedPending {
-				allowed = true
-			}
 			if !allowed && expectedActive != "" && localProvider == expectedActive {
 				allowed = true
 			}
 
 			if !allowed {
-				hint := fmt.Sprintf("expected %s", expectedActive)
-				if expectedPending != "" {
-					hint = fmt.Sprintf("expected %s (or pending %s)", expectedActive, expectedPending)
-				}
-				writeJSONError(w, http.StatusBadRequest, "provider slot mismatch", hint)
+				writeJSONError(w, http.StatusBadRequest, "provider slot mismatch", fmt.Sprintf("expected %s", expectedActive))
 				return
 			}
 		} else {
@@ -2927,12 +2919,11 @@ func GatewayPlanRetrievalSession(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		assign := slots[startSlot]
-		providerAddr = strings.TrimSpace(assign.Provider)
-		// Make-before-break: route retrieval sessions around repairing slots by preferring the
-		// pending provider when present.
-		if assign.Status == 2 && strings.TrimSpace(assign.PendingProvider) != "" {
-			providerAddr = strings.TrimSpace(assign.PendingProvider)
+		if assign.Status != 1 {
+			writeJSONError(w, http.StatusConflict, "slot not ACTIVE", fmt.Sprintf("slot %d status %d", startSlot, assign.Status))
+			return
 		}
+		providerAddr = strings.TrimSpace(assign.Provider)
 	} else {
 		providerAddr = cachedProviderAddress(r.Context())
 		if strings.TrimSpace(providerAddr) == "" {

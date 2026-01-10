@@ -52,6 +52,14 @@ func newMode2LCDServer(t *testing.T, dealID uint64, state *mode2DealState) *http
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/deals/"):
 			owner, cid, hint, providers := state.getDeal()
+			mode2Slots := make([]map[string]any, 0, len(providers))
+			for i, provider := range providers {
+				mode2Slots = append(mode2Slots, map[string]any{
+					"slot":     i,
+					"provider": provider,
+					"status":   "SLOT_STATUS_ACTIVE",
+				})
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"deal": map[string]any{
 					"id":           dealID,
@@ -59,6 +67,7 @@ func newMode2LCDServer(t *testing.T, dealID uint64, state *mode2DealState) *http
 					"cid":          cid,
 					"service_hint": hint,
 					"providers":    providers,
+					"mode2_slots":  mode2Slots,
 				},
 			})
 		case strings.HasPrefix(r.URL.Path, "/nilchain/nilchain/v1/providers/"):

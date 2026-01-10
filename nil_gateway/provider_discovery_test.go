@@ -37,9 +37,8 @@ func TestFetchDealProvidersFromLCD_Mode2SlotsPrefersActive(t *testing.T) {
 		t.Fatalf("fetchDealProvidersFromLCD returned error: %v", err)
 	}
 
-	// Pending providers for repairing slots should be preferred over outgoing providers
-	// so router/deputy selection routes around repairing assignments.
-	want := []string{"providerZ", "providerB", "providerC", "providerA", "providerD"}
+	// Only ACTIVE slots should be used for routing reads; repairing slots are excluded.
+	want := []string{"providerB", "providerC", "providerD"}
 	if len(providers) != len(want) {
 		t.Fatalf("expected %d providers, got %d (%v)", len(want), len(providers), providers)
 	}
