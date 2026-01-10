@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"strings"
 
 	"cosmossdk.io/collections"
@@ -422,6 +423,10 @@ func (k Keeper) epochSeed(ctx sdk.Context, epochID uint64) ([32]byte, error) {
 	}
 
 	if errors.Is(err, collections.ErrNotFound) || len(seedBytes) != 32 {
+		params := k.GetParams(ctx)
+		if !isEpochStart(ctx.BlockHeight(), params.EpochLenBlocks) {
+			return seed, fmt.Errorf("epoch seed missing for epoch %d (height %d)", epochID, ctx.BlockHeight())
+		}
 		sum := deriveEpochSeed(ctx.ChainID(), epochID, ctx.HeaderHash())
 		if err := k.EpochSeeds.Set(ctx, epochID, sum[:]); err != nil {
 			return seed, err
@@ -430,6 +435,44 @@ func (k Keeper) epochSeed(ctx sdk.Context, epochID uint64) ([32]byte, error) {
 	}
 	copy(seed[:], seedBytes)
 	return seed, nil
+}
+
+func mode2SlotActiveForSynthetic(deal types.Deal, slot uint32) bool {
+	if deal.RedundancyMode != 2 {
+		return true
+	}
+	if len(deal.Mode2Slots) == 0 {
+		return true
+	}
+	if int(slot) < 0 || int(slot) >= len(deal.Mode2Slots) {
+		return false
+	}
+	entry := deal.Mode2Slots[int(slot)]
+	if entry == nil {
+		return false
+	}
+	return entry.Status == types.SlotStatus_SLOT_STATUS_ACTIVE
+}
+
+func matchesMode2SyntheticChallenge(seed [32]byte, dealID uint64, currentGen uint64, slot uint32, in quotaInputs, stripe stripeParams, required uint64, mduIndex uint64, blobIndex uint32) bool {
+	slotU64 := uint64(slot)
+	for i := uint64(0); i < required; i++ {
+		expMdu, expBlob := deriveMode2Challenge(seed, dealID, currentGen, slotU64, i, in, stripe)
+		if expMdu == mduIndex && expBlob == blobIndex {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesMode1SyntheticChallenge(seed [32]byte, dealID uint64, currentGen uint64, provider []byte, in quotaInputs, required uint64, mduIndex uint64, blobIndex uint32) bool {
+	for i := uint64(0); i < required; i++ {
+		expMdu, expBlob := deriveMode1Challenge(seed, dealID, currentGen, provider, i, in)
+		if expMdu == mduIndex && expBlob == blobIndex {
+			return true
+		}
+	}
+	return false
 }
 
 func (k Keeper) recordCreditForProof(ctx sdk.Context, epochID uint64, deal types.Deal, stripe stripeParams, provider string, mduIndex uint64, blobIndex uint32) error {
@@ -520,6 +563,9 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 	if !hasSlab || in.userMdus == 0 {
 		return nil
 	}
+	if mduIndex < in.metaMdus {
+		return sdkerrors.ErrInvalidRequest.Wrap("metadata MDUs are excluded from synthetic challenges")
+	}
 
 	var quotaBlobs uint64
 	switch stripe.mode {
@@ -538,6 +584,9 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 		}
 
 		slotU := uint32(slot)
+		if !mode2SlotActiveForSynthetic(deal, slotU) {
+			return sdkerrors.ErrInvalidRequest.Wrap("no synthetic proofs required for non-active slot")
+		}
 		activeProvider, pendingProvider := mode2SlotProviders(deal, slotU)
 		creator := strings.TrimSpace(provider)
 		active := strings.TrimSpace(activeProvider)
@@ -578,16 +627,7 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 			return sdkerrors.ErrInvalidRequest.Wrap("synthetic quota already satisfied for this epoch")
 		}
 
-		slotU64 := uint64(slotU)
-		found := false
-		for i := uint64(0); i < syntheticRequired; i++ {
-			expMdu, expBlob := deriveMode2Challenge(seed, deal.Id, deal.CurrentGen, slotU64, i, in, stripe)
-			if expMdu == mduIndex && expBlob == blobIndex {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !matchesMode2SyntheticChallenge(seed, deal.Id, deal.CurrentGen, slotU, in, stripe, syntheticRequired, mduIndex, blobIndex) {
 			return sdkerrors.ErrInvalidRequest.Wrap("system proof does not match any required synthetic challenge")
 		}
 
@@ -631,15 +671,7 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 		return sdkerrors.ErrInvalidRequest.Wrap("synthetic quota already satisfied for this epoch")
 	}
 
-	found := false
-	for i := uint64(0); i < syntheticRequired; i++ {
-		expMdu, expBlob := deriveMode1Challenge(seed, deal.Id, deal.CurrentGen, assignment, i, in)
-		if expMdu == mduIndex && expBlob == blobIndex {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !matchesMode1SyntheticChallenge(seed, deal.Id, deal.CurrentGen, assignment, in, syntheticRequired, mduIndex, blobIndex) {
 		return sdkerrors.ErrInvalidRequest.Wrap("system proof does not match any required synthetic challenge")
 	}
 
