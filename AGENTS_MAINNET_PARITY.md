@@ -62,6 +62,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-REPAIR-001 | done | deterministic replacement selection nonce + cooldown/cap enforcement | 858abf4 | -`
 * `2026-01-10 | TASK P0-MODE2-ROUTING-002 | in progress | start Mode2 routing guard against REPAIRING slots | - | -`
 * `2026-01-10 | TASK P0-MODE2-ROUTING-002 | done | avoid routing reads to repairing slots + active-only selection | 7a030e2 | -`
+* `2026-01-10 | TASK P0-MODE2-REWARD-003 | in progress | start excluding repairing slots from rewards/challenges | - | -`
+* `2026-01-10 | TASK P0-MODE2-REWARD-003 | done | suppress rewards for repairing slots + reward eligibility test | 23ea526 | -`
 
 ---
 
@@ -893,7 +895,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-MODE2-REWARD-003 — Repairing slots earn no rewards and are ignored by synthetic challenges
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
 * **Depends on:** `P0-QUOTAS-001`, `P0-QUOTAS-002`, `P0-MODE2-MBB-001`
