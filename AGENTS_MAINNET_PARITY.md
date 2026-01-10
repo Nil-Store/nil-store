@@ -72,6 +72,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-10 | TASK P0-EVIDENCE-E2E-002 | done | add wrong-data evidence E2E script | 21d013a | -`
 * `2026-01-10 | TASK P0-DEPUTY-001 | in progress | start proxy retrieval premium lock/payout accounting | - | -`
 * `2026-01-10 | TASK P0-DEPUTY-001 | done | lock proxy premium fees + payout on deputy success | 4f6a07a | -`
+* `2026-01-10 | TASK P0-DEPUTY-002 | in progress | start proof-of-failure aggregation + bond/bounty + expiry handling | - | -`
+* `2026-01-10 | TASK P0-DEPUTY-002 | done | proof-of-failure submit + aggregation + expiry handling + tests | 550f123 | -`
 
 ---
 
@@ -1140,7 +1142,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-DEPUTY-002 — Proof-of-failure aggregation + evidence incentives (bond/bounty + partial burn on TTL expiry)
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`
 * **Depends on:** `P0-DEPUTY-001`, `P0-PARAMS-001`, `P0-EVIDENCE-001`
