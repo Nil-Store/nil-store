@@ -52,6 +52,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-09 | TASK P0-HEALTH-001 | done | add health state tracking + hot/cold eviction tests | 5f63784 | -`
 * `2026-01-09 | TASK P0-MODE2-MBB-001 | in progress | start make-before-break repair state machine | - | -`
 * `2026-01-09 | TASK P0-MODE2-MBB-001 | done | gate slot repair promotion on quota readiness + tests | 0746542 | -`
+* `2026-01-09 | TASK P0-HEALTH-002 | in progress | start health observability queries + events | - | -`
+* `2026-01-09 | TASK P0-HEALTH-002 | done | add health queries/events + tests | 06fb3f9 | -`
 
 ---
 
@@ -648,7 +650,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-HEALTH-002 — Health observability: queries + events suitable for testnet monitoring
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/x/nilchain/keeper/`, `nilchain/x/nilchain/types/`, query layer
 * **Depends on:** `P0-HEALTH-001`
