@@ -25,6 +25,9 @@ GATEWAY_BASE="${GATEWAY_BASE:-http://127.0.0.1:8080}"
 NILCHAIND_BIN="${NILCHAIND_BIN:-$ROOT_DIR/nilchain/nilchaind}"
 
 PROVIDER_COUNT="${PROVIDER_COUNT:-12}"
+MANAGE_STACK="${MANAGE_STACK:-1}"
+EXPECT_REPAIR="${EXPECT_REPAIR:-1}"
+STACK_STARTED=0
 
 UPLOAD_FILE="${UPLOAD_FILE:-$ROOT_DIR/test_1mb.bin}"
 FILE_PATH="${FILE_PATH:-test_1mb.bin}"
@@ -33,10 +36,14 @@ RAW_BLOB_PAYLOAD_BYTES="${RAW_BLOB_PAYLOAD_BYTES:-126976}"
 REPAIR_BLOB_COUNT="${REPAIR_BLOB_COUNT:-4}"
 
 cleanup() {
-  echo "==> Stopping devnet alpha multi-SP stack..."
-  "$STACK_SCRIPT" stop || true
+  if [ "$STACK_STARTED" -eq 1 ]; then
+    echo "==> Stopping devnet alpha multi-SP stack..."
+    "$STACK_SCRIPT" stop || true
+  fi
 }
-trap cleanup EXIT
+if [ "$MANAGE_STACK" -eq 1 ]; then
+  trap cleanup EXIT
+fi
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -210,8 +217,11 @@ export NIL_EVICT_AFTER_MISSED_EPOCHS_COLD="${NIL_EVICT_AFTER_MISSED_EPOCHS_COLD:
 export NIL_QUOTA_MIN_BLOBS="${NIL_QUOTA_MIN_BLOBS:-1}"
 export NIL_QUOTA_MAX_BLOBS="${NIL_QUOTA_MAX_BLOBS:-1}"
 
-echo "==> Starting devnet alpha multi-SP stack (providers=$PROVIDER_COUNT)..."
-"$STACK_SCRIPT" start
+if [ "$MANAGE_STACK" -eq 1 ]; then
+  echo "==> Starting devnet alpha multi-SP stack (providers=$PROVIDER_COUNT)..."
+  "$STACK_SCRIPT" start
+  STACK_STARTED=1
+fi
 
 wait_for_http "lcd" "$LCD_BASE/cosmos/base/tendermint/v1beta1/node_info" "200" 60 1
 wait_for_http "nilchain lcd" "$LCD_BASE/nilchain/nilchain/v1/params" "200" 60 1
@@ -444,15 +454,16 @@ echo "==> Opening on-chain retrieval session..."
 
 echo "==> Waiting for retrieval session to appear..."
 SESSION_HEX=""
+SESSION_JSON=""
+SESSION_PREMIUM=""
 for _ in $(seq 1 30); do
   SESSIONS_JSON="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/retrieval-sessions/by-owner/$FAUCET_ADDR" || echo "{}")"
-  SESSION_HEX="$(echo "$SESSIONS_JSON" | DEAL_ID="$DEAL_ID" NONCE="$NONCE" python3 -c '
-import base64, json, os, sys
+  SESSION_JSON="$(echo "$SESSIONS_JSON" | DEAL_ID="$DEAL_ID" NONCE="$NONCE" python3 -c '
+import json, os, sys
 deal_id = str(os.environ.get("DEAL_ID",""))
 nonce = int(os.environ.get("NONCE","0") or 0)
 data = json.load(sys.stdin)
 sessions = data.get("sessions") or []
-raw = ""
 for s in sessions:
   if str(s.get("deal_id","")) != deal_id:
     continue
@@ -461,32 +472,40 @@ for s in sessions:
       continue
   except Exception:
     continue
-  raw = s.get("session_id") or ""
-  break
-if not raw:
-  print("")
+  print(json.dumps(s))
   raise SystemExit(0)
-try:
-  bz = base64.b64decode(raw)
-except Exception:
-  try:
-    bz = base64.urlsafe_b64decode(raw + "==")
-  except Exception:
-    print("")
-    raise SystemExit(0)
-print("0x" + bz.hex())
+print("")
 ')"
-  if [ -n "$SESSION_HEX" ]; then
+  if [ -n "$SESSION_JSON" ]; then
+    SESSION_HEX="$(echo "$SESSION_JSON" | decode_session_id_hex)"
+    SESSION_PREMIUM="$(echo "$SESSION_JSON" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("locked_premium_fee",""))' 2>/dev/null || true)"
     break
   fi
   sleep 1
 done
-if [ -z "$SESSION_HEX" ]; then
+if [ -z "$SESSION_HEX" ] || [ -z "$SESSION_JSON" ]; then
   echo "ERROR: failed to resolve session id" >&2
   echo "$SESSIONS_JSON" >&2
   exit 1
 fi
+if [ -z "$SESSION_PREMIUM" ]; then
+  echo "ERROR: failed to resolve locked premium fee" >&2
+  echo "$SESSION_JSON" >&2
+  exit 1
+fi
+if ! python3 -c "import sys; print(int(sys.argv[1]) > 0)" "$SESSION_PREMIUM" | grep -q True; then
+  echo "ERROR: expected locked premium fee to be > 0 (got $SESSION_PREMIUM)" >&2
+  exit 1
+fi
 echo "    session_id=$SESSION_HEX"
+echo "    locked_premium_fee=$SESSION_PREMIUM"
+
+DEAL_ESCROW_BEFORE="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID" | json_get "deal.escrow_balance")"
+if [ -z "$DEAL_ESCROW_BEFORE" ]; then
+  echo "ERROR: failed to resolve deal escrow balance before settlement" >&2
+  exit 1
+fi
+echo "    escrow_before=$DEAL_ESCROW_BEFORE"
 
 echo "==> Simulating ghosting: stopping planned provider..."
 # Only kill the listener on that port (avoid killing the router, which may have
@@ -562,6 +581,111 @@ if [ "$STATUS" != "success" ]; then
   echo "ERROR: session proof submission failed" >&2
   echo "$PROOF_SUBMIT_RESP" >&2
   exit 1
+fi
+
+echo "==> Confirming retrieval session (user validation)..."
+"$NILCHAIND_BIN" tx nilchain confirm-retrieval-session "$SESSION_HEX" \
+  --from faucet \
+  --chain-id "$CHAIN_ID" \
+  --node tcp://127.0.0.1:26657 \
+  --home "$CHAIN_HOME" \
+  --keyring-backend test \
+  --yes \
+  --gas auto \
+  --gas-adjustment 1.6 \
+  --gas-prices 0.001aatom \
+  --broadcast-mode sync \
+  --output json >/dev/null
+
+echo "==> Waiting for retrieval session to complete..."
+SESSION_STATUS=""
+SESSION_PREMIUM_AFTER=""
+for _ in $(seq 1 30); do
+  SESSIONS_JSON="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/retrieval-sessions/by-owner/$FAUCET_ADDR" || echo "{}")"
+  SESSION_STATUS="$(echo "$SESSIONS_JSON" | SESSION_HEX="$SESSION_HEX" python3 -c '
+import base64, json, os, sys
+target = os.environ.get("SESSION_HEX","").lower().replace("0x","")
+data = json.load(sys.stdin)
+sessions = data.get("sessions") or []
+for s in sessions:
+  raw = s.get("session_id") or ""
+  if not raw:
+    continue
+  try:
+    bz = base64.b64decode(raw)
+  except Exception:
+    try:
+      bz = base64.urlsafe_b64decode(raw + "==")
+    except Exception:
+      continue
+  if bz.hex() != target:
+    continue
+  status = s.get("status")
+  if isinstance(status, (int, float)):
+    print(str(int(status)))
+  else:
+    print(str(status or ""))
+  raise SystemExit(0)
+print("")
+')"
+  SESSION_PREMIUM_AFTER="$(echo "$SESSIONS_JSON" | SESSION_HEX="$SESSION_HEX" python3 -c '
+import base64, json, os, sys
+target = os.environ.get("SESSION_HEX","").lower().replace("0x","")
+data = json.load(sys.stdin)
+sessions = data.get("sessions") or []
+for s in sessions:
+  raw = s.get("session_id") or ""
+  if not raw:
+    continue
+  try:
+    bz = base64.b64decode(raw)
+  except Exception:
+    try:
+      bz = base64.urlsafe_b64decode(raw + "==")
+    except Exception:
+      continue
+  if bz.hex() != target:
+    continue
+  print(s.get("locked_premium_fee",""))
+  raise SystemExit(0)
+print("")
+')"
+  if [ "$SESSION_STATUS" = "RETRIEVAL_SESSION_STATUS_COMPLETED" ] || [ "$SESSION_STATUS" = "4" ]; then
+    break
+  fi
+  sleep 1
+done
+if [ "$SESSION_STATUS" != "RETRIEVAL_SESSION_STATUS_COMPLETED" ] && [ "$SESSION_STATUS" != "4" ]; then
+  echo "ERROR: retrieval session did not complete (status=$SESSION_STATUS)" >&2
+  exit 1
+fi
+if [ -z "$SESSION_PREMIUM_AFTER" ]; then
+  echo "ERROR: failed to resolve locked premium after completion" >&2
+  exit 1
+fi
+if ! python3 -c "import sys; print(int(sys.argv[1]) == 0)" "$SESSION_PREMIUM_AFTER" | grep -q True; then
+  echo "ERROR: expected locked premium to be zero after completion (got $SESSION_PREMIUM_AFTER)" >&2
+  exit 1
+fi
+
+DEAL_ESCROW_AFTER="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID" | json_get "deal.escrow_balance")"
+if [ -z "$DEAL_ESCROW_AFTER" ]; then
+  echo "ERROR: failed to resolve deal escrow balance after settlement" >&2
+  exit 1
+fi
+python3 - <<PY
+import sys
+before = int("$DEAL_ESCROW_BEFORE")
+after = int("$DEAL_ESCROW_AFTER")
+premium = int("$SESSION_PREMIUM")
+if after - before >= premium:
+  print("ERROR: escrow increased by premium fee (proxy premium likely refunded)", file=sys.stderr)
+  sys.exit(1)
+PY
+
+if [ "$EXPECT_REPAIR" -eq 0 ]; then
+  echo "==> Deputy ghosting E2E passed."
+  exit 0
 fi
 
 echo "==> Waiting for epoch end to trigger deputy-miss repair..."
