@@ -7,6 +7,7 @@ const (
 	TypeMsgProveLiveness    = "prove_liveness"
 	TypeMsgSignalSaturation = "signal_saturation"
 	TypeLockInDeposit       = "lock_in_deposit"
+	TypeMsgOpenRetrievalSession = "open_retrieval_session"
 
 	AttributeKeyProvider          = "provider"
 	AttributeKeyCapabilities      = "capabilities"
@@ -23,4 +24,9 @@ const (
 	AttributeKeyDeltaBytes        = "delta_bytes"
 	AttributeKeyStorageCost       = "storage_cost"
 	AttributeKeyDurationBlocks    = "duration_blocks"
+	AttributeKeySessionID         = "session_id"
+	AttributeKeyBaseFee           = "base_fee"
+	AttributeKeyVariableFee       = "variable_fee"
+	AttributeKeyTotalFee          = "total_fee"
+	AttributeKeyBlobCount         = "blob_count"
 )

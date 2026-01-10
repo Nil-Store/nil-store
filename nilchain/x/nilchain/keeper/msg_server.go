@@ -1976,6 +1976,22 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 		return nil, fmt.Errorf("failed to update retrieval session nonce: %w", err)
 	}
 
+	variableFeeCoin := sdk.NewCoin(baseFee.Denom, variableFee)
+	totalFeeCoin := sdk.NewCoin(baseFee.Denom, totalFee)
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgOpenRetrievalSession,
+			sdk.NewAttribute(types.AttributeKeyDealID, fmt.Sprintf("%d", msg.DealId)),
+			sdk.NewAttribute(types.AttributeKeySessionID, hex.EncodeToString(sessionID)),
+			sdk.NewAttribute(types.AttributeKeyOwner, msg.Creator),
+			sdk.NewAttribute(types.AttributeKeyProvider, msg.Provider),
+			sdk.NewAttribute(types.AttributeKeyBlobCount, fmt.Sprintf("%d", msg.BlobCount)),
+			sdk.NewAttribute(types.AttributeKeyBaseFee, baseFee.String()),
+			sdk.NewAttribute(types.AttributeKeyVariableFee, variableFeeCoin.String()),
+			sdk.NewAttribute(types.AttributeKeyTotalFee, totalFeeCoin.String()),
+		),
+	)
+
 	return &types.MsgOpenRetrievalSessionResponse{SessionId: sessionID}, nil
 }
 
