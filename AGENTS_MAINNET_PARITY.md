@@ -46,6 +46,8 @@ Append-only. Do not edit prior entries.
 * `2026-01-09 | TASK P0-QUOTAS-001 | done | enforce synthetic challenge exclusions + derivation tests | 1adb0b9 | -`
 * `2026-01-09 | TASK P0-QUOTAS-002 | in progress | start quota accounting + synthetic tracking cleanup | - | -`
 * `2026-01-09 | TASK P0-QUOTAS-002 | done | prune quota accounting + add quota clamp/dedup tests | 67cab32 | -`
+* `2026-01-09 | TASK P0-QUOTAS-SIM-003 | in progress | start adversarial sim gate for challenge derivation | - | -`
+* `2026-01-09 | TASK P0-QUOTAS-SIM-003 | done | add deterministic challenge derivation sim test | 62492e7 | -`
 
 ---
 
@@ -556,7 +558,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-QUOTAS-SIM-003 — Adversarial sim / determinism gate for anti-grind properties
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `scripts/`, `performance/` (if present), or `nilchain/` property tests
 * **Depends on:** `P0-QUOTAS-001`
