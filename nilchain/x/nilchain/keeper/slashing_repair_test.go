@@ -20,7 +20,11 @@ func TestCheckMissedProofs_StartsMode2SlotRepair(t *testing.T) {
 
 	params := types.DefaultParams()
 	params.EpochLenBlocks = 5
-	params.EvictAfterMissedEpochs = 1
+	params.EvictAfterMissedEpochsHot = 1
+	params.EvictAfterMissedEpochsCold = 1
+	params.CreditCapBps = 10000
+	params.CreditCapBpsHot = 10000
+	params.CreditCapBpsCold = 10000
 	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
 
 	mkAddr := func(tag byte) string {
@@ -118,7 +122,11 @@ func TestCheckMissedProofs_Mode2RepairFallbackReusesProvider(t *testing.T) {
 
 	params := types.DefaultParams()
 	params.EpochLenBlocks = 5
-	params.EvictAfterMissedEpochs = 1
+	params.EvictAfterMissedEpochsHot = 1
+	params.EvictAfterMissedEpochsCold = 1
+	params.CreditCapBps = 10000
+	params.CreditCapBpsHot = 10000
+	params.CreditCapBpsCold = 10000
 	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
 
 	mkAddr := func(tag byte) string {
@@ -199,7 +207,11 @@ func TestCheckMissedProofs_CompletesMode2SlotRepairWhenQuotaMet(t *testing.T) {
 
 	params := types.DefaultParams()
 	params.EpochLenBlocks = 5
-	params.EvictAfterMissedEpochs = 3
+	params.EvictAfterMissedEpochsHot = 3
+	params.EvictAfterMissedEpochsCold = 3
+	params.CreditCapBps = 10000
+	params.CreditCapBpsHot = 10000
+	params.CreditCapBpsCold = 10000
 	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
 
 	mkAddr := func(tag byte) string {
@@ -289,7 +301,11 @@ func TestCheckMissedProofs_DeputyServedTriggersRepairEvenIfQuotaMet(t *testing.T
 
 	params := types.DefaultParams()
 	params.EpochLenBlocks = 5
-	params.EvictAfterMissedEpochs = 1
+	params.EvictAfterMissedEpochsHot = 1
+	params.EvictAfterMissedEpochsCold = 1
+	params.CreditCapBps = 10000
+	params.CreditCapBpsHot = 10000
+	params.CreditCapBpsCold = 10000
 	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
 
 	mkAddr := func(tag byte) string {

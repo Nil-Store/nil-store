@@ -60,4 +60,52 @@ message Params {
 
   // Evict (trigger repair) after this many consecutive missed epochs.
   uint64 evict_after_missed_epochs = 17;
+
+  // --- Slashing + jailing policy (B1) ---
+  uint64 slash_invalid_proof_bps = 18;
+  uint64 slash_wrong_data_bps = 19;
+  uint64 slash_nonresponse_bps = 20;
+
+  uint64 jail_invalid_proof_epochs = 21;
+  uint64 jail_wrong_data_epochs = 22;
+  uint64 jail_nonresponse_epochs = 23;
+
+  uint64 nonresponse_threshold = 24;
+  uint64 nonresponse_window_epochs = 25;
+
+  uint64 max_strikes_before_global_jail = 26;
+  uint64 strike_window_epochs = 27;
+
+  uint64 evict_after_missed_epochs_hot = 28;
+  uint64 evict_after_missed_epochs_cold = 29;
+
+  // --- Bonding (B2) ---
+  cosmos.base.v1beta1.Coin min_provider_bond = 30 [
+    (gogoproto.nullable) = false
+  ];
+  uint64 bond_months = 31;
+  uint64 provider_unbonding_blocks = 32;
+
+  // --- Replacement (B4) ---
+  uint64 replacement_cooldown_blocks = 33;
+  uint64 repair_attempts_cap = 34;
+  uint64 repair_attempt_window_blocks = 35;
+
+  // --- Deputy + audit budget (B5) ---
+  uint64 premium_bps = 36;
+  cosmos.base.v1beta1.Coin evidence_bond = 37 [
+    (gogoproto.nullable) = false
+  ];
+  cosmos.base.v1beta1.Coin failure_bounty = 38 [
+    (gogoproto.nullable) = false
+  ];
+  uint64 evidence_bond_burn_bps_on_expiry = 39;
+  uint64 proof_of_failure_ttl_epochs = 40;
+  uint64 audit_budget_bps = 41;
+  uint64 audit_budget_cap_bps = 42;
+  uint64 audit_budget_carryover_epochs = 43;
+
+  // --- Credits phase-in (B6) ---
+  uint64 credit_cap_bps_hot = 44;
+  uint64 credit_cap_bps_cold = 45;
 }

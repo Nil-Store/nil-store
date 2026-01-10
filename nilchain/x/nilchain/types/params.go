@@ -30,6 +30,35 @@ var (
 	KeyQuotaMaxBlobs          = []byte("QuotaMaxBlobs")
 	KeyCreditCapBps           = []byte("CreditCapBps")
 	KeyEvictAfterMissedEpochs = []byte("EvictAfterMissedEpochs")
+
+	KeySlashInvalidProofBps        = []byte("SlashInvalidProofBps")
+	KeySlashWrongDataBps           = []byte("SlashWrongDataBps")
+	KeySlashNonresponseBps         = []byte("SlashNonresponseBps")
+	KeyJailInvalidProofEpochs      = []byte("JailInvalidProofEpochs")
+	KeyJailWrongDataEpochs         = []byte("JailWrongDataEpochs")
+	KeyJailNonresponseEpochs       = []byte("JailNonresponseEpochs")
+	KeyNonresponseThreshold        = []byte("NonresponseThreshold")
+	KeyNonresponseWindowEpochs     = []byte("NonresponseWindowEpochs")
+	KeyMaxStrikesBeforeGlobalJail  = []byte("MaxStrikesBeforeGlobalJail")
+	KeyStrikeWindowEpochs          = []byte("StrikeWindowEpochs")
+	KeyEvictAfterMissedEpochsHot   = []byte("EvictAfterMissedEpochsHot")
+	KeyEvictAfterMissedEpochsCold  = []byte("EvictAfterMissedEpochsCold")
+	KeyMinProviderBond             = []byte("MinProviderBond")
+	KeyBondMonths                  = []byte("BondMonths")
+	KeyProviderUnbondingBlocks     = []byte("ProviderUnbondingBlocks")
+	KeyReplacementCooldownBlocks   = []byte("ReplacementCooldownBlocks")
+	KeyRepairAttemptsCap           = []byte("RepairAttemptsCap")
+	KeyRepairAttemptWindowBlocks   = []byte("RepairAttemptWindowBlocks")
+	KeyPremiumBps                  = []byte("PremiumBps")
+	KeyEvidenceBond                = []byte("EvidenceBond")
+	KeyFailureBounty               = []byte("FailureBounty")
+	KeyEvidenceBondBurnBpsOnExpiry = []byte("EvidenceBondBurnBpsOnExpiry")
+	KeyProofOfFailureTtlEpochs     = []byte("ProofOfFailureTtlEpochs")
+	KeyAuditBudgetBps              = []byte("AuditBudgetBps")
+	KeyAuditBudgetCapBps           = []byte("AuditBudgetCapBps")
+	KeyAuditBudgetCarryoverEpochs  = []byte("AuditBudgetCarryoverEpochs")
+	KeyCreditCapBpsHot             = []byte("CreditCapBpsHot")
+	KeyCreditCapBpsCold            = []byte("CreditCapBpsCold")
 )
 
 // ParamKeyTable the param key table for launch module
@@ -56,6 +85,34 @@ func NewParams(
 	quotaMaxBlobs uint64,
 	creditCapBps uint64,
 	evictAfterMissedEpochs uint64,
+	slashInvalidProofBps uint64,
+	slashWrongDataBps uint64,
+	slashNonresponseBps uint64,
+	jailInvalidProofEpochs uint64,
+	jailWrongDataEpochs uint64,
+	jailNonresponseEpochs uint64,
+	nonresponseThreshold uint64,
+	nonresponseWindowEpochs uint64,
+	maxStrikesBeforeGlobalJail uint64,
+	strikeWindowEpochs uint64,
+	evictAfterMissedEpochsHot uint64,
+	evictAfterMissedEpochsCold uint64,
+	minProviderBond sdk.Coin,
+	bondMonths uint64,
+	providerUnbondingBlocks uint64,
+	replacementCooldownBlocks uint64,
+	repairAttemptsCap uint64,
+	repairAttemptWindowBlocks uint64,
+	premiumBps uint64,
+	evidenceBond sdk.Coin,
+	failureBounty sdk.Coin,
+	evidenceBondBurnBpsOnExpiry uint64,
+	proofOfFailureTtlEpochs uint64,
+	auditBudgetBps uint64,
+	auditBudgetCapBps uint64,
+	auditBudgetCarryoverEpochs uint64,
+	creditCapBpsHot uint64,
+	creditCapBpsCold uint64,
 ) Params {
 	return Params{
 		BaseStripeCost:        baseStripeCost,
@@ -76,6 +133,35 @@ func NewParams(
 		QuotaMaxBlobs:          quotaMaxBlobs,
 		CreditCapBps:           creditCapBps,
 		EvictAfterMissedEpochs: evictAfterMissedEpochs,
+
+		SlashInvalidProofBps:        slashInvalidProofBps,
+		SlashWrongDataBps:           slashWrongDataBps,
+		SlashNonresponseBps:         slashNonresponseBps,
+		JailInvalidProofEpochs:      jailInvalidProofEpochs,
+		JailWrongDataEpochs:         jailWrongDataEpochs,
+		JailNonresponseEpochs:       jailNonresponseEpochs,
+		NonresponseThreshold:        nonresponseThreshold,
+		NonresponseWindowEpochs:     nonresponseWindowEpochs,
+		MaxStrikesBeforeGlobalJail:  maxStrikesBeforeGlobalJail,
+		StrikeWindowEpochs:          strikeWindowEpochs,
+		EvictAfterMissedEpochsHot:   evictAfterMissedEpochsHot,
+		EvictAfterMissedEpochsCold:  evictAfterMissedEpochsCold,
+		MinProviderBond:             minProviderBond,
+		BondMonths:                  bondMonths,
+		ProviderUnbondingBlocks:     providerUnbondingBlocks,
+		ReplacementCooldownBlocks:   replacementCooldownBlocks,
+		RepairAttemptsCap:           repairAttemptsCap,
+		RepairAttemptWindowBlocks:   repairAttemptWindowBlocks,
+		PremiumBps:                  premiumBps,
+		EvidenceBond:                evidenceBond,
+		FailureBounty:               failureBounty,
+		EvidenceBondBurnBpsOnExpiry: evidenceBondBurnBpsOnExpiry,
+		ProofOfFailureTtlEpochs:     proofOfFailureTtlEpochs,
+		AuditBudgetBps:              auditBudgetBps,
+		AuditBudgetCapBps:           auditBudgetCapBps,
+		AuditBudgetCarryoverEpochs:  auditBudgetCarryoverEpochs,
+		CreditCapBpsHot:             creditCapBpsHot,
+		CreditCapBpsCold:            creditCapBpsCold,
 	}
 }
 
@@ -88,8 +174,8 @@ func DefaultParams() Params {
 		math.LegacyNewDec(0), // StoragePrice
 		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(0)), // DealCreationFee
 		10, // MinDurationBlocks
-		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)), // BaseRetrievalFee (provisional devnet default)
-		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)), // RetrievalPricePerBlob (provisional devnet default)
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(100)), // BaseRetrievalFee (0.0001 NIL)
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(1)),   // RetrievalPricePerBlob (provisional devnet default)
 		500,  // RetrievalBurnBps (5%)
 		1000, // MonthLenBlocks (devnet-friendly "month")
 		100,  // EpochLenBlocks (devnet-friendly "epoch")
@@ -97,8 +183,37 @@ func DefaultParams() Params {
 		50,   // QuotaBpsPerEpochCold (0.5%)
 		1,    // QuotaMinBlobs
 		64,   // QuotaMaxBlobs
-		5000, // CreditCapBps (50% of quota via organic retrieval)
-		3,    // EvictAfterMissedEpochs
+		0,    // CreditCapBps (legacy fallback, devnet caps disabled)
+		3,    // EvictAfterMissedEpochs (legacy fallback)
+
+		50,  // SlashInvalidProofBps (0.5%)
+		500, // SlashWrongDataBps (5%)
+		100, // SlashNonresponseBps (1%)
+		3,   // JailInvalidProofEpochs
+		30,  // JailWrongDataEpochs
+		10,  // JailNonresponseEpochs
+		3,   // NonresponseThreshold
+		6,   // NonresponseWindowEpochs
+		10,  // MaxStrikesBeforeGlobalJail
+		100, // StrikeWindowEpochs
+		2,   // EvictAfterMissedEpochsHot
+		6,   // EvictAfterMissedEpochsCold
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(100)), // MinProviderBond
+		2,      // BondMonths
+		1000,   // ProviderUnbondingBlocks (default to MonthLenBlocks)
+		604800, // ReplacementCooldownBlocks (7 days at 1s blocks)
+		3,      // RepairAttemptsCap
+		1000,   // RepairAttemptWindowBlocks (default to MonthLenBlocks)
+		2000,   // PremiumBps (20%)
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(10000)), // EvidenceBond (0.01 NIL)
+		sdk.NewCoin(sdk.DefaultBondDenom, math.NewInt(20000)), // FailureBounty (0.02 NIL)
+		5000, // EvidenceBondBurnBpsOnExpiry (50%)
+		6,    // ProofOfFailureTtlEpochs (default to nonresponse window)
+		200,  // AuditBudgetBps (2%)
+		500,  // AuditBudgetCapBps (5%)
+		2,    // AuditBudgetCarryoverEpochs
+		0,    // CreditCapBpsHot
+		0,    // CreditCapBpsCold
 	)
 }
 
@@ -123,6 +238,34 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyQuotaMaxBlobs, &p.QuotaMaxBlobs, validateQuotaMaxBlobs),
 		paramtypes.NewParamSetPair(KeyCreditCapBps, &p.CreditCapBps, validateCreditCapBps),
 		paramtypes.NewParamSetPair(KeyEvictAfterMissedEpochs, &p.EvictAfterMissedEpochs, validateEvictAfterMissedEpochs),
+		paramtypes.NewParamSetPair(KeySlashInvalidProofBps, &p.SlashInvalidProofBps, validateSlashInvalidProofBps),
+		paramtypes.NewParamSetPair(KeySlashWrongDataBps, &p.SlashWrongDataBps, validateSlashWrongDataBps),
+		paramtypes.NewParamSetPair(KeySlashNonresponseBps, &p.SlashNonresponseBps, validateSlashNonresponseBps),
+		paramtypes.NewParamSetPair(KeyJailInvalidProofEpochs, &p.JailInvalidProofEpochs, validateJailInvalidProofEpochs),
+		paramtypes.NewParamSetPair(KeyJailWrongDataEpochs, &p.JailWrongDataEpochs, validateJailWrongDataEpochs),
+		paramtypes.NewParamSetPair(KeyJailNonresponseEpochs, &p.JailNonresponseEpochs, validateJailNonresponseEpochs),
+		paramtypes.NewParamSetPair(KeyNonresponseThreshold, &p.NonresponseThreshold, validateNonresponseThreshold),
+		paramtypes.NewParamSetPair(KeyNonresponseWindowEpochs, &p.NonresponseWindowEpochs, validateNonresponseWindowEpochs),
+		paramtypes.NewParamSetPair(KeyMaxStrikesBeforeGlobalJail, &p.MaxStrikesBeforeGlobalJail, validateMaxStrikesBeforeGlobalJail),
+		paramtypes.NewParamSetPair(KeyStrikeWindowEpochs, &p.StrikeWindowEpochs, validateStrikeWindowEpochs),
+		paramtypes.NewParamSetPair(KeyEvictAfterMissedEpochsHot, &p.EvictAfterMissedEpochsHot, validateEvictAfterMissedEpochsHot),
+		paramtypes.NewParamSetPair(KeyEvictAfterMissedEpochsCold, &p.EvictAfterMissedEpochsCold, validateEvictAfterMissedEpochsCold),
+		paramtypes.NewParamSetPair(KeyMinProviderBond, &p.MinProviderBond, validateMinProviderBond),
+		paramtypes.NewParamSetPair(KeyBondMonths, &p.BondMonths, validateBondMonths),
+		paramtypes.NewParamSetPair(KeyProviderUnbondingBlocks, &p.ProviderUnbondingBlocks, validateProviderUnbondingBlocks),
+		paramtypes.NewParamSetPair(KeyReplacementCooldownBlocks, &p.ReplacementCooldownBlocks, validateReplacementCooldownBlocks),
+		paramtypes.NewParamSetPair(KeyRepairAttemptsCap, &p.RepairAttemptsCap, validateRepairAttemptsCap),
+		paramtypes.NewParamSetPair(KeyRepairAttemptWindowBlocks, &p.RepairAttemptWindowBlocks, validateRepairAttemptWindowBlocks),
+		paramtypes.NewParamSetPair(KeyPremiumBps, &p.PremiumBps, validatePremiumBps),
+		paramtypes.NewParamSetPair(KeyEvidenceBond, &p.EvidenceBond, validateEvidenceBond),
+		paramtypes.NewParamSetPair(KeyFailureBounty, &p.FailureBounty, validateFailureBounty),
+		paramtypes.NewParamSetPair(KeyEvidenceBondBurnBpsOnExpiry, &p.EvidenceBondBurnBpsOnExpiry, validateEvidenceBondBurnBpsOnExpiry),
+		paramtypes.NewParamSetPair(KeyProofOfFailureTtlEpochs, &p.ProofOfFailureTtlEpochs, validateProofOfFailureTtlEpochs),
+		paramtypes.NewParamSetPair(KeyAuditBudgetBps, &p.AuditBudgetBps, validateAuditBudgetBps),
+		paramtypes.NewParamSetPair(KeyAuditBudgetCapBps, &p.AuditBudgetCapBps, validateAuditBudgetCapBps),
+		paramtypes.NewParamSetPair(KeyAuditBudgetCarryoverEpochs, &p.AuditBudgetCarryoverEpochs, validateAuditBudgetCarryoverEpochs),
+		paramtypes.NewParamSetPair(KeyCreditCapBpsHot, &p.CreditCapBpsHot, validateCreditCapBpsHot),
+		paramtypes.NewParamSetPair(KeyCreditCapBpsCold, &p.CreditCapBpsCold, validateCreditCapBpsCold),
 	}
 }
 
@@ -180,6 +323,90 @@ func (p Params) Validate() error {
 		return err
 	}
 	if err := validateEvictAfterMissedEpochs(p.EvictAfterMissedEpochs); err != nil {
+		return err
+	}
+	if err := validateSlashInvalidProofBps(p.SlashInvalidProofBps); err != nil {
+		return err
+	}
+	if err := validateSlashWrongDataBps(p.SlashWrongDataBps); err != nil {
+		return err
+	}
+	if err := validateSlashNonresponseBps(p.SlashNonresponseBps); err != nil {
+		return err
+	}
+	if err := validateJailInvalidProofEpochs(p.JailInvalidProofEpochs); err != nil {
+		return err
+	}
+	if err := validateJailWrongDataEpochs(p.JailWrongDataEpochs); err != nil {
+		return err
+	}
+	if err := validateJailNonresponseEpochs(p.JailNonresponseEpochs); err != nil {
+		return err
+	}
+	if err := validateNonresponseThreshold(p.NonresponseThreshold); err != nil {
+		return err
+	}
+	if err := validateNonresponseWindowEpochs(p.NonresponseWindowEpochs); err != nil {
+		return err
+	}
+	if err := validateMaxStrikesBeforeGlobalJail(p.MaxStrikesBeforeGlobalJail); err != nil {
+		return err
+	}
+	if err := validateStrikeWindowEpochs(p.StrikeWindowEpochs); err != nil {
+		return err
+	}
+	if err := validateEvictAfterMissedEpochsHot(p.EvictAfterMissedEpochsHot); err != nil {
+		return err
+	}
+	if err := validateEvictAfterMissedEpochsCold(p.EvictAfterMissedEpochsCold); err != nil {
+		return err
+	}
+	if err := validateMinProviderBond(p.MinProviderBond); err != nil {
+		return err
+	}
+	if err := validateBondMonths(p.BondMonths); err != nil {
+		return err
+	}
+	if err := validateProviderUnbondingBlocks(p.ProviderUnbondingBlocks); err != nil {
+		return err
+	}
+	if err := validateReplacementCooldownBlocks(p.ReplacementCooldownBlocks); err != nil {
+		return err
+	}
+	if err := validateRepairAttemptsCap(p.RepairAttemptsCap); err != nil {
+		return err
+	}
+	if err := validateRepairAttemptWindowBlocks(p.RepairAttemptWindowBlocks); err != nil {
+		return err
+	}
+	if err := validatePremiumBps(p.PremiumBps); err != nil {
+		return err
+	}
+	if err := validateEvidenceBond(p.EvidenceBond); err != nil {
+		return err
+	}
+	if err := validateFailureBounty(p.FailureBounty); err != nil {
+		return err
+	}
+	if err := validateEvidenceBondBurnBpsOnExpiry(p.EvidenceBondBurnBpsOnExpiry); err != nil {
+		return err
+	}
+	if err := validateProofOfFailureTtlEpochs(p.ProofOfFailureTtlEpochs); err != nil {
+		return err
+	}
+	if err := validateAuditBudgetBps(p.AuditBudgetBps); err != nil {
+		return err
+	}
+	if err := validateAuditBudgetCapBps(p.AuditBudgetCapBps); err != nil {
+		return err
+	}
+	if err := validateAuditBudgetCarryoverEpochs(p.AuditBudgetCarryoverEpochs); err != nil {
+		return err
+	}
+	if err := validateCreditCapBpsHot(p.CreditCapBpsHot); err != nil {
+		return err
+	}
+	if err := validateCreditCapBpsCold(p.CreditCapBpsCold); err != nil {
 		return err
 	}
 	return nil
@@ -363,6 +590,168 @@ func validateEvictAfterMissedEpochs(i interface{}) error {
 	}
 	if v == 0 {
 		return fmt.Errorf("evict_after_missed_epochs must be non-zero")
+	}
+	return nil
+}
+
+func validateSlashInvalidProofBps(i interface{}) error {
+	return validateBps(i, "slash_invalid_proof_bps")
+}
+
+func validateSlashWrongDataBps(i interface{}) error {
+	return validateBps(i, "slash_wrong_data_bps")
+}
+
+func validateSlashNonresponseBps(i interface{}) error {
+	return validateBps(i, "slash_nonresponse_bps")
+}
+
+func validateJailInvalidProofEpochs(i interface{}) error {
+	return validateUint64NonZero(i, "jail_invalid_proof_epochs")
+}
+
+func validateJailWrongDataEpochs(i interface{}) error {
+	return validateUint64NonZero(i, "jail_wrong_data_epochs")
+}
+
+func validateJailNonresponseEpochs(i interface{}) error {
+	return validateUint64NonZero(i, "jail_nonresponse_epochs")
+}
+
+func validateNonresponseThreshold(i interface{}) error {
+	v, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v < 1 {
+		return fmt.Errorf("nonresponse_threshold must be >= 1 (got %d)", v)
+	}
+	return nil
+}
+
+func validateNonresponseWindowEpochs(i interface{}) error {
+	v, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v < 1 {
+		return fmt.Errorf("nonresponse_window_epochs must be >= 1 (got %d)", v)
+	}
+	return nil
+}
+
+func validateMaxStrikesBeforeGlobalJail(i interface{}) error {
+	return validateUint64NonZero(i, "max_strikes_before_global_jail")
+}
+
+func validateStrikeWindowEpochs(i interface{}) error {
+	return validateUint64NonZero(i, "strike_window_epochs")
+}
+
+func validateEvictAfterMissedEpochsHot(i interface{}) error {
+	return validateUint64NonZero(i, "evict_after_missed_epochs_hot")
+}
+
+func validateEvictAfterMissedEpochsCold(i interface{}) error {
+	return validateUint64NonZero(i, "evict_after_missed_epochs_cold")
+}
+
+func validateMinProviderBond(i interface{}) error {
+	return validateCoinWithDenom(i, "min_provider_bond")
+}
+
+func validateBondMonths(i interface{}) error {
+	return validateUint64NonZero(i, "bond_months")
+}
+
+func validateProviderUnbondingBlocks(i interface{}) error {
+	return validateUint64NonZero(i, "provider_unbonding_blocks")
+}
+
+func validateReplacementCooldownBlocks(i interface{}) error {
+	return validateUint64NonZero(i, "replacement_cooldown_blocks")
+}
+
+func validateRepairAttemptsCap(i interface{}) error {
+	return validateUint64NonZero(i, "repair_attempts_cap")
+}
+
+func validateRepairAttemptWindowBlocks(i interface{}) error {
+	return validateUint64NonZero(i, "repair_attempt_window_blocks")
+}
+
+func validatePremiumBps(i interface{}) error {
+	return validateBps(i, "premium_bps")
+}
+
+func validateEvidenceBond(i interface{}) error {
+	return validateCoinWithDenom(i, "evidence_bond")
+}
+
+func validateFailureBounty(i interface{}) error {
+	return validateCoinWithDenom(i, "failure_bounty")
+}
+
+func validateEvidenceBondBurnBpsOnExpiry(i interface{}) error {
+	return validateBps(i, "evidence_bond_burn_bps_on_expiry")
+}
+
+func validateProofOfFailureTtlEpochs(i interface{}) error {
+	return validateUint64NonZero(i, "proof_of_failure_ttl_epochs")
+}
+
+func validateAuditBudgetBps(i interface{}) error {
+	return validateBps(i, "audit_budget_bps")
+}
+
+func validateAuditBudgetCapBps(i interface{}) error {
+	return validateBps(i, "audit_budget_cap_bps")
+}
+
+func validateAuditBudgetCarryoverEpochs(i interface{}) error {
+	return validateUint64NonZero(i, "audit_budget_carryover_epochs")
+}
+
+func validateCreditCapBpsHot(i interface{}) error {
+	return validateBps(i, "credit_cap_bps_hot")
+}
+
+func validateCreditCapBpsCold(i interface{}) error {
+	return validateBps(i, "credit_cap_bps_cold")
+}
+
+func validateBps(i interface{}, name string) error {
+	v, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v > 10000 {
+		return fmt.Errorf("%s must be <= 10000 (got %d)", name, v)
+	}
+	return nil
+}
+
+func validateUint64NonZero(i interface{}, name string) error {
+	v, ok := i.(uint64)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if v == 0 {
+		return fmt.Errorf("%s must be non-zero", name)
+	}
+	return nil
+}
+
+func validateCoinWithDenom(i interface{}, name string) error {
+	v, ok := i.(sdk.Coin)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+	if !v.IsValid() {
+		return fmt.Errorf("invalid %s: %s", name, v)
+	}
+	if strings.TrimSpace(v.Denom) != strings.TrimSpace(sdk.DefaultBondDenom) {
+		return fmt.Errorf("%s denom must be %q (got %q)", name, sdk.DefaultBondDenom, v.Denom)
 	}
 	return nil
 }

@@ -55,6 +55,39 @@ type Params struct {
 	CreditCapBps uint64 `protobuf:"varint,16,opt,name=credit_cap_bps,json=creditCapBps,proto3" json:"credit_cap_bps,omitempty"`
 	// Evict (trigger repair) after this many consecutive missed epochs.
 	EvictAfterMissedEpochs uint64 `protobuf:"varint,17,opt,name=evict_after_missed_epochs,json=evictAfterMissedEpochs,proto3" json:"evict_after_missed_epochs,omitempty"`
+	// --- Slashing + jailing policy (B1) ---
+	SlashInvalidProofBps       uint64 `protobuf:"varint,18,opt,name=slash_invalid_proof_bps,json=slashInvalidProofBps,proto3" json:"slash_invalid_proof_bps,omitempty"`
+	SlashWrongDataBps          uint64 `protobuf:"varint,19,opt,name=slash_wrong_data_bps,json=slashWrongDataBps,proto3" json:"slash_wrong_data_bps,omitempty"`
+	SlashNonresponseBps        uint64 `protobuf:"varint,20,opt,name=slash_nonresponse_bps,json=slashNonresponseBps,proto3" json:"slash_nonresponse_bps,omitempty"`
+	JailInvalidProofEpochs     uint64 `protobuf:"varint,21,opt,name=jail_invalid_proof_epochs,json=jailInvalidProofEpochs,proto3" json:"jail_invalid_proof_epochs,omitempty"`
+	JailWrongDataEpochs        uint64 `protobuf:"varint,22,opt,name=jail_wrong_data_epochs,json=jailWrongDataEpochs,proto3" json:"jail_wrong_data_epochs,omitempty"`
+	JailNonresponseEpochs      uint64 `protobuf:"varint,23,opt,name=jail_nonresponse_epochs,json=jailNonresponseEpochs,proto3" json:"jail_nonresponse_epochs,omitempty"`
+	NonresponseThreshold       uint64 `protobuf:"varint,24,opt,name=nonresponse_threshold,json=nonresponseThreshold,proto3" json:"nonresponse_threshold,omitempty"`
+	NonresponseWindowEpochs    uint64 `protobuf:"varint,25,opt,name=nonresponse_window_epochs,json=nonresponseWindowEpochs,proto3" json:"nonresponse_window_epochs,omitempty"`
+	MaxStrikesBeforeGlobalJail uint64 `protobuf:"varint,26,opt,name=max_strikes_before_global_jail,json=maxStrikesBeforeGlobalJail,proto3" json:"max_strikes_before_global_jail,omitempty"`
+	StrikeWindowEpochs         uint64 `protobuf:"varint,27,opt,name=strike_window_epochs,json=strikeWindowEpochs,proto3" json:"strike_window_epochs,omitempty"`
+	EvictAfterMissedEpochsHot  uint64 `protobuf:"varint,28,opt,name=evict_after_missed_epochs_hot,json=evictAfterMissedEpochsHot,proto3" json:"evict_after_missed_epochs_hot,omitempty"`
+	EvictAfterMissedEpochsCold uint64 `protobuf:"varint,29,opt,name=evict_after_missed_epochs_cold,json=evictAfterMissedEpochsCold,proto3" json:"evict_after_missed_epochs_cold,omitempty"`
+	// --- Bonding (B2) ---
+	MinProviderBond         types.Coin `protobuf:"bytes,30,opt,name=min_provider_bond,json=minProviderBond,proto3" json:"min_provider_bond"`
+	BondMonths              uint64     `protobuf:"varint,31,opt,name=bond_months,json=bondMonths,proto3" json:"bond_months,omitempty"`
+	ProviderUnbondingBlocks uint64     `protobuf:"varint,32,opt,name=provider_unbonding_blocks,json=providerUnbondingBlocks,proto3" json:"provider_unbonding_blocks,omitempty"`
+	// --- Replacement (B4) ---
+	ReplacementCooldownBlocks uint64 `protobuf:"varint,33,opt,name=replacement_cooldown_blocks,json=replacementCooldownBlocks,proto3" json:"replacement_cooldown_blocks,omitempty"`
+	RepairAttemptsCap         uint64 `protobuf:"varint,34,opt,name=repair_attempts_cap,json=repairAttemptsCap,proto3" json:"repair_attempts_cap,omitempty"`
+	RepairAttemptWindowBlocks uint64 `protobuf:"varint,35,opt,name=repair_attempt_window_blocks,json=repairAttemptWindowBlocks,proto3" json:"repair_attempt_window_blocks,omitempty"`
+	// --- Deputy + audit budget (B5) ---
+	PremiumBps                  uint64     `protobuf:"varint,36,opt,name=premium_bps,json=premiumBps,proto3" json:"premium_bps,omitempty"`
+	EvidenceBond                types.Coin `protobuf:"bytes,37,opt,name=evidence_bond,json=evidenceBond,proto3" json:"evidence_bond"`
+	FailureBounty               types.Coin `protobuf:"bytes,38,opt,name=failure_bounty,json=failureBounty,proto3" json:"failure_bounty"`
+	EvidenceBondBurnBpsOnExpiry uint64     `protobuf:"varint,39,opt,name=evidence_bond_burn_bps_on_expiry,json=evidenceBondBurnBpsOnExpiry,proto3" json:"evidence_bond_burn_bps_on_expiry,omitempty"`
+	ProofOfFailureTtlEpochs     uint64     `protobuf:"varint,40,opt,name=proof_of_failure_ttl_epochs,json=proofOfFailureTtlEpochs,proto3" json:"proof_of_failure_ttl_epochs,omitempty"`
+	AuditBudgetBps              uint64     `protobuf:"varint,41,opt,name=audit_budget_bps,json=auditBudgetBps,proto3" json:"audit_budget_bps,omitempty"`
+	AuditBudgetCapBps           uint64     `protobuf:"varint,42,opt,name=audit_budget_cap_bps,json=auditBudgetCapBps,proto3" json:"audit_budget_cap_bps,omitempty"`
+	AuditBudgetCarryoverEpochs  uint64     `protobuf:"varint,43,opt,name=audit_budget_carryover_epochs,json=auditBudgetCarryoverEpochs,proto3" json:"audit_budget_carryover_epochs,omitempty"`
+	// --- Credits phase-in (B6) ---
+	CreditCapBpsHot  uint64 `protobuf:"varint,44,opt,name=credit_cap_bps_hot,json=creditCapBpsHot,proto3" json:"credit_cap_bps_hot,omitempty"`
+	CreditCapBpsCold uint64 `protobuf:"varint,45,opt,name=credit_cap_bps_cold,json=creditCapBpsCold,proto3" json:"credit_cap_bps_cold,omitempty"`
 }
 
 func (m *Params) Reset()         { *m = Params{} }
@@ -202,6 +235,202 @@ func (m *Params) GetEvictAfterMissedEpochs() uint64 {
 	return 0
 }
 
+func (m *Params) GetSlashInvalidProofBps() uint64 {
+	if m != nil {
+		return m.SlashInvalidProofBps
+	}
+	return 0
+}
+
+func (m *Params) GetSlashWrongDataBps() uint64 {
+	if m != nil {
+		return m.SlashWrongDataBps
+	}
+	return 0
+}
+
+func (m *Params) GetSlashNonresponseBps() uint64 {
+	if m != nil {
+		return m.SlashNonresponseBps
+	}
+	return 0
+}
+
+func (m *Params) GetJailInvalidProofEpochs() uint64 {
+	if m != nil {
+		return m.JailInvalidProofEpochs
+	}
+	return 0
+}
+
+func (m *Params) GetJailWrongDataEpochs() uint64 {
+	if m != nil {
+		return m.JailWrongDataEpochs
+	}
+	return 0
+}
+
+func (m *Params) GetJailNonresponseEpochs() uint64 {
+	if m != nil {
+		return m.JailNonresponseEpochs
+	}
+	return 0
+}
+
+func (m *Params) GetNonresponseThreshold() uint64 {
+	if m != nil {
+		return m.NonresponseThreshold
+	}
+	return 0
+}
+
+func (m *Params) GetNonresponseWindowEpochs() uint64 {
+	if m != nil {
+		return m.NonresponseWindowEpochs
+	}
+	return 0
+}
+
+func (m *Params) GetMaxStrikesBeforeGlobalJail() uint64 {
+	if m != nil {
+		return m.MaxStrikesBeforeGlobalJail
+	}
+	return 0
+}
+
+func (m *Params) GetStrikeWindowEpochs() uint64 {
+	if m != nil {
+		return m.StrikeWindowEpochs
+	}
+	return 0
+}
+
+func (m *Params) GetEvictAfterMissedEpochsHot() uint64 {
+	if m != nil {
+		return m.EvictAfterMissedEpochsHot
+	}
+	return 0
+}
+
+func (m *Params) GetEvictAfterMissedEpochsCold() uint64 {
+	if m != nil {
+		return m.EvictAfterMissedEpochsCold
+	}
+	return 0
+}
+
+func (m *Params) GetMinProviderBond() types.Coin {
+	if m != nil {
+		return m.MinProviderBond
+	}
+	return types.Coin{}
+}
+
+func (m *Params) GetBondMonths() uint64 {
+	if m != nil {
+		return m.BondMonths
+	}
+	return 0
+}
+
+func (m *Params) GetProviderUnbondingBlocks() uint64 {
+	if m != nil {
+		return m.ProviderUnbondingBlocks
+	}
+	return 0
+}
+
+func (m *Params) GetReplacementCooldownBlocks() uint64 {
+	if m != nil {
+		return m.ReplacementCooldownBlocks
+	}
+	return 0
+}
+
+func (m *Params) GetRepairAttemptsCap() uint64 {
+	if m != nil {
+		return m.RepairAttemptsCap
+	}
+	return 0
+}
+
+func (m *Params) GetRepairAttemptWindowBlocks() uint64 {
+	if m != nil {
+		return m.RepairAttemptWindowBlocks
+	}
+	return 0
+}
+
+func (m *Params) GetPremiumBps() uint64 {
+	if m != nil {
+		return m.PremiumBps
+	}
+	return 0
+}
+
+func (m *Params) GetEvidenceBond() types.Coin {
+	if m != nil {
+		return m.EvidenceBond
+	}
+	return types.Coin{}
+}
+
+func (m *Params) GetFailureBounty() types.Coin {
+	if m != nil {
+		return m.FailureBounty
+	}
+	return types.Coin{}
+}
+
+func (m *Params) GetEvidenceBondBurnBpsOnExpiry() uint64 {
+	if m != nil {
+		return m.EvidenceBondBurnBpsOnExpiry
+	}
+	return 0
+}
+
+func (m *Params) GetProofOfFailureTtlEpochs() uint64 {
+	if m != nil {
+		return m.ProofOfFailureTtlEpochs
+	}
+	return 0
+}
+
+func (m *Params) GetAuditBudgetBps() uint64 {
+	if m != nil {
+		return m.AuditBudgetBps
+	}
+	return 0
+}
+
+func (m *Params) GetAuditBudgetCapBps() uint64 {
+	if m != nil {
+		return m.AuditBudgetCapBps
+	}
+	return 0
+}
+
+func (m *Params) GetAuditBudgetCarryoverEpochs() uint64 {
+	if m != nil {
+		return m.AuditBudgetCarryoverEpochs
+	}
+	return 0
+}
+
+func (m *Params) GetCreditCapBpsHot() uint64 {
+	if m != nil {
+		return m.CreditCapBpsHot
+	}
+	return 0
+}
+
+func (m *Params) GetCreditCapBpsCold() uint64 {
+	if m != nil {
+		return m.CreditCapBpsCold
+	}
+	return 0
+}
+
 func init() {
 	proto.RegisterType((*Params)(nil), "nilchain.nilchain.v1.Params")
 }
@@ -209,48 +438,85 @@ func init() {
 func init() { proto.RegisterFile("nilchain/nilchain/v1/params.proto", fileDescriptor_8ae414f9073848ab) }
 
 var fileDescriptor_8ae414f9073848ab = []byte{
-	// 654 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x54, 0xcb, 0x6e, 0xd3, 0x4a,
-	0x18, 0x8e, 0xcf, 0xe9, 0x69, 0x4f, 0xa7, 0x97, 0x24, 0x6e, 0xcf, 0xc1, 0x2d, 0x52, 0x5a, 0x28,
-	0x42, 0x01, 0x21, 0x5b, 0x69, 0x11, 0x08, 0x76, 0x38, 0x05, 0xb5, 0xa2, 0x95, 0xa2, 0xb0, 0x41,
-	0x6c, 0x46, 0x63, 0xfb, 0x6f, 0x32, 0xaa, 0xed, 0x31, 0x33, 0x13, 0xab, 0x7d, 0x05, 0x56, 0x3c,
-	0x02, 0x8f, 0xc0, 0x9e, 0x17, 0xe8, 0xb2, 0x4b, 0xc4, 0xa2, 0x42, 0xed, 0x02, 0x1e, 0x03, 0xcd,
-	0x3f, 0x6e, 0x52, 0x50, 0x17, 0xdd, 0x44, 0xa3, 0xef, 0xf2, 0x5f, 0xbe, 0x8c, 0x87, 0xdc, 0xc9,
-	0x79, 0x1a, 0x0f, 0x19, 0xcf, 0x83, 0xf1, 0xa1, 0xec, 0x04, 0x05, 0x93, 0x2c, 0x53, 0x7e, 0x21,
-	0x85, 0x16, 0xee, 0xf2, 0x25, 0xe3, 0x8f, 0x0f, 0x65, 0x67, 0xb5, 0xc9, 0x32, 0x9e, 0x8b, 0x00,
-	0x7f, 0xad, 0x70, 0x75, 0x79, 0x20, 0x06, 0x02, 0x8f, 0x81, 0x39, 0x55, 0x68, 0x2b, 0x16, 0x2a,
-	0x13, 0x2a, 0x88, 0x98, 0x82, 0xa0, 0xec, 0x44, 0xa0, 0x59, 0x27, 0x88, 0x05, 0xcf, 0x2d, 0x7f,
-	0xf7, 0xcb, 0x0c, 0x99, 0xee, 0x61, 0x3f, 0xb7, 0x4d, 0x1a, 0x46, 0x45, 0x95, 0x96, 0xbc, 0x00,
-	0x1a, 0x0b, 0xa5, 0x3d, 0x67, 0xdd, 0x69, 0x4f, 0xf5, 0x17, 0x0d, 0xfe, 0x06, 0xe1, 0xae, 0x50,
-	0xda, 0x7d, 0x40, 0x1a, 0x43, 0x96, 0x96, 0x3c, 0x1f, 0x50, 0x9e, 0x6b, 0x90, 0x25, 0x4b, 0xbd,
-	0xbf, 0x50, 0x59, 0xaf, 0xf0, 0xdd, 0x0a, 0x76, 0xef, 0x93, 0x3a, 0xf0, 0xe2, 0x69, 0x67, 0x93,
-	0xe2, 0xec, 0x94, 0x27, 0xde, 0xdf, 0xa8, 0x5c, 0xb0, 0x70, 0xd7, 0xa0, 0xbb, 0x89, 0xbb, 0x43,
-	0x16, 0x94, 0x16, 0x92, 0x0d, 0x80, 0x16, 0x92, 0xc7, 0xe0, 0x4d, 0xad, 0x3b, 0xed, 0xd9, 0x70,
-	0xe3, 0xe4, 0x6c, 0xad, 0xf6, 0xed, 0x6c, 0xed, 0xb6, 0x5d, 0x43, 0x25, 0x87, 0x3e, 0x17, 0x41,
-	0xc6, 0xf4, 0xd0, 0xdf, 0x83, 0x01, 0x8b, 0x8f, 0xb7, 0x21, 0xee, 0xcf, 0x57, 0xce, 0x9e, 0x31,
-	0xba, 0xaf, 0x49, 0x33, 0x01, 0x96, 0xd2, 0x58, 0x02, 0xd3, 0x5c, 0xe4, 0xf4, 0x00, 0xc0, 0xfb,
-	0x67, 0xdd, 0x69, 0xcf, 0x6d, 0xae, 0xf8, 0xb6, 0x8c, 0x6f, 0xf6, 0xf1, 0xab, 0x34, 0xfc, 0xae,
-	0xe0, 0x79, 0x38, 0x65, 0x1a, 0xf5, 0xeb, 0xc6, 0xd9, 0xad, 0x8c, 0xaf, 0x00, 0x5c, 0x9f, 0x2c,
-	0x65, 0x3c, 0xa7, 0xc9, 0x48, 0xda, 0x5a, 0x51, 0x2a, 0xe2, 0x43, 0xe5, 0x4d, 0xe3, 0x0a, 0xcd,
-	0x8c, 0xe7, 0xdb, 0x15, 0x13, 0x22, 0xe1, 0xee, 0x13, 0x17, 0x33, 0x94, 0xa0, 0x25, 0x87, 0x92,
-	0xa5, 0xd8, 0x7d, 0xe6, 0x66, 0xdd, 0x31, 0xfe, 0xfe, 0xa5, 0xd3, 0xb4, 0x7f, 0x4b, 0xbc, 0x49,
-	0x25, 0xcc, 0x85, 0x16, 0x20, 0xcd, 0x14, 0x91, 0xf7, 0xef, 0xcd, 0x8a, 0xfe, 0x37, 0x2e, 0x80,
-	0xf1, 0xf4, 0x40, 0x86, 0xa9, 0x88, 0xdc, 0x47, 0xc4, 0x9d, 0x54, 0x8e, 0x46, 0x32, 0xa7, 0x51,
-	0xa1, 0xbc, 0x59, 0xdc, 0xab, 0x31, 0x66, 0xc2, 0x91, 0xcc, 0xc3, 0x02, 0xaf, 0x46, 0x26, 0x72,
-	0x3d, 0xa4, 0x29, 0x8c, 0x33, 0x20, 0xf6, 0x6a, 0x20, 0xbe, 0x07, 0x97, 0x01, 0xb4, 0x49, 0x03,
-	0x0a, 0x11, 0xff, 0xa6, 0x9c, 0xb3, 0x4a, 0xc4, 0x27, 0xca, 0xc7, 0xe4, 0xd6, 0xfb, 0x91, 0xd0,
-	0xcc, 0x34, 0xc6, 0xad, 0xac, 0x6f, 0x28, 0xb4, 0x37, 0x8f, 0x86, 0x25, 0xa4, 0xc3, 0x42, 0xf5,
-	0x40, 0xbe, 0x34, 0xdc, 0x8e, 0xd0, 0xee, 0x13, 0xe2, 0x5d, 0xe7, 0x8a, 0x45, 0x9a, 0x78, 0x0b,
-	0x68, 0x5b, 0xfe, 0xd3, 0xd6, 0x15, 0x69, 0x62, 0xee, 0xa1, 0xf5, 0x99, 0xbf, 0xd3, 0xe4, 0xa7,
-	0xbc, 0x45, 0x7b, 0x0f, 0x11, 0xde, 0xe7, 0x66, 0xac, 0x48, 0x5d, 0xd1, 0xb1, 0xa3, 0x4a, 0x57,
-	0xbf, 0xaa, 0x63, 0x47, 0x56, 0x77, 0x8f, 0x2c, 0xc6, 0x12, 0x12, 0xae, 0x69, 0xcc, 0x0a, 0xcc,
-	0xae, 0x81, 0xb2, 0x79, 0x8b, 0x76, 0x59, 0x61, 0x72, 0x7b, 0x46, 0x56, 0xa0, 0xe4, 0xb1, 0xa6,
-	0xec, 0x40, 0x83, 0xa4, 0x19, 0x57, 0x0a, 0x12, 0x3b, 0xb2, 0xf2, 0x9a, 0x68, 0xf8, 0x1f, 0x05,
-	0x2f, 0x0c, 0xbf, 0x8f, 0x34, 0xce, 0xac, 0x9e, 0x6f, 0xfc, 0xfc, 0xb4, 0xe6, 0x7c, 0xf8, 0xf1,
-	0xf9, 0xe1, 0xea, 0xf8, 0x69, 0x38, 0x9a, 0xbc, 0x12, 0xf6, 0x93, 0x0d, 0xb7, 0x4e, 0xce, 0x5b,
-	0xce, 0xe9, 0x79, 0xcb, 0xf9, 0x7e, 0xde, 0x72, 0x3e, 0x5e, 0xb4, 0x6a, 0xa7, 0x17, 0xad, 0xda,
-	0xd7, 0x8b, 0x56, 0xed, 0xdd, 0xca, 0x75, 0x2e, 0x7d, 0x5c, 0x80, 0x8a, 0xa6, 0xf1, 0xcb, 0xdf,
-	0xfa, 0x15, 0x00, 0x00, 0xff, 0xff, 0xdd, 0x98, 0x4c, 0x1b, 0x7d, 0x04, 0x00, 0x00,
+	// 1241 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x56, 0xcb, 0x72, 0x1b, 0x45,
+	0x17, 0xb6, 0xfe, 0x3f, 0x04, 0xd2, 0xbe, 0xc9, 0x23, 0x3b, 0x1e, 0xd9, 0x89, 0xe4, 0x5c, 0x08,
+	0xca, 0x4d, 0xc2, 0x09, 0x84, 0x22, 0x45, 0x01, 0x19, 0x39, 0x21, 0x21, 0x31, 0x51, 0x39, 0xa1,
+	0x42, 0xb1, 0xe9, 0xea, 0x99, 0x69, 0x49, 0x8d, 0x67, 0xba, 0x87, 0xee, 0x96, 0x6c, 0xbf, 0x02,
+	0x2b, 0x1e, 0x81, 0x47, 0xe0, 0x31, 0xb2, 0xcc, 0x92, 0x62, 0x91, 0xa2, 0xec, 0x05, 0xbc, 0x00,
+	0x7b, 0xaa, 0x4f, 0xf7, 0x8c, 0x46, 0x2e, 0xa7, 0xca, 0x1b, 0x95, 0xea, 0x7c, 0xdf, 0x77, 0x6e,
+	0xdd, 0xe7, 0xf4, 0xa0, 0x4b, 0x9c, 0x25, 0xd1, 0x90, 0x30, 0xde, 0x29, 0xfe, 0x8c, 0x37, 0x3b,
+	0x19, 0x91, 0x24, 0x55, 0xed, 0x4c, 0x0a, 0x2d, 0xbc, 0xe5, 0x1c, 0x69, 0x17, 0x7f, 0xc6, 0x9b,
+	0x6b, 0x4b, 0x24, 0x65, 0x5c, 0x74, 0xe0, 0xd7, 0x12, 0xd7, 0x96, 0x07, 0x62, 0x20, 0xe0, 0x6f,
+	0xc7, 0xfc, 0x73, 0xd6, 0x46, 0x24, 0x54, 0x2a, 0x54, 0x27, 0x24, 0x8a, 0x76, 0xc6, 0x9b, 0x21,
+	0xd5, 0x64, 0xb3, 0x13, 0x09, 0xc6, 0x2d, 0x7e, 0xf9, 0xdf, 0x1a, 0x3a, 0xdb, 0x83, 0x78, 0x5e,
+	0x0b, 0x55, 0x0d, 0x0b, 0x2b, 0x2d, 0x59, 0x46, 0x71, 0x24, 0x94, 0xf6, 0x2b, 0x1b, 0x95, 0xd6,
+	0x99, 0x9d, 0x05, 0x63, 0x7f, 0x01, 0xe6, 0xae, 0x50, 0xda, 0xbb, 0x8e, 0xaa, 0x43, 0x92, 0x8c,
+	0x19, 0x1f, 0x60, 0xc6, 0x35, 0x95, 0x63, 0x92, 0xf8, 0xff, 0x03, 0xe6, 0xa2, 0xb3, 0x3f, 0x71,
+	0x66, 0xef, 0x1a, 0x5a, 0xa4, 0x2c, 0xfb, 0x6c, 0xf3, 0x0e, 0x86, 0xdc, 0x31, 0x8b, 0xfd, 0xff,
+	0x03, 0x73, 0xde, 0x9a, 0xbb, 0xc6, 0xfa, 0x24, 0xf6, 0x1e, 0xa3, 0x79, 0xa5, 0x85, 0x24, 0x03,
+	0x8a, 0x33, 0xc9, 0x22, 0xea, 0x9f, 0xd9, 0xa8, 0xb4, 0xce, 0x05, 0x57, 0x5e, 0xbf, 0x6d, 0xce,
+	0xfc, 0xf9, 0xb6, 0xb9, 0x6e, 0xcb, 0x50, 0xf1, 0x6e, 0x9b, 0x89, 0x4e, 0x4a, 0xf4, 0xb0, 0xfd,
+	0x8c, 0x0e, 0x48, 0x74, 0xb0, 0x45, 0xa3, 0x9d, 0x39, 0xa7, 0xec, 0x19, 0xa1, 0xf7, 0x14, 0x2d,
+	0xc5, 0x94, 0x24, 0x38, 0x92, 0x94, 0x68, 0x26, 0x38, 0xee, 0x53, 0xea, 0xbf, 0xb7, 0x51, 0x69,
+	0xcd, 0xde, 0xa9, 0xb7, 0xad, 0x9b, 0xb6, 0xa9, 0xa7, 0xed, 0xba, 0xd1, 0xee, 0x0a, 0xc6, 0x83,
+	0x33, 0x26, 0xd0, 0xce, 0xa2, 0x51, 0x76, 0x9d, 0xf0, 0x11, 0xa5, 0x5e, 0x1b, 0xd5, 0x52, 0xc6,
+	0x71, 0x3c, 0x92, 0xd6, 0x57, 0x98, 0x88, 0x68, 0x57, 0xf9, 0x67, 0xa1, 0x84, 0xa5, 0x94, 0xf1,
+	0x2d, 0x87, 0x04, 0x00, 0x78, 0xdb, 0xc8, 0x83, 0x1e, 0x4a, 0xaa, 0x25, 0xa3, 0x63, 0x92, 0x40,
+	0xf4, 0xf7, 0x4f, 0x17, 0x1d, 0xda, 0xbf, 0x93, 0x2b, 0x4d, 0xf8, 0x1f, 0x90, 0x3f, 0xf1, 0x04,
+	0x7d, 0xc1, 0x19, 0x95, 0x26, 0x8b, 0xd0, 0xff, 0xe0, 0x74, 0x4e, 0x57, 0x0a, 0x07, 0xd0, 0x9e,
+	0x1e, 0x95, 0x41, 0x22, 0x42, 0xef, 0x16, 0xf2, 0x26, 0x9e, 0xc3, 0x91, 0xe4, 0x38, 0xcc, 0x94,
+	0x7f, 0x0e, 0xea, 0xaa, 0x16, 0x48, 0x30, 0x92, 0x3c, 0xc8, 0xe0, 0x6a, 0xa4, 0x82, 0xeb, 0x21,
+	0x4e, 0x68, 0xd1, 0x03, 0x64, 0xaf, 0x06, 0xd8, 0x9f, 0xd1, 0xbc, 0x01, 0x2d, 0x54, 0xa5, 0x99,
+	0x88, 0xa6, 0x98, 0xb3, 0x96, 0x09, 0xf6, 0x09, 0xf3, 0x13, 0xb4, 0xfa, 0xf3, 0x48, 0x68, 0x62,
+	0x02, 0x43, 0x55, 0x56, 0x37, 0x14, 0xda, 0x9f, 0x03, 0x41, 0x0d, 0xe0, 0x20, 0x53, 0x3d, 0x2a,
+	0x1f, 0x1a, 0xec, 0xb1, 0xd0, 0xde, 0x3d, 0xe4, 0x9f, 0xa4, 0x8a, 0x44, 0x12, 0xfb, 0xf3, 0x20,
+	0x5b, 0x3e, 0x2e, 0xeb, 0x8a, 0x24, 0x36, 0xf7, 0xd0, 0xea, 0xcc, 0x71, 0x9a, 0xfe, 0x29, 0x7f,
+	0xc1, 0xde, 0x43, 0x30, 0x6f, 0x33, 0x93, 0x56, 0xa8, 0x4a, 0x3c, 0xb2, 0xef, 0x78, 0x8b, 0x65,
+	0x1e, 0xd9, 0xb7, 0xbc, 0xab, 0x68, 0x21, 0x92, 0x34, 0x66, 0x1a, 0x47, 0x24, 0x83, 0xde, 0x55,
+	0x81, 0x36, 0x67, 0xad, 0x5d, 0x92, 0x99, 0xbe, 0x7d, 0x8e, 0xea, 0x74, 0xcc, 0x22, 0x8d, 0x49,
+	0x5f, 0x53, 0x89, 0x53, 0xa6, 0x14, 0x8d, 0x6d, 0xca, 0xca, 0x5f, 0x02, 0xc1, 0x79, 0x20, 0x3c,
+	0x30, 0xf8, 0x36, 0xc0, 0x90, 0xb3, 0xf2, 0x3e, 0x45, 0xab, 0x2a, 0x21, 0x6a, 0x88, 0x19, 0x1f,
+	0x93, 0x84, 0xc5, 0x38, 0x93, 0x42, 0xf4, 0x21, 0x92, 0x67, 0xeb, 0x04, 0xf8, 0x89, 0x45, 0x7b,
+	0x06, 0x34, 0x11, 0x3b, 0xc8, 0xda, 0xf1, 0x9e, 0x14, 0x7c, 0x80, 0x63, 0x62, 0x5b, 0xe5, 0xd7,
+	0xec, 0x8d, 0x05, 0xec, 0x95, 0x81, 0xb6, 0x08, 0x34, 0xc9, 0xbb, 0x83, 0x56, 0xac, 0x80, 0x0b,
+	0x2e, 0xa9, 0xca, 0x04, 0x57, 0x14, 0x14, 0xcb, 0xf6, 0x10, 0x00, 0xfc, 0x6e, 0x82, 0xb9, 0xb2,
+	0x7e, 0x22, 0x2c, 0x39, 0x96, 0x9a, 0x2b, 0x6b, 0xc5, 0x96, 0x65, 0x08, 0xe5, 0xe4, 0x5c, 0x59,
+	0x77, 0x11, 0x20, 0xe5, 0xf4, 0x9c, 0xee, 0xbc, 0x8d, 0x67, 0xd0, 0x22, 0x41, 0x27, 0xba, 0x87,
+	0x56, 0x41, 0x54, 0x4e, 0xd1, 0xa9, 0x56, 0x41, 0xb5, 0x62, 0xe0, 0x52, 0x92, 0x45, 0xb0, 0x95,
+	0xb2, 0x44, 0x0f, 0x25, 0x55, 0x43, 0x73, 0x53, 0x7c, 0xdb, 0xc1, 0x12, 0xf8, 0x32, 0xc7, 0xbc,
+	0xfb, 0xa8, 0x5e, 0x16, 0xed, 0x31, 0x1e, 0x8b, 0xbd, 0x3c, 0x5c, 0x1d, 0x84, 0xab, 0x25, 0xc2,
+	0x2b, 0xc0, 0x5d, 0xc0, 0x00, 0x35, 0xcc, 0xbd, 0x31, 0x1b, 0x74, 0x97, 0x2a, 0x1c, 0xd2, 0xbe,
+	0x90, 0x14, 0x0f, 0x12, 0x11, 0x92, 0x04, 0x9b, 0x1c, 0xfd, 0x35, 0x70, 0xb0, 0x96, 0x92, 0xfd,
+	0x17, 0x96, 0x14, 0x00, 0xe7, 0x1b, 0xa0, 0x7c, 0x4b, 0x58, 0xe2, 0x7d, 0x8c, 0x96, 0xad, 0xfe,
+	0x58, 0xe8, 0x75, 0x50, 0x7a, 0x16, 0x9b, 0x8a, 0xfa, 0x35, 0xba, 0xf8, 0xce, 0x5b, 0x06, 0xf3,
+	0x74, 0x01, 0xa4, 0xf5, 0x93, 0x6f, 0x9a, 0x99, 0xaa, 0x00, 0x35, 0xde, 0xed, 0x01, 0x66, 0xeb,
+	0xa2, 0xcd, 0xfb, 0x64, 0x17, 0x30, 0x61, 0x4f, 0x91, 0xd9, 0x87, 0xe6, 0x2e, 0x8c, 0x59, 0x6c,
+	0x96, 0x94, 0xe0, 0xb1, 0xdf, 0x38, 0xe5, 0xde, 0x4d, 0x19, 0xef, 0x39, 0x61, 0x20, 0x78, 0xec,
+	0x35, 0xd1, 0xac, 0xd1, 0x63, 0xd8, 0x2e, 0xca, 0x6f, 0x42, 0x74, 0x64, 0x4c, 0xdb, 0x60, 0x31,
+	0xa7, 0x54, 0x44, 0x1a, 0x71, 0x03, 0x98, 0xd7, 0xc8, 0x2d, 0x9c, 0x0d, 0x7b, 0x4a, 0x39, 0xe1,
+	0xfb, 0x1c, 0x77, 0x9b, 0xe7, 0x4b, 0xb4, 0x2e, 0x69, 0x96, 0x90, 0x88, 0xa6, 0x94, 0x6b, 0x1c,
+	0x09, 0x91, 0xc4, 0x62, 0xaf, 0x58, 0x57, 0x97, 0x6c, 0xb7, 0x4a, 0x94, 0xae, 0x63, 0x38, 0x7d,
+	0x1b, 0xd5, 0x24, 0xcd, 0x08, 0x93, 0x98, 0x68, 0x4d, 0xd3, 0x4c, 0x2b, 0xb3, 0x04, 0xfc, 0xcb,
+	0x76, 0xc4, 0x2c, 0xf4, 0xc0, 0x21, 0x5d, 0x92, 0x79, 0x5f, 0xa1, 0x0b, 0xd3, 0xfc, 0xfc, 0x64,
+	0x5d, 0xc0, 0x2b, 0x45, 0xc0, 0x89, 0xd0, 0x1e, 0xb0, 0x0b, 0xd8, 0x44, 0xb3, 0x99, 0xa4, 0x29,
+	0x1b, 0xa5, 0x30, 0x99, 0x57, 0x6d, 0x37, 0x9c, 0xc9, 0x0c, 0xe4, 0x16, 0x9a, 0xa7, 0xa6, 0x54,
+	0x1e, 0x51, 0xdb, 0xf7, 0x0f, 0x4f, 0xd7, 0xf7, 0xb9, 0x5c, 0x05, 0x4d, 0x7f, 0x84, 0x16, 0xfa,
+	0x84, 0x25, 0x23, 0x69, 0x9c, 0x8c, 0xb8, 0x3e, 0xf0, 0xaf, 0x9d, 0xce, 0xcd, 0xbc, 0x93, 0x05,
+	0xa0, 0xf2, 0x1e, 0xa2, 0x8d, 0xa9, 0x6c, 0x8a, 0xf7, 0x05, 0x0b, 0x8e, 0xe9, 0x7e, 0xc6, 0xe4,
+	0x81, 0xff, 0x11, 0xd4, 0xb0, 0x5e, 0x8e, 0xef, 0x1e, 0x9b, 0xe7, 0xfc, 0x21, 0x50, 0xbc, 0x2f,
+	0xd0, 0xba, 0x5d, 0x2c, 0xa2, 0x8f, 0xf3, 0xbc, 0xb4, 0x4e, 0xf2, 0x79, 0x68, 0x15, 0x87, 0x2c,
+	0xfa, 0xcf, 0xfb, 0x8f, 0x2c, 0xe1, 0xa5, 0x4e, 0xdc, 0x50, 0xb4, 0x50, 0x95, 0x8c, 0xcc, 0x7e,
+	0x0e, 0x47, 0xf1, 0x80, 0x6a, 0x68, 0xdc, 0x75, 0xfb, 0x10, 0x81, 0x3d, 0x00, 0xb3, 0x5b, 0x99,
+	0x53, 0xcc, 0x7c, 0xa1, 0xdf, 0xb0, 0xe7, 0x59, 0x62, 0xbb, 0xad, 0xfe, 0x00, 0x5d, 0x3c, 0x26,
+	0x90, 0xf2, 0x40, 0x8c, 0xf3, 0xc7, 0x48, 0xf9, 0x37, 0xed, 0xb0, 0x4c, 0x29, 0x1d, 0xc5, 0x65,
+	0x77, 0x13, 0x79, 0xd3, 0xcf, 0x07, 0xcc, 0xe9, 0x2d, 0xfb, 0x0d, 0x55, 0x7e, 0x42, 0xcc, 0x74,
+	0xde, 0x46, 0xb5, 0x63, 0x64, 0x18, 0xc9, 0xdb, 0xf6, 0xb1, 0x2e, 0xb3, 0xcd, 0x20, 0xde, 0xbf,
+	0xf2, 0xcf, 0x6f, 0xcd, 0xca, 0x2f, 0x7f, 0xff, 0x7e, 0x63, 0xad, 0xf8, 0xa8, 0xdc, 0x9f, 0x7c,
+	0x5f, 0xda, 0x8f, 0xbd, 0xe0, 0xee, 0xeb, 0xc3, 0x46, 0xe5, 0xcd, 0x61, 0xa3, 0xf2, 0xd7, 0x61,
+	0xa3, 0xf2, 0xeb, 0x51, 0x63, 0xe6, 0xcd, 0x51, 0x63, 0xe6, 0x8f, 0xa3, 0xc6, 0xcc, 0x8f, 0xf5,
+	0x93, 0x54, 0xfa, 0x20, 0xa3, 0x2a, 0x3c, 0x0b, 0xdf, 0x8c, 0x77, 0xff, 0x0b, 0x00, 0x00, 0xff,
+	0xff, 0x05, 0x1d, 0x1f, 0x86, 0xb7, 0x0a, 0x00, 0x00,
 }
 
 func (this *Params) Equal(that interface{}) bool {
@@ -323,6 +589,90 @@ func (this *Params) Equal(that interface{}) bool {
 	if this.EvictAfterMissedEpochs != that1.EvictAfterMissedEpochs {
 		return false
 	}
+	if this.SlashInvalidProofBps != that1.SlashInvalidProofBps {
+		return false
+	}
+	if this.SlashWrongDataBps != that1.SlashWrongDataBps {
+		return false
+	}
+	if this.SlashNonresponseBps != that1.SlashNonresponseBps {
+		return false
+	}
+	if this.JailInvalidProofEpochs != that1.JailInvalidProofEpochs {
+		return false
+	}
+	if this.JailWrongDataEpochs != that1.JailWrongDataEpochs {
+		return false
+	}
+	if this.JailNonresponseEpochs != that1.JailNonresponseEpochs {
+		return false
+	}
+	if this.NonresponseThreshold != that1.NonresponseThreshold {
+		return false
+	}
+	if this.NonresponseWindowEpochs != that1.NonresponseWindowEpochs {
+		return false
+	}
+	if this.MaxStrikesBeforeGlobalJail != that1.MaxStrikesBeforeGlobalJail {
+		return false
+	}
+	if this.StrikeWindowEpochs != that1.StrikeWindowEpochs {
+		return false
+	}
+	if this.EvictAfterMissedEpochsHot != that1.EvictAfterMissedEpochsHot {
+		return false
+	}
+	if this.EvictAfterMissedEpochsCold != that1.EvictAfterMissedEpochsCold {
+		return false
+	}
+	if !this.MinProviderBond.Equal(&that1.MinProviderBond) {
+		return false
+	}
+	if this.BondMonths != that1.BondMonths {
+		return false
+	}
+	if this.ProviderUnbondingBlocks != that1.ProviderUnbondingBlocks {
+		return false
+	}
+	if this.ReplacementCooldownBlocks != that1.ReplacementCooldownBlocks {
+		return false
+	}
+	if this.RepairAttemptsCap != that1.RepairAttemptsCap {
+		return false
+	}
+	if this.RepairAttemptWindowBlocks != that1.RepairAttemptWindowBlocks {
+		return false
+	}
+	if this.PremiumBps != that1.PremiumBps {
+		return false
+	}
+	if !this.EvidenceBond.Equal(&that1.EvidenceBond) {
+		return false
+	}
+	if !this.FailureBounty.Equal(&that1.FailureBounty) {
+		return false
+	}
+	if this.EvidenceBondBurnBpsOnExpiry != that1.EvidenceBondBurnBpsOnExpiry {
+		return false
+	}
+	if this.ProofOfFailureTtlEpochs != that1.ProofOfFailureTtlEpochs {
+		return false
+	}
+	if this.AuditBudgetBps != that1.AuditBudgetBps {
+		return false
+	}
+	if this.AuditBudgetCapBps != that1.AuditBudgetCapBps {
+		return false
+	}
+	if this.AuditBudgetCarryoverEpochs != that1.AuditBudgetCarryoverEpochs {
+		return false
+	}
+	if this.CreditCapBpsHot != that1.CreditCapBpsHot {
+		return false
+	}
+	if this.CreditCapBpsCold != that1.CreditCapBpsCold {
+		return false
+	}
 	return true
 }
 func (m *Params) Marshal() (dAtA []byte, err error) {
@@ -345,6 +695,217 @@ func (m *Params) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.CreditCapBpsCold != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.CreditCapBpsCold))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0xe8
+	}
+	if m.CreditCapBpsHot != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.CreditCapBpsHot))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0xe0
+	}
+	if m.AuditBudgetCarryoverEpochs != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.AuditBudgetCarryoverEpochs))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0xd8
+	}
+	if m.AuditBudgetCapBps != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.AuditBudgetCapBps))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0xd0
+	}
+	if m.AuditBudgetBps != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.AuditBudgetBps))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0xc8
+	}
+	if m.ProofOfFailureTtlEpochs != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.ProofOfFailureTtlEpochs))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0xc0
+	}
+	if m.EvidenceBondBurnBpsOnExpiry != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.EvidenceBondBurnBpsOnExpiry))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0xb8
+	}
+	{
+		size, err := m.FailureBounty.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintParams(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x2
+	i--
+	dAtA[i] = 0xb2
+	{
+		size, err := m.EvidenceBond.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintParams(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x2
+	i--
+	dAtA[i] = 0xaa
+	if m.PremiumBps != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.PremiumBps))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0xa0
+	}
+	if m.RepairAttemptWindowBlocks != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.RepairAttemptWindowBlocks))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0x98
+	}
+	if m.RepairAttemptsCap != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.RepairAttemptsCap))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0x90
+	}
+	if m.ReplacementCooldownBlocks != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.ReplacementCooldownBlocks))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0x88
+	}
+	if m.ProviderUnbondingBlocks != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.ProviderUnbondingBlocks))
+		i--
+		dAtA[i] = 0x2
+		i--
+		dAtA[i] = 0x80
+	}
+	if m.BondMonths != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.BondMonths))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xf8
+	}
+	{
+		size, err := m.MinProviderBond.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintParams(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1
+	i--
+	dAtA[i] = 0xf2
+	if m.EvictAfterMissedEpochsCold != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.EvictAfterMissedEpochsCold))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xe8
+	}
+	if m.EvictAfterMissedEpochsHot != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.EvictAfterMissedEpochsHot))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xe0
+	}
+	if m.StrikeWindowEpochs != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.StrikeWindowEpochs))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xd8
+	}
+	if m.MaxStrikesBeforeGlobalJail != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.MaxStrikesBeforeGlobalJail))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xd0
+	}
+	if m.NonresponseWindowEpochs != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.NonresponseWindowEpochs))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xc8
+	}
+	if m.NonresponseThreshold != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.NonresponseThreshold))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xc0
+	}
+	if m.JailNonresponseEpochs != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.JailNonresponseEpochs))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xb8
+	}
+	if m.JailWrongDataEpochs != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.JailWrongDataEpochs))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xb0
+	}
+	if m.JailInvalidProofEpochs != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.JailInvalidProofEpochs))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xa8
+	}
+	if m.SlashNonresponseBps != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.SlashNonresponseBps))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0xa0
+	}
+	if m.SlashWrongDataBps != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.SlashWrongDataBps))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x98
+	}
+	if m.SlashInvalidProofBps != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.SlashInvalidProofBps))
+		i--
+		dAtA[i] = 0x1
+		i--
+		dAtA[i] = 0x90
+	}
 	if m.EvictAfterMissedEpochs != 0 {
 		i = encodeVarintParams(dAtA, i, uint64(m.EvictAfterMissedEpochs))
 		i--
@@ -520,6 +1081,87 @@ func (m *Params) Size() (n int) {
 	}
 	if m.EvictAfterMissedEpochs != 0 {
 		n += 2 + sovParams(uint64(m.EvictAfterMissedEpochs))
+	}
+	if m.SlashInvalidProofBps != 0 {
+		n += 2 + sovParams(uint64(m.SlashInvalidProofBps))
+	}
+	if m.SlashWrongDataBps != 0 {
+		n += 2 + sovParams(uint64(m.SlashWrongDataBps))
+	}
+	if m.SlashNonresponseBps != 0 {
+		n += 2 + sovParams(uint64(m.SlashNonresponseBps))
+	}
+	if m.JailInvalidProofEpochs != 0 {
+		n += 2 + sovParams(uint64(m.JailInvalidProofEpochs))
+	}
+	if m.JailWrongDataEpochs != 0 {
+		n += 2 + sovParams(uint64(m.JailWrongDataEpochs))
+	}
+	if m.JailNonresponseEpochs != 0 {
+		n += 2 + sovParams(uint64(m.JailNonresponseEpochs))
+	}
+	if m.NonresponseThreshold != 0 {
+		n += 2 + sovParams(uint64(m.NonresponseThreshold))
+	}
+	if m.NonresponseWindowEpochs != 0 {
+		n += 2 + sovParams(uint64(m.NonresponseWindowEpochs))
+	}
+	if m.MaxStrikesBeforeGlobalJail != 0 {
+		n += 2 + sovParams(uint64(m.MaxStrikesBeforeGlobalJail))
+	}
+	if m.StrikeWindowEpochs != 0 {
+		n += 2 + sovParams(uint64(m.StrikeWindowEpochs))
+	}
+	if m.EvictAfterMissedEpochsHot != 0 {
+		n += 2 + sovParams(uint64(m.EvictAfterMissedEpochsHot))
+	}
+	if m.EvictAfterMissedEpochsCold != 0 {
+		n += 2 + sovParams(uint64(m.EvictAfterMissedEpochsCold))
+	}
+	l = m.MinProviderBond.Size()
+	n += 2 + l + sovParams(uint64(l))
+	if m.BondMonths != 0 {
+		n += 2 + sovParams(uint64(m.BondMonths))
+	}
+	if m.ProviderUnbondingBlocks != 0 {
+		n += 2 + sovParams(uint64(m.ProviderUnbondingBlocks))
+	}
+	if m.ReplacementCooldownBlocks != 0 {
+		n += 2 + sovParams(uint64(m.ReplacementCooldownBlocks))
+	}
+	if m.RepairAttemptsCap != 0 {
+		n += 2 + sovParams(uint64(m.RepairAttemptsCap))
+	}
+	if m.RepairAttemptWindowBlocks != 0 {
+		n += 2 + sovParams(uint64(m.RepairAttemptWindowBlocks))
+	}
+	if m.PremiumBps != 0 {
+		n += 2 + sovParams(uint64(m.PremiumBps))
+	}
+	l = m.EvidenceBond.Size()
+	n += 2 + l + sovParams(uint64(l))
+	l = m.FailureBounty.Size()
+	n += 2 + l + sovParams(uint64(l))
+	if m.EvidenceBondBurnBpsOnExpiry != 0 {
+		n += 2 + sovParams(uint64(m.EvidenceBondBurnBpsOnExpiry))
+	}
+	if m.ProofOfFailureTtlEpochs != 0 {
+		n += 2 + sovParams(uint64(m.ProofOfFailureTtlEpochs))
+	}
+	if m.AuditBudgetBps != 0 {
+		n += 2 + sovParams(uint64(m.AuditBudgetBps))
+	}
+	if m.AuditBudgetCapBps != 0 {
+		n += 2 + sovParams(uint64(m.AuditBudgetCapBps))
+	}
+	if m.AuditBudgetCarryoverEpochs != 0 {
+		n += 2 + sovParams(uint64(m.AuditBudgetCarryoverEpochs))
+	}
+	if m.CreditCapBpsHot != 0 {
+		n += 2 + sovParams(uint64(m.CreditCapBpsHot))
+	}
+	if m.CreditCapBpsCold != 0 {
+		n += 2 + sovParams(uint64(m.CreditCapBpsCold))
 	}
 	return n
 }
@@ -935,6 +1577,580 @@ func (m *Params) Unmarshal(dAtA []byte) error {
 				b := dAtA[iNdEx]
 				iNdEx++
 				m.EvictAfterMissedEpochs |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 18:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SlashInvalidProofBps", wireType)
+			}
+			m.SlashInvalidProofBps = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SlashInvalidProofBps |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 19:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SlashWrongDataBps", wireType)
+			}
+			m.SlashWrongDataBps = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SlashWrongDataBps |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 20:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SlashNonresponseBps", wireType)
+			}
+			m.SlashNonresponseBps = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.SlashNonresponseBps |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 21:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field JailInvalidProofEpochs", wireType)
+			}
+			m.JailInvalidProofEpochs = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.JailInvalidProofEpochs |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 22:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field JailWrongDataEpochs", wireType)
+			}
+			m.JailWrongDataEpochs = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.JailWrongDataEpochs |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 23:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field JailNonresponseEpochs", wireType)
+			}
+			m.JailNonresponseEpochs = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.JailNonresponseEpochs |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 24:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NonresponseThreshold", wireType)
+			}
+			m.NonresponseThreshold = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NonresponseThreshold |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 25:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NonresponseWindowEpochs", wireType)
+			}
+			m.NonresponseWindowEpochs = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NonresponseWindowEpochs |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 26:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxStrikesBeforeGlobalJail", wireType)
+			}
+			m.MaxStrikesBeforeGlobalJail = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MaxStrikesBeforeGlobalJail |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 27:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StrikeWindowEpochs", wireType)
+			}
+			m.StrikeWindowEpochs = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.StrikeWindowEpochs |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 28:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EvictAfterMissedEpochsHot", wireType)
+			}
+			m.EvictAfterMissedEpochsHot = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.EvictAfterMissedEpochsHot |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 29:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EvictAfterMissedEpochsCold", wireType)
+			}
+			m.EvictAfterMissedEpochsCold = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.EvictAfterMissedEpochsCold |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 30:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MinProviderBond", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.MinProviderBond.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 31:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BondMonths", wireType)
+			}
+			m.BondMonths = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.BondMonths |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 32:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProviderUnbondingBlocks", wireType)
+			}
+			m.ProviderUnbondingBlocks = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ProviderUnbondingBlocks |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 33:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReplacementCooldownBlocks", wireType)
+			}
+			m.ReplacementCooldownBlocks = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ReplacementCooldownBlocks |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 34:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RepairAttemptsCap", wireType)
+			}
+			m.RepairAttemptsCap = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RepairAttemptsCap |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 35:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RepairAttemptWindowBlocks", wireType)
+			}
+			m.RepairAttemptWindowBlocks = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.RepairAttemptWindowBlocks |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 36:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PremiumBps", wireType)
+			}
+			m.PremiumBps = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.PremiumBps |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 37:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EvidenceBond", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.EvidenceBond.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 38:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FailureBounty", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.FailureBounty.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 39:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EvidenceBondBurnBpsOnExpiry", wireType)
+			}
+			m.EvidenceBondBurnBpsOnExpiry = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.EvidenceBondBurnBpsOnExpiry |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 40:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProofOfFailureTtlEpochs", wireType)
+			}
+			m.ProofOfFailureTtlEpochs = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ProofOfFailureTtlEpochs |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 41:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AuditBudgetBps", wireType)
+			}
+			m.AuditBudgetBps = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.AuditBudgetBps |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 42:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AuditBudgetCapBps", wireType)
+			}
+			m.AuditBudgetCapBps = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.AuditBudgetCapBps |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 43:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AuditBudgetCarryoverEpochs", wireType)
+			}
+			m.AuditBudgetCarryoverEpochs = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.AuditBudgetCarryoverEpochs |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 44:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CreditCapBpsHot", wireType)
+			}
+			m.CreditCapBpsHot = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CreditCapBpsHot |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 45:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CreditCapBpsCold", wireType)
+			}
+			m.CreditCapBpsCold = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CreditCapBpsCold |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}

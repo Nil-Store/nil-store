@@ -282,7 +282,32 @@ overrides = {
     "quota_min_blobs": os.getenv("NIL_QUOTA_MIN_BLOBS"),
     "quota_max_blobs": os.getenv("NIL_QUOTA_MAX_BLOBS"),
     "credit_cap_bps": os.getenv("NIL_CREDIT_CAP_BPS"),
+    "credit_cap_bps_hot": os.getenv("NIL_CREDIT_CAP_BPS_HOT"),
+    "credit_cap_bps_cold": os.getenv("NIL_CREDIT_CAP_BPS_COLD"),
     "evict_after_missed_epochs": os.getenv("NIL_EVICT_AFTER_MISSED_EPOCHS"),
+    "evict_after_missed_epochs_hot": os.getenv("NIL_EVICT_AFTER_MISSED_EPOCHS_HOT"),
+    "evict_after_missed_epochs_cold": os.getenv("NIL_EVICT_AFTER_MISSED_EPOCHS_COLD"),
+    "slash_invalid_proof_bps": os.getenv("NIL_SLASH_INVALID_PROOF_BPS"),
+    "slash_wrong_data_bps": os.getenv("NIL_SLASH_WRONG_DATA_BPS"),
+    "slash_nonresponse_bps": os.getenv("NIL_SLASH_NONRESPONSE_BPS"),
+    "jail_invalid_proof_epochs": os.getenv("NIL_JAIL_INVALID_PROOF_EPOCHS"),
+    "jail_wrong_data_epochs": os.getenv("NIL_JAIL_WRONG_DATA_EPOCHS"),
+    "jail_nonresponse_epochs": os.getenv("NIL_JAIL_NONRESPONSE_EPOCHS"),
+    "nonresponse_threshold": os.getenv("NIL_NONRESPONSE_THRESHOLD"),
+    "nonresponse_window_epochs": os.getenv("NIL_NONRESPONSE_WINDOW_EPOCHS"),
+    "max_strikes_before_global_jail": os.getenv("NIL_MAX_STRIKES_BEFORE_GLOBAL_JAIL"),
+    "strike_window_epochs": os.getenv("NIL_STRIKE_WINDOW_EPOCHS"),
+    "bond_months": os.getenv("NIL_BOND_MONTHS"),
+    "provider_unbonding_blocks": os.getenv("NIL_PROVIDER_UNBONDING_BLOCKS"),
+    "replacement_cooldown_blocks": os.getenv("NIL_REPLACEMENT_COOLDOWN_BLOCKS"),
+    "repair_attempts_cap": os.getenv("NIL_REPAIR_ATTEMPTS_CAP"),
+    "repair_attempt_window_blocks": os.getenv("NIL_REPAIR_ATTEMPT_WINDOW_BLOCKS"),
+    "premium_bps": os.getenv("NIL_PREMIUM_BPS"),
+    "evidence_bond_burn_bps_on_expiry": os.getenv("NIL_EVIDENCE_BOND_BURN_BPS_ON_EXPIRY"),
+    "proof_of_failure_ttl_epochs": os.getenv("NIL_PROOF_OF_FAILURE_TTL_EPOCHS"),
+    "audit_budget_bps": os.getenv("NIL_AUDIT_BUDGET_BPS"),
+    "audit_budget_cap_bps": os.getenv("NIL_AUDIT_BUDGET_CAP_BPS"),
+    "audit_budget_carryover_epochs": os.getenv("NIL_AUDIT_BUDGET_CARRYOVER_EPOCHS"),
 }
 for key, raw in overrides.items():
     if raw is None:
@@ -297,6 +322,26 @@ for key, raw in overrides.items():
     if val < 0:
         continue
     params[key] = str(val)
+
+denom = os.getenv("NIL_DENOM", "stake").strip() or "stake"
+coin_overrides = {
+    "min_provider_bond": os.getenv("NIL_MIN_PROVIDER_BOND"),
+    "evidence_bond": os.getenv("NIL_EVIDENCE_BOND"),
+    "failure_bounty": os.getenv("NIL_FAILURE_BOUNTY"),
+}
+for key, raw in coin_overrides.items():
+    if raw is None:
+        continue
+    raw = raw.strip()
+    if raw == "":
+        continue
+    try:
+        val = int(raw, 10)
+    except Exception:
+        continue
+    if val < 0:
+        continue
+    params[key] = {"denom": denom, "amount": str(val)}
 if isinstance(nilchain, dict):
     nilchain["params"] = params
     data["app_state"]["nilchain"] = nilchain

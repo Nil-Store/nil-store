@@ -12,6 +12,20 @@ import (
 	"nilchain/x/nilchain/types"
 )
 
+func evictAfterMissedEpochsForDeal(params types.Params, deal types.Deal) uint64 {
+	info, err := types.ParseServiceHint(deal.ServiceHint)
+	if err == nil && strings.EqualFold(strings.TrimSpace(info.Base), "Hot") {
+		if params.EvictAfterMissedEpochsHot > 0 {
+			return params.EvictAfterMissedEpochsHot
+		}
+		return params.EvictAfterMissedEpochs
+	}
+	if params.EvictAfterMissedEpochsCold > 0 {
+		return params.EvictAfterMissedEpochsCold
+	}
+	return params.EvictAfterMissedEpochs
+}
+
 // CheckMissedProofs iterates over all deals and slashes providers who have missed their proof window.
 func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
@@ -43,6 +57,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 			return false, nil
 		}
 
+		evictAfterMissed := evictAfterMissedEpochsForDeal(params, deal)
 		switch stripe.mode {
 		case 1:
 			for _, provider := range deal.Providers {
@@ -61,7 +76,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					return false, err
 				}
 
-				creditCap := creditCapBlobs(params, quota)
+				creditCap := creditCapBlobs(params, deal, quota)
 				credits := creditsRaw
 				if creditCap < credits {
 					credits = creditCap
@@ -122,7 +137,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					return false, err
 				}
 
-				creditCap := creditCapBlobs(params, quota)
+				creditCap := creditCapBlobs(params, deal, quota)
 				credits := creditsRaw
 				if creditCap < credits {
 					credits = creditCap
@@ -209,7 +224,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						"missed_epochs", nextMissed,
 					)
 
-					if params.EvictAfterMissedEpochs > 0 && nextMissed >= params.EvictAfterMissedEpochs {
+					if evictAfterMissed > 0 && nextMissed >= evictAfterMissed {
 						if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 || int(slot) >= len(deal.Mode2Slots) {
 							continue
 						}
@@ -284,7 +299,7 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 						"missed_epochs", nextMissed,
 					)
 
-					if params.EvictAfterMissedEpochs > 0 && nextMissed >= params.EvictAfterMissedEpochs {
+					if evictAfterMissed > 0 && nextMissed >= evictAfterMissed {
 						if deal.RedundancyMode != 2 || len(deal.Mode2Slots) == 0 || int(slot) >= len(deal.Mode2Slots) {
 							continue
 						}

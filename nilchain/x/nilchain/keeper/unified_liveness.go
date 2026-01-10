@@ -139,6 +139,20 @@ func quotaBpsForDeal(params types.Params, deal types.Deal) uint64 {
 	return params.QuotaBpsPerEpochCold
 }
 
+func creditCapBpsForDeal(params types.Params, deal types.Deal) uint64 {
+	info, err := types.ParseServiceHint(deal.ServiceHint)
+	if err == nil && strings.EqualFold(strings.TrimSpace(info.Base), "Hot") {
+		if params.CreditCapBpsHot > 0 {
+			return params.CreditCapBpsHot
+		}
+		return params.CreditCapBps
+	}
+	if params.CreditCapBpsCold > 0 {
+		return params.CreditCapBpsCold
+	}
+	return params.CreditCapBps
+}
+
 func requiredBlobsMode1(params types.Params, deal types.Deal, in quotaInputs) uint64 {
 	quotaBps := quotaBpsForDeal(params, deal)
 	slotBytes := in.userMdus * uint64(types.MDU_SIZE)
@@ -175,11 +189,12 @@ func requiredBlobsFromSlotBytes(params types.Params, quotaBps uint64, slotBytes 
 	return quota
 }
 
-func creditCapBlobs(params types.Params, quotaBlobs uint64) uint64 {
-	if quotaBlobs == 0 || params.CreditCapBps == 0 {
+func creditCapBlobs(params types.Params, deal types.Deal, quotaBlobs uint64) uint64 {
+	creditCapBps := creditCapBpsForDeal(params, deal)
+	if quotaBlobs == 0 || creditCapBps == 0 {
 		return 0
 	}
-	return mulDivCeil(quotaBlobs, params.CreditCapBps, 10000)
+	return mulDivCeil(quotaBlobs, creditCapBps, 10000)
 }
 
 func mulDivCeil(a uint64, b uint64, denom uint64) uint64 {
@@ -514,7 +529,7 @@ func (k Keeper) validateAndRecordSystemProof(ctx sdk.Context, epochID uint64, se
 		quotaBlobs = requiredBlobsMode1(params, deal, in)
 	}
 
-	creditCap := creditCapBlobs(params, quotaBlobs)
+	creditCap := creditCapBlobs(params, deal, quotaBlobs)
 
 	if stripe.mode == 2 {
 		slot, err := leafSlotIndex(uint64(blobIndex), stripe.rows)
