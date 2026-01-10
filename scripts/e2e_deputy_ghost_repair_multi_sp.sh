@@ -25,6 +25,7 @@ GATEWAY_BASE="${GATEWAY_BASE:-http://127.0.0.1:8080}"
 NILCHAIND_BIN="${NILCHAIND_BIN:-$ROOT_DIR/nilchain/nilchaind}"
 
 PROVIDER_COUNT="${PROVIDER_COUNT:-12}"
+REPLICA_COUNT="${REPLICA_COUNT:-12}"
 MANAGE_STACK="${MANAGE_STACK:-1}"
 EXPECT_REPAIR="${EXPECT_REPAIR:-1}"
 STACK_STARTED=0
@@ -165,13 +166,15 @@ for item in logs:
   events.extend(item.get("events") or [])
 if not events:
   events = tx.get("events") or []
-for ev in events:
-  if (ev.get("type") or "") != "create_deal":
-    continue
-  for a in ev.get("attributes") or []:
-    if (a.get("key") or "") == "deal_id":
-      print(a.get("value") or "")
-      sys.exit(0)
+  for ev in events:
+    et = (ev.get("type") or "")
+    if et not in ("create_deal", "nilchain.nilchain.v1.EventCreateDeal"):
+      continue
+    for a in ev.get("attributes") or []:
+      key = a.get("key") or ""
+      if key in ("deal_id", "id"):
+        print(a.get("value") or "")
+        sys.exit(0)
 print("")
 '
 }
@@ -212,6 +215,10 @@ if [ ! -f "$UPLOAD_FILE" ]; then
   echo "ERROR: UPLOAD_FILE does not exist: $UPLOAD_FILE" >&2
   exit 1
 fi
+if [ "$PROVIDER_COUNT" -lt "$REPLICA_COUNT" ]; then
+  echo "ERROR: PROVIDER_COUNT ($PROVIDER_COUNT) must be >= REPLICA_COUNT ($REPLICA_COUNT)" >&2
+  exit 1
+fi
 
 # Speed up the repair loop for E2E.
 export PROVIDER_COUNT
@@ -240,7 +247,7 @@ if [ -z "$FAUCET_ADDR" ]; then
 fi
 echo "==> Using deal owner: $FAUCET_ADDR"
 
-SERVICE_HINT="General:replicas=${PROVIDER_COUNT}:rs=8+4"
+SERVICE_HINT="General:replicas=${REPLICA_COUNT}:rs=8+4"
 
 echo "==> Creating Mode 2 deal..."
 DEAL_ID=""
@@ -256,12 +263,17 @@ for attempt in $(seq 1 5); do
     --gas 250000 \
     --gas-prices 0.001aatom \
     --broadcast-mode sync \
-    --output json 2>/dev/null || true)"
+    --output json 2>&1 || true)"
   CREATE_RES="$(echo "$CREATE_RES_RAW" | extract_last_json)"
   if [ -z "$CREATE_RES" ]; then
     echo "WARN: create-deal returned no JSON (attempt $attempt)" >&2
+    echo "$CREATE_RES_RAW" >&2
     sleep 2
     continue
+  fi
+  DEAL_ID="$(echo "$CREATE_RES" | parse_create_deal_id)"
+  if [ -n "$DEAL_ID" ]; then
+    break
   fi
   TXHASH="$(echo "$CREATE_RES" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("txhash", ""))' 2>/dev/null || true)"
   if [ -z "$TXHASH" ]; then
@@ -270,16 +282,30 @@ for attempt in $(seq 1 5); do
     continue
   fi
 
-  for _ in $(seq 1 10); do
+  for _ in $(seq 1 30); do
     sleep 1
-    CREATE_TX_RAW="$("$NILCHAIND_BIN" query tx "$TXHASH" --node tcp://127.0.0.1:26657 --output json --home "$CHAIN_HOME" 2>/dev/null || true)"
-    CREATE_TX="$(echo "$CREATE_TX_RAW" | extract_last_json)"
+    CREATE_TX_RAW="$(timeout 10s curl -sS "$LCD_BASE/cosmos/tx/v1beta1/txs/$TXHASH" 2>/dev/null || true)"
+    CREATE_TX="$(echo "$CREATE_TX_RAW" | python3 -c '
+import json, sys
+try:
+  data = json.load(sys.stdin)
+except Exception:
+  print("")
+  raise SystemExit(0)
+tx = data.get("tx_response") or data
+print(json.dumps(tx))
+' 2>/dev/null || true)"
     DEAL_ID="$(echo "$CREATE_TX" | parse_create_deal_id)"
     if [ -n "$DEAL_ID" ]; then
       break
     fi
   done
 
+  if [ -n "$DEAL_ID" ]; then
+    break
+  fi
+  DEAL_LIST_RAW="$("$NILCHAIND_BIN" query nilchain list-deals --node tcp://127.0.0.1:26657 --output json --home "$CHAIN_HOME" 2>/dev/null || true)"
+  DEAL_ID="$(echo "$DEAL_LIST_RAW" | python3 -c 'import json, sys; d=json.load(sys.stdin); deals=d.get("deals") or []; print(deals[-1].get("id","") if deals else "")' 2>/dev/null || true)"
   if [ -n "$DEAL_ID" ]; then
     break
   fi
