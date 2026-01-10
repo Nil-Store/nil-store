@@ -18,12 +18,13 @@ import (
 )
 
 type mode2DealState struct {
-	mu         sync.RWMutex
-	owner      string
-	cid        string
-	serviceHint string
-	providers  []string
-	endpoints  map[string]string // providerAddr -> baseURL
+	mu           sync.RWMutex
+	owner        string
+	cid          string
+	serviceHint  string
+	providers    []string
+	endpoints    map[string]string // providerAddr -> baseURL
+	slotStatuses []string
 }
 
 func (s *mode2DealState) getDeal() (owner, cid, hint string, providers []string) {
@@ -54,10 +55,14 @@ func newMode2LCDServer(t *testing.T, dealID uint64, state *mode2DealState) *http
 			owner, cid, hint, providers := state.getDeal()
 			mode2Slots := make([]map[string]any, 0, len(providers))
 			for i, provider := range providers {
+				status := "SLOT_STATUS_ACTIVE"
+				if i < len(state.slotStatuses) && strings.TrimSpace(state.slotStatuses[i]) != "" {
+					status = state.slotStatuses[i]
+				}
 				mode2Slots = append(mode2Slots, map[string]any{
 					"slot":     i,
 					"provider": provider,
-					"status":   "SLOT_STATUS_ACTIVE",
+					"status":   status,
 				})
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -259,6 +264,106 @@ func TestGateway_Mode2_UploadThenFetch_WithMissingLocalShard(t *testing.T) {
 	}
 	// Remove one local shard to force remote fetch on reconstruction.
 	_ = os.Remove(filepath.Join(dealDir, "mdu_2_slot_0.bin"))
+
+	fetchReq := httptest.NewRequest(http.MethodGet, "/gateway/fetch/"+root.Canonical+"?deal_id="+strconv.FormatUint(dealID, 10)+"&owner="+owner+"&file_path=fixture.bin", nil)
+	fetchW := httptest.NewRecorder()
+	testRouter().ServeHTTP(fetchW, fetchReq)
+	if fetchW.Code != http.StatusOK {
+		t.Fatalf("GatewayFetch failed: %d %s", fetchW.Code, fetchW.Body.String())
+	}
+
+	if !bytes.Equal(fetchW.Body.Bytes(), payload) {
+		t.Fatalf("fetched bytes mismatch")
+	}
+}
+
+func TestGateway_Mode2_FetchWithInactiveSlotsUsesLocalShards(t *testing.T) {
+	dealProviderCache = sync.Map{}
+	providerBaseCache = sync.Map{}
+
+	useTempUploadDir(t)
+	if err := crypto_ffi.Init(trustedSetup); err != nil {
+		t.Fatalf("crypto_ffi.Init failed: %v", err)
+	}
+
+	oldReqSig := requireRetrievalReqSig
+	requireRetrievalReqSig = false
+	t.Cleanup(func() { requireRetrievalReqSig = oldReqSig })
+
+	dealID := uint64(43)
+	owner := testDealOwner(t)
+
+	fx := readMode2Fixture(t)
+	payload := decodeHex0x(t, fx.PayloadHex)
+
+	providers := make([]string, 0, 12)
+	endpoints := map[string]string{}
+	for i := 0; i < 12; i++ {
+		addr := "nil1provider" + strconv.Itoa(i)
+		providers = append(providers, addr)
+		srv, _ := newProviderServer(t)
+		endpoints[addr] = srv.URL
+	}
+
+	statuses := make([]string, len(providers))
+	for i := 0; i < len(providers); i++ {
+		statuses[i] = "SLOT_STATUS_REPAIRING"
+		if i < 7 {
+			statuses[i] = "SLOT_STATUS_ACTIVE"
+		}
+	}
+
+	state := &mode2DealState{
+		owner:        owner,
+		cid:          "",
+		serviceHint:  "General:replicas=12:rs=8+4",
+		providers:    providers,
+		endpoints:    endpoints,
+		slotStatuses: statuses,
+	}
+
+	lcdSrv := newMode2LCDServer(t, dealID, state)
+	defer lcdSrv.Close()
+	oldLCD := lcdBase
+	lcdBase = lcdSrv.URL
+	t.Cleanup(func() { lcdBase = oldLCD })
+
+	t.Setenv("NIL_PROVIDER_ADDRESS", providers[0])
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("file", "fixture.bin")
+	_, _ = part.Write(payload)
+	_ = writer.WriteField("deal_id", strconv.FormatUint(dealID, 10))
+	_ = writer.WriteField("file_path", "fixture.bin")
+	_ = writer.Close()
+
+	uploadReq := httptest.NewRequest(http.MethodPost, "/gateway/upload?deal_id="+strconv.FormatUint(dealID, 10), body)
+	uploadReq.Header.Set("Content-Type", writer.FormDataContentType())
+	uploadW := httptest.NewRecorder()
+	testRouter().ServeHTTP(uploadW, uploadReq)
+	if uploadW.Code != http.StatusOK {
+		t.Fatalf("GatewayUpload failed: %d %s", uploadW.Code, uploadW.Body.String())
+	}
+
+	var uploadResp struct {
+		ManifestRoot string `json:"manifest_root"`
+		CID          string `json:"cid"`
+	}
+	_ = json.Unmarshal(uploadW.Body.Bytes(), &uploadResp)
+	cid := strings.TrimSpace(uploadResp.ManifestRoot)
+	if cid == "" {
+		cid = strings.TrimSpace(uploadResp.CID)
+	}
+	if cid == "" {
+		t.Fatalf("missing manifest_root in upload response: %s", uploadW.Body.String())
+	}
+	state.setCID(cid)
+
+	root, err := parseManifestRoot(cid)
+	if err != nil {
+		t.Fatalf("parseManifestRoot: %v", err)
+	}
 
 	fetchReq := httptest.NewRequest(http.MethodGet, "/gateway/fetch/"+root.Canonical+"?deal_id="+strconv.FormatUint(dealID, 10)+"&owner="+owner+"&file_path=fixture.bin", nil)
 	fetchW := httptest.NewRecorder()

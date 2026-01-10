@@ -63,11 +63,6 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 			activeSlots = append(activeSlots, slot)
 		}
 	}
-	if len(activeSlots) < int(stripe.k) {
-		return "", fmt.Errorf("not enough ACTIVE slots for reconstruction (need %d, got %d)", stripe.k, len(activeSlots))
-	}
-	orderedSlots := make([]uint64, 0, len(activeSlots))
-	orderedSlots = append(orderedSlots, activeSlots...)
 
 	shards := make([][]byte, stripe.slotCount)
 	present := make([]bool, stripe.slotCount)
@@ -75,6 +70,9 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 	expectedShardSize := stripe.rows * uint64(types.BLOB_SIZE)
 
 	tryLoadSlot := func(slot uint64) error {
+		if present[slot] {
+			return nil
+		}
 		localPath := filepath.Join(dealDir, fmt.Sprintf("mdu_%d_slot_%d.bin", mduIndex, slot))
 		if localBytes, err := os.ReadFile(localPath); err == nil && uint64(len(localBytes)) == expectedShardSize {
 			shards[slot] = localBytes
@@ -134,27 +132,39 @@ func ensureMode2MduOnDisk(ctx context.Context, dealID uint64, manifestRoot Manif
 		return nil
 	}
 
-	// Prefer local shards first. Fetch remote shards until we have >=K present.
-	for _, slot := range orderedSlots {
-		if presentCount >= stripe.k {
-			break
-		}
+	// Prefer any local shards (regardless of slot status) before contacting other providers.
+	for slot := uint64(0); slot < stripe.slotCount; slot++ {
 		_ = tryLoadSlot(slot)
 	}
 	if presentCount < stripe.k {
-		// Second pass: try all slots to pick up parity shards if earlier ones were missing.
+		if len(activeSlots) < int(stripe.k) {
+			return "", fmt.Errorf("not enough ACTIVE slots for reconstruction (need %d, got %d)", stripe.k, len(activeSlots))
+		}
+		orderedSlots := make([]uint64, 0, len(activeSlots))
+		orderedSlots = append(orderedSlots, activeSlots...)
+
+		// Prefer local shards first. Fetch remote shards until we have >=K present.
 		for _, slot := range orderedSlots {
 			if presentCount >= stripe.k {
 				break
 			}
-			if present[slot] {
-				continue
-			}
 			_ = tryLoadSlot(slot)
 		}
-	}
-	if presentCount < stripe.k {
-		return "", fmt.Errorf("not enough shards available for reconstruction (need %d, got %d)", stripe.k, presentCount)
+		if presentCount < stripe.k {
+			// Second pass: try all slots to pick up parity shards if earlier ones were missing.
+			for _, slot := range orderedSlots {
+				if presentCount >= stripe.k {
+					break
+				}
+				if present[slot] {
+					continue
+				}
+				_ = tryLoadSlot(slot)
+			}
+		}
+		if presentCount < stripe.k {
+			return "", fmt.Errorf("not enough shards available for reconstruction (need %d, got %d)", stripe.k, presentCount)
+		}
 	}
 
 	mduBytes, err := crypto_ffi.ReconstructMduRs(shards, present, stripe.k, stripe.m)

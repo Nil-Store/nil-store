@@ -35,6 +35,12 @@ FILE_PATH="${FILE_PATH:-test_1mb.bin}"
 RAW_BLOB_PAYLOAD_BYTES="${RAW_BLOB_PAYLOAD_BYTES:-126976}"
 REPAIR_BLOB_COUNT="${REPAIR_BLOB_COUNT:-4}"
 
+# Ensure credits can satisfy repair readiness in this E2E (caps default to 0 on devnet).
+: "${NIL_CREDIT_CAP_BPS_HOT:=10000}"
+: "${NIL_CREDIT_CAP_BPS_COLD:=10000}"
+export NIL_CREDIT_CAP_BPS_HOT
+export NIL_CREDIT_CAP_BPS_COLD
+
 cleanup() {
   if [ "$STACK_STARTED" -eq 1 ]; then
     echo "==> Stopping devnet alpha multi-SP stack..."
@@ -389,23 +395,35 @@ REPAIR_START_MDUS[0]="$PLAN_START_MDU"
 REPAIR_START_BLOBS[0]="$PLAN_START_BLOB"
 REPAIR_RANGE_STARTS[0]=0
 REPAIR_BLOB_COUNTS[0]="$PLAN_BLOB_COUNT"
+repair_idx=1
 if [ "$REPAIR_BLOB_COUNT" -gt 1 ]; then
   for i in $(seq 1 $((REPAIR_BLOB_COUNT - 1))); do
     range_start="$((i * RAW_BLOB_PAYLOAD_BYTES))"
     REPAIR_PLAN_RESP="$(timeout 10s curl -sS "$GATEWAY_BASE/gateway/plan-retrieval-session/$MANIFEST_ROOT?deal_id=$DEAL_ID&owner=$FAUCET_ADDR&file_path=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$FILENAME")&range_start=$range_start&range_len=$RAW_BLOB_PAYLOAD_BYTES")"
+    range_provider="$(echo "$REPAIR_PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("provider",""))' 2>/dev/null || true)"
     start_mdu="$(echo "$REPAIR_PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("start_mdu_index",""))' 2>/dev/null || true)"
     start_blob="$(echo "$REPAIR_PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("start_blob_index",""))' 2>/dev/null || true)"
     blob_count="$(echo "$REPAIR_PLAN_RESP" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("blob_count",""))' 2>/dev/null || true)"
-    if [ -z "$start_mdu" ] || [ -z "$start_blob" ] || [ -z "$blob_count" ]; then
+    if [ -z "$range_provider" ] || [ -z "$start_mdu" ] || [ -z "$start_blob" ] || [ -z "$blob_count" ]; then
       echo "ERROR: repair plan response missing required fields" >&2
       echo "$REPAIR_PLAN_RESP" >&2
       exit 1
     fi
-    REPAIR_START_MDUS[$i]="$start_mdu"
-    REPAIR_START_BLOBS[$i]="$start_blob"
-    REPAIR_RANGE_STARTS[$i]="$range_start"
-    REPAIR_BLOB_COUNTS[$i]="$blob_count"
+    if [ "$range_provider" != "$PLAN_PROVIDER" ]; then
+      echo "    skipping range_start=$range_start (provider=$range_provider != $PLAN_PROVIDER)"
+      continue
+    fi
+    REPAIR_START_MDUS[$repair_idx]="$start_mdu"
+    REPAIR_START_BLOBS[$repair_idx]="$start_blob"
+    REPAIR_RANGE_STARTS[$repair_idx]="$range_start"
+    REPAIR_BLOB_COUNTS[$repair_idx]="$blob_count"
+    repair_idx=$((repair_idx + 1))
   done
+fi
+REPAIR_PLAN_COUNT="${#REPAIR_START_MDUS[@]}"
+if [ "$REPAIR_PLAN_COUNT" -lt 1 ]; then
+  echo "ERROR: no repair ranges match planned provider $PLAN_PROVIDER" >&2
+  exit 1
 fi
 
 echo "==> Resolving planned provider endpoint..."
@@ -752,7 +770,18 @@ if [ "$PENDING_INDEX" -le 0 ]; then
   exit 1
 fi
 PENDING_DEAL_DIR="$LOG_DIR/providers/provider$PENDING_INDEX/deals/$DEAL_ID/$MANIFEST_KEY"
-if [ ! -f "$PENDING_DEAL_DIR/mdu_0.bin" ]; then
+NEED_COPY=0
+if [ ! -f "$PENDING_DEAL_DIR/mdu_0.bin" ] || [ ! -f "$PENDING_DEAL_DIR/manifest.bin" ] || [ ! -f "$PENDING_DEAL_DIR/.slab_complete" ]; then
+  NEED_COPY=1
+fi
+if [ "$NEED_COPY" -eq 0 ]; then
+  SHARD_COUNT="$(find "$PENDING_DEAL_DIR" -maxdepth 1 -type f -name 'mdu_*_slot_*.bin' | wc -l | tr -d ' ')"
+  if [ "$SHARD_COUNT" -eq 0 ]; then
+    NEED_COPY=1
+  fi
+fi
+
+if [ "$NEED_COPY" -eq 1 ]; then
   SRC_DIR="$(find "$LOG_DIR/router_tmp" -type d \( -path "*/deals/$DEAL_ID/$MANIFEST_KEY" -o -path "*/$MANIFEST_KEY" \) | head -n 1 || true)"
   if [ -z "$SRC_DIR" ]; then
     SRC_DIR="$(find "$LOG_DIR/providers" -type d \( -path "*/deals/$DEAL_ID/$MANIFEST_KEY" -o -path "*/$MANIFEST_KEY" \) | head -n 1 || true)"
@@ -764,8 +793,18 @@ if [ ! -f "$PENDING_DEAL_DIR/mdu_0.bin" ]; then
   if [ "$SRC_DIR" != "$PENDING_DEAL_DIR" ]; then
     echo "==> Copying slab for pending provider: $SRC_DIR -> $PENDING_DEAL_DIR"
     mkdir -p "$(dirname "$PENDING_DEAL_DIR")"
+    rm -rf "$PENDING_DEAL_DIR"
     cp -R "$SRC_DIR" "$PENDING_DEAL_DIR"
   fi
+fi
+
+if [ -d "$PENDING_DEAL_DIR" ]; then
+  echo "==> Aggregating slot shards for pending provider..."
+  for src in "$LOG_DIR/providers"/provider*/deals/"$DEAL_ID"/"$MANIFEST_KEY"; do
+    if [ -d "$src" ]; then
+      find "$src" -maxdepth 1 -type f -name 'mdu_*_slot_*.bin' -exec cp -f {} "$PENDING_DEAL_DIR"/ \;
+    fi
+  done
 fi
 
 SLOT_INDEX="$(echo "$REPAIR_SLOT_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("slot",""))' 2>/dev/null || true)"
@@ -775,7 +814,7 @@ if [ -z "$SLOT_INDEX" ]; then
   exit 1
 fi
 
-for i in $(seq 0 $((REPAIR_BLOB_COUNT - 1))); do
+for i in $(seq 0 $((REPAIR_PLAN_COUNT - 1))); do
   echo "==> Opening retrieval session against pending provider (blob $i)..."
   HEIGHT2="$(rpc_height)"
   if [ "$HEIGHT2" -le 0 ]; then
@@ -882,6 +921,11 @@ print("0x" + bz.hex())
     echo "---- response headers ----" >&2
     cat "$HDR_FILE2" >&2 || true
     echo "--------------------------" >&2
+    if [ -s "$OUT_FILE2" ]; then
+      echo "---- response body ----" >&2
+      cat "$OUT_FILE2" >&2 || true
+      echo "------------------------" >&2
+    fi
     exit 1
   fi
 
@@ -893,9 +937,15 @@ print("0x" + bz.hex())
   fi
 
   echo "==> Submitting retrieval session proof for pending provider..."
-  PROOF_SUBMIT_RESP2="$(timeout 120s curl -sS -X POST "$GATEWAY_BASE/gateway/session-proof" \
+  SP_AUTH="$(cat "$LOG_DIR/sp_auth.txt" 2>/dev/null || true)"
+  if [ -z "$SP_AUTH" ]; then
+    echo "ERROR: missing SP auth token at $LOG_DIR/sp_auth.txt" >&2
+    exit 1
+  fi
+  PROOF_SUBMIT_RESP2="$(timeout 120s curl -sS -X POST "$PENDING_BASE/sp/session-proof" \
     -H "Content-Type: application/json" \
-    -d "{\"session_id\":\"$SESSION2_HEX\",\"provider\":\"$PENDING_PROVIDER\"}")"
+    -H "X-Nil-Gateway-Auth: $SP_AUTH" \
+    -d "{\"session_id\":\"$SESSION2_HEX\"}")"
   STATUS2="$(echo "$PROOF_SUBMIT_RESP2" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("status",""))' 2>/dev/null || true)"
   if [ "$STATUS2" != "success" ]; then
     echo "ERROR: repair session proof submission failed" >&2
@@ -904,14 +954,68 @@ print("0x" + bz.hex())
   fi
 done
 
-echo "==> Waiting for epoch end to complete repair..."
+echo "==> Waiting for repair proof to land..."
 CUR_H2="$(rpc_height)"
-NEXT_EPOCH_END2="$(( ( (CUR_H2 + EPOCH_LEN - 1) / EPOCH_LEN ) * EPOCH_LEN ))"
-if [ "$NEXT_EPOCH_END2" -le "$CUR_H2" ]; then
-  NEXT_EPOCH_END2="$((CUR_H2 + EPOCH_LEN))"
+TARGET_H2="$((CUR_H2 + 2))"
+wait_for_height "$TARGET_H2" 60 1 || { echo "ERROR: timed out waiting for repair proof inclusion" >&2; exit 1; }
+
+echo "==> Completing slot repair on-chain..."
+COMPLETE_RESP="$("$NILCHAIND_BIN" tx nilchain complete-slot-repair \
+  --deal-id "$DEAL_ID" \
+  --slot "$SLOT_INDEX" \
+  --from faucet \
+  --chain-id "$CHAIN_ID" \
+  --node tcp://127.0.0.1:26657 \
+  --home "$CHAIN_HOME" \
+  --keyring-backend test \
+  --yes \
+  --gas auto \
+  --gas-adjustment 1.6 \
+  --gas-prices 0.001aatom \
+  --broadcast-mode sync \
+  --output json 2>&1)" || {
+  echo "ERROR: complete-slot-repair failed" >&2
+  echo "$COMPLETE_RESP" >&2
+  exit 1
+}
+
+COMPLETE_JSON="$(echo "$COMPLETE_RESP" | extract_last_json)"
+if [ -z "$COMPLETE_JSON" ]; then
+  echo "ERROR: failed to parse complete-slot-repair response" >&2
+  echo "$COMPLETE_RESP" >&2
+  exit 1
 fi
-wait_for_height "$NEXT_EPOCH_END2" 180 1 || { echo "ERROR: timed out waiting for epoch end (repair completion)" >&2; exit 1; }
-sleep 2
+COMPLETE_TXHASH="$(echo "$COMPLETE_JSON" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("txhash",""))' 2>/dev/null || true)"
+if [ -z "$COMPLETE_TXHASH" ]; then
+  echo "ERROR: missing txhash in complete-slot-repair response" >&2
+  echo "$COMPLETE_JSON" >&2
+  exit 1
+fi
+
+COMPLETE_TX=""
+for _ in $(seq 1 10); do
+  sleep 1
+  COMPLETE_TX_RAW="$("$NILCHAIND_BIN" query tx "$COMPLETE_TXHASH" --node tcp://127.0.0.1:26657 --output json --home "$CHAIN_HOME" 2>/dev/null || true)"
+  COMPLETE_TX="$(echo "$COMPLETE_TX_RAW" | extract_last_json)"
+  if [ -n "$COMPLETE_TX" ]; then
+    COMPLETE_CODE="$(echo "$COMPLETE_TX" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("code",""))' 2>/dev/null || true)"
+    if [ -n "$COMPLETE_CODE" ] && [ "$COMPLETE_CODE" != "0" ]; then
+      COMPLETE_LOG="$(echo "$COMPLETE_TX" | python3 -c 'import sys, json; print(json.load(sys.stdin).get("raw_log",""))' 2>/dev/null || true)"
+      echo "ERROR: complete-slot-repair tx failed (code=$COMPLETE_CODE)" >&2
+      echo "$COMPLETE_LOG" >&2
+      exit 1
+    fi
+    break
+  fi
+done
+if [ -z "$COMPLETE_TX" ]; then
+  echo "ERROR: complete-slot-repair tx not found" >&2
+  exit 1
+fi
+
+CUR_H3="$(rpc_height)"
+TARGET_H3="$((CUR_H3 + 2))"
+wait_for_height "$TARGET_H3" 60 1 || { echo "ERROR: timed out waiting for complete-slot-repair inclusion" >&2; exit 1; }
 
 DEAL_JSON2="$(timeout 10s curl -sS "$LCD_BASE/nilchain/nilchain/v1/deals/$DEAL_ID")"
 UPDATED_SLOT_JSON="$(echo "$DEAL_JSON2" | SLOT_INDEX="$SLOT_INDEX" python3 -c '
