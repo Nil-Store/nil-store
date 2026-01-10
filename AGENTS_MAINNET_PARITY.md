@@ -30,6 +30,9 @@ Append-only. Do not edit prior entries.
 
 * `YYYY-MM-DD | TASK <ID> | <status> | <notes> | <commit> | <PR link (optional)>`
 
+* `2026-01-09 | TASK P0-PARAMS-001 | in progress | start params/proto/defaults/overrides work | - | -`
+* `2026-01-09 | TASK P0-PARAMS-001 | done | params proto/defaults/validation + overrides + tests | d35eba4 | -`
+
 ---
 
 ## 2) Working Rules
@@ -56,7 +59,7 @@ Organized by Stage 0–7 (per `MAINNET_ECON_PARITY_CHECKLIST.md`). Each task mus
 
 #### TASK P0-PARAMS-001 — Encode final policy params (B1/B2/B4/B5/B6) + validation + devnet override plumbing
 
-* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [ ] done`
+* **Status:** `[ ] not started  [ ] in progress  [ ] blocked  [x] done`
 * **Owner:**
 * **Area:** `nilchain/proto/nilchain/nilchain/v1/params.proto`, `nilchain/x/nilchain/types/`, `nilchain/x/nilchain/keeper/`, `scripts/run_devnet_alpha_multi_sp.sh`
 * **Depends on:** (none)
@@ -1332,4 +1335,3 @@ These are the canonical “stop-the-line” gates used to claim parity. Tasks sh
 ## 5) Open Decisions
 
 (Empty — add here only if a decision is truly unresolved and blocks implementation.)
-
