@@ -33,6 +33,7 @@ func TestRetrievalSession_LocksFeesAndCancels(t *testing.T) {
 	p := types.DefaultParams()
 	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 2)
 	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 3)
+	p.PremiumBps = 2000
 	p.RetrievalBurnBps = 500
 	require.NoError(t, f.keeper.Params.Set(f.ctx, p))
 
@@ -84,11 +85,12 @@ func TestRetrievalSession_LocksFeesAndCancels(t *testing.T) {
 
 	dealAfter, err := f.keeper.Deals.Get(sdk.UnwrapSDKContext(f.ctx), resDeal.DealId)
 	require.NoError(t, err)
-	require.Equal(t, math.NewInt(92), dealAfter.EscrowBalance)
+	require.Equal(t, math.NewInt(90), dealAfter.EscrowBalance)
 
 	session, err := f.keeper.RetrievalSessions.Get(sdk.UnwrapSDKContext(f.ctx), openRes.SessionId)
 	require.NoError(t, err)
 	require.Equal(t, math.NewInt(6), session.LockedFee)
+	require.Equal(t, math.NewInt(2), session.LockedPremiumFee)
 
 	require.Equal(
 		t,
@@ -111,6 +113,7 @@ func TestRetrievalSession_LocksFeesAndCancels(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_CANCELED, sessionAfter.Status)
 	require.True(t, sessionAfter.LockedFee.IsZero())
+	require.True(t, sessionAfter.LockedPremiumFee.IsZero())
 }
 
 func TestRetrievalSession_SettlesBurnAndPayout(t *testing.T) {
@@ -134,6 +137,7 @@ func TestRetrievalSession_SettlesBurnAndPayout(t *testing.T) {
 	p := types.DefaultParams()
 	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 2)
 	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 3)
+	p.PremiumBps = 2000
 	p.RetrievalBurnBps = 500
 	require.NoError(t, f.keeper.Params.Set(f.ctx, p))
 
@@ -187,6 +191,7 @@ func TestRetrievalSession_SettlesBurnAndPayout(t *testing.T) {
 	session.Status = types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_PROOF_SUBMITTED
 	session.UpdatedHeight = sdk.UnwrapSDKContext(f.ctx).BlockHeight()
 	require.NoError(t, f.keeper.RetrievalSessions.Set(sdk.UnwrapSDKContext(f.ctx), openRes.SessionId, session))
+	require.NoError(t, f.keeper.RetrievalSessionProofProvider.Set(sdk.UnwrapSDKContext(f.ctx), openRes.SessionId, deal.Providers[1]))
 
 	_, err = msgServer.ConfirmRetrievalSession(f.ctx, &types.MsgConfirmRetrievalSession{
 		Creator:   user,
@@ -198,18 +203,19 @@ func TestRetrievalSession_SettlesBurnAndPayout(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_COMPLETED, settled.Status)
 	require.True(t, settled.LockedFee.IsZero())
+	require.True(t, settled.LockedPremiumFee.IsZero())
 
 	require.Equal(
 		t,
-		sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 92)).String(),
+		sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 90)).String(),
 		bank.moduleBalances[types.ModuleName].String(),
 	)
 
-	providerAddr, err := sdk.AccAddressFromBech32(deal.Providers[0])
+	providerAddr, err := sdk.AccAddressFromBech32(deal.Providers[1])
 	require.NoError(t, err)
 	require.Equal(
 		t,
-		sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 5)).String(),
+		sdk.NewCoins(sdk.NewInt64Coin(sdk.DefaultBondDenom, 7)).String(),
 		bank.accountBalances[providerAddr.String()].String(),
 	)
 }
@@ -235,6 +241,7 @@ func TestRetrievalSession_ExpiryRefundsLockedFee(t *testing.T) {
 	p := types.DefaultParams()
 	p.BaseRetrievalFee = sdk.NewInt64Coin(sdk.DefaultBondDenom, 2)
 	p.RetrievalPricePerBlob = sdk.NewInt64Coin(sdk.DefaultBondDenom, 3)
+	p.PremiumBps = 2000
 	require.NoError(t, f.keeper.Params.Set(f.ctx, p))
 
 	userBz := make([]byte, 20)
@@ -297,6 +304,7 @@ func TestRetrievalSession_ExpiryRefundsLockedFee(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_EXPIRED, sessionAfter.Status)
 	require.True(t, sessionAfter.LockedFee.IsZero())
+	require.True(t, sessionAfter.LockedPremiumFee.IsZero())
 
 	require.Equal(
 		t,

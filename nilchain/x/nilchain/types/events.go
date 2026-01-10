@@ -31,6 +31,7 @@ const (
 	AttributeKeySessionID         = "session_id"
 	AttributeKeyBaseFee           = "base_fee"
 	AttributeKeyVariableFee       = "variable_fee"
+	AttributeKeyPremiumFee        = "premium_fee"
 	AttributeKeyTotalFee          = "total_fee"
 	AttributeKeyBlobCount         = "blob_count"
 	AttributeKeySlot              = "slot"

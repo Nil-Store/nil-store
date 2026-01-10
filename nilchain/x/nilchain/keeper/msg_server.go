@@ -2033,7 +2033,14 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 	if params.RetrievalPricePerBlob.IsValid() && params.RetrievalPricePerBlob.Amount.IsPositive() {
 		variableFee = params.RetrievalPricePerBlob.Amount.Mul(math.NewIntFromUint64(msg.BlobCount))
 	}
-	totalFee := variableFee.Add(baseFee.Amount)
+	premiumFee := math.ZeroInt()
+	if params.PremiumBps > 0 && variableFee.IsPositive() {
+		bps := math.NewIntFromUint64(params.PremiumBps)
+		bpsDiv := math.NewInt(10000)
+		bpsCeil := math.NewInt(9999)
+		premiumFee = variableFee.Mul(bps).Add(bpsCeil).Quo(bpsDiv)
+	}
+	totalFee := variableFee.Add(baseFee.Amount).Add(premiumFee)
 	if totalFee.IsPositive() {
 		newEscrow := deal.EscrowBalance.Sub(totalFee)
 		if newEscrow.IsNegative() {
@@ -2076,21 +2083,22 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 	}
 
 	session := types.RetrievalSession{
-		SessionId:      sessionID,
-		DealId:         msg.DealId,
-		Owner:          msg.Creator,
-		Provider:       msg.Provider,
-		ManifestRoot:   msg.ManifestRoot,
-		StartMduIndex:  msg.StartMduIndex,
-		StartBlobIndex: msg.StartBlobIndex,
-		BlobCount:      msg.BlobCount,
-		TotalBytes:     totalBytes,
-		Nonce:          msg.Nonce,
-		ExpiresAt:      msg.ExpiresAt,
-		OpenedHeight:   ctx.BlockHeight(),
-		UpdatedHeight:  ctx.BlockHeight(),
-		Status:         types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
-		LockedFee:      variableFee,
+		SessionId:        sessionID,
+		DealId:           msg.DealId,
+		Owner:            msg.Creator,
+		Provider:         msg.Provider,
+		ManifestRoot:     msg.ManifestRoot,
+		StartMduIndex:    msg.StartMduIndex,
+		StartBlobIndex:   msg.StartBlobIndex,
+		BlobCount:        msg.BlobCount,
+		TotalBytes:       totalBytes,
+		Nonce:            msg.Nonce,
+		ExpiresAt:        msg.ExpiresAt,
+		OpenedHeight:     ctx.BlockHeight(),
+		UpdatedHeight:    ctx.BlockHeight(),
+		Status:           types.RetrievalSessionStatus_RETRIEVAL_SESSION_STATUS_OPEN,
+		LockedFee:        variableFee,
+		LockedPremiumFee: premiumFee,
 	}
 
 	if err := k.RetrievalSessions.Set(ctx, sessionID, session); err != nil {
@@ -2107,6 +2115,7 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 	}
 
 	variableFeeCoin := sdk.NewCoin(baseFee.Denom, variableFee)
+	premiumFeeCoin := sdk.NewCoin(baseFee.Denom, premiumFee)
 	totalFeeCoin := sdk.NewCoin(baseFee.Denom, totalFee)
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(
@@ -2118,6 +2127,7 @@ func (k msgServer) OpenRetrievalSession(goCtx context.Context, msg *types.MsgOpe
 			sdk.NewAttribute(types.AttributeKeyBlobCount, fmt.Sprintf("%d", msg.BlobCount)),
 			sdk.NewAttribute(types.AttributeKeyBaseFee, baseFee.String()),
 			sdk.NewAttribute(types.AttributeKeyVariableFee, variableFeeCoin.String()),
+			sdk.NewAttribute(types.AttributeKeyPremiumFee, premiumFeeCoin.String()),
 			sdk.NewAttribute(types.AttributeKeyTotalFee, totalFeeCoin.String()),
 		),
 	)
@@ -2528,7 +2538,7 @@ func isSessionExpired(ctx sdk.Context, session *types.RetrievalSession) bool {
 }
 
 func (k msgServer) settleRetrievalSession(ctx sdk.Context, session *types.RetrievalSession) error {
-	if session == nil || !session.LockedFee.IsPositive() {
+	if session == nil || (!session.LockedFee.IsPositive() && !session.LockedPremiumFee.IsPositive()) {
 		return nil
 	}
 
@@ -2578,6 +2588,36 @@ func (k msgServer) settleRetrievalSession(ctx sdk.Context, session *types.Retrie
 	}
 
 	session.LockedFee = math.ZeroInt()
+	if session.LockedPremiumFee.IsPositive() {
+		paidPremium := false
+		if sessionID := session.SessionId; len(sessionID) == 32 {
+			if proofProvider, err := k.RetrievalSessionProofProvider.Get(ctx, sessionID); err == nil {
+				proofProvider = strings.TrimSpace(proofProvider)
+				if proofProvider != "" && proofProvider != strings.TrimSpace(session.Provider) {
+					deputyAddr, err := sdk.AccAddressFromBech32(proofProvider)
+					if err != nil {
+						return sdkerrors.ErrInvalidAddress.Wrap("invalid deputy address")
+					}
+					premiumCoins := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, session.LockedPremiumFee))
+					if err := k.BankKeeper.SendCoinsFromModuleToAccount(ctx, types.ModuleName, deputyAddr, premiumCoins); err != nil {
+						return fmt.Errorf("failed to pay proxy premium: %w", err)
+					}
+					paidPremium = true
+				}
+			}
+		}
+		if !paidPremium {
+			deal, err := k.Deals.Get(ctx, session.DealId)
+			if err != nil {
+				return sdkerrors.ErrNotFound.Wrapf("deal %d not found", session.DealId)
+			}
+			deal.EscrowBalance = deal.EscrowBalance.Add(session.LockedPremiumFee)
+			if err := k.Deals.Set(ctx, session.DealId, deal); err != nil {
+				return fmt.Errorf("failed to refund proxy premium: %w", err)
+			}
+		}
+	}
+	session.LockedPremiumFee = math.ZeroInt()
 	if sessionID := session.SessionId; len(sessionID) == 32 {
 		_ = k.RetrievalSessionProofProvider.Remove(ctx, sessionID)
 	}
@@ -2585,18 +2625,19 @@ func (k msgServer) settleRetrievalSession(ctx sdk.Context, session *types.Retrie
 }
 
 func (k msgServer) refundLockedRetrievalFee(ctx sdk.Context, session *types.RetrievalSession) error {
-	if session == nil || !session.LockedFee.IsPositive() {
+	if session == nil || (!session.LockedFee.IsPositive() && !session.LockedPremiumFee.IsPositive()) {
 		return nil
 	}
 	deal, err := k.Deals.Get(ctx, session.DealId)
 	if err != nil {
 		return sdkerrors.ErrNotFound.Wrapf("deal %d not found", session.DealId)
 	}
-	deal.EscrowBalance = deal.EscrowBalance.Add(session.LockedFee)
+	deal.EscrowBalance = deal.EscrowBalance.Add(session.LockedFee).Add(session.LockedPremiumFee)
 	if err := k.Deals.Set(ctx, session.DealId, deal); err != nil {
 		return fmt.Errorf("failed to refund locked retrieval fees: %w", err)
 	}
 	session.LockedFee = math.ZeroInt()
+	session.LockedPremiumFee = math.ZeroInt()
 	return nil
 }
 
