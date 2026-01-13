@@ -305,6 +305,8 @@ This RFC does not change how audit budgets are minted/spent; it only defines a n
 
 **Implementation requirement:** all protocol flows that attempt to spend from audit budget MUST route through a single keeper helper (e.g., `SpendAuditBudget(ctx, amount, reason)`), which MUST update the per-epoch `requested/spent/denied` counters deterministically.
 
+**Controller assumption (v1; control-stability prerequisite):** this RFC assumes that the *amounts* requested/spent from the audit budget (i.e., `audit_budget_requested.Amount`) are not defined as a direct function of the current spot `Params.storage_price`. In particular, implementations MUST NOT define audit budget spend amounts as `amount = spot_storage_price * (some physical work measure)` in a way that makes `audit_budget_requested` mechanically proportional to `Params.storage_price` each epoch. If such coupling is desired, the storage controller MUST be revised to normalize in physical units (e.g., bytes/blobs/audit-tasks) rather than in token amounts; that redesign is out of scope for v1.
+
 #### S2) Repair pressure (secondary storage signal; v1 optional)
 
 Mode 2 repairs mark slots `REPAIRING`. Repairing slots indicate supply stress (unhealthy assignments and reduced effective capacity).
@@ -406,12 +408,6 @@ message MarketPricingState {
 
   // --- Pending baseline reset (epoch-boundary effective; see §10.2.1 and §8.1) ---
   bool pending_baseline_reset = 8;
-
-  // Snapshot values captured at message execution time; applied at the next epoch boundary.
-  string pending_baseline_storage_price = 9
-    [(gogoproto.customtype) = "cosmossdk.io/math.LegacyDec", (gogoproto.nullable) = false];
-  cosmos.base.v1beta1.Coin pending_baseline_retrieval_price_per_blob = 10 [(gogoproto.nullable) = false];
-  uint64 pending_month_len_blocks_snapshot = 11;
 }
 ```
 
@@ -593,6 +589,8 @@ The retrieval session state MUST include an immutable boolean `is_proxy` set at 
 
 If the session type does not yet contain `is_proxy` **or** there is no on-chain deputy/gateway authorization registry to derive it from, retrieval pricing updates MUST remain disabled (Stage 0 metrics-only) until this field and authorization rule are implemented and enforced.
 
+**Legacy session handling (normative):** retrieval sessions created before the upgrade that introduces `session.is_proxy` (or before proxy authorization is enforceable) MUST be treated as `is_proxy=false` for the purposes of `proxy_sessions_served` accounting.
+
 ### 6.5 Audit budget counters (normative)
 
 `audit_budget_requested`, `audit_budget_spent`, and `audit_budget_denied` MUST be derived from a single keeper helper that is the exclusive debit path for the audit budget account.
@@ -654,7 +652,13 @@ For a validated `amount`, the helper MUST attempt the debit and update per-epoch
 
 This invariant is checked at metrics finalization (§6.6), and violations are handled fail-closed (no chain halt) as specified below.
 
-`audit_budget_minted` MUST be the actual minted amount for the epoch as recorded by the audit budget subsystem (Option A). The keeper MUST record `audit_budget_minted` exactly once per epoch during epoch initialization (§6.6).
+`audit_budget_minted` MUST be the actual minted amount for the epoch as recorded by the audit budget subsystem (Option A).
+
+**Canonical measurement point (normative):** the audit budget subsystem MUST call a chain hook (name illustrative) exactly once per epoch immediately after minting the audit budget for that epoch:
+
+* `RecordAuditBudgetMint(ctx, epoch_id, amount)`
+
+This hook MUST set `MarketPricingEpochMetrics{epoch_id}.audit_budget_minted = amount` deterministically. The epoch metrics entry MAY initialize `audit_budget_minted` to zero as a placeholder; `RecordAuditBudgetMint` MUST overwrite it exactly once per epoch after minting completes.
 
 ### 6.6 Metrics lifecycle and immutability (normative)
 
@@ -666,7 +670,7 @@ Define:
 
 `MarketPricingEpochMetrics{epoch_id=e}` describes epoch `e` and has two classes of fields:
 
-* **Snapshot-at-epoch-start fields** (written once at initialization of epoch `e`):
+* **Snapshot-at-epoch-start fields** (written once at the epoch boundary into epoch `e`):
 
   * `active_slot_bytes`
   * `repairing_slot_bytes`
@@ -685,10 +689,10 @@ Lifecycle (normative):
    * It MUST set snapshot-at-epoch-start fields as follows:
 
      * `active_slot_bytes` and `repairing_slot_bytes` MUST be obtained at the epoch boundary using the incrementally maintained aggregates defined in §6.3 (MUST NOT scan all deals/slots).
-     * `audit_budget_minted` MUST be recorded as the actual amount minted for epoch `e` by the audit budget subsystem (Option A).
+     * `audit_budget_minted` MUST be initialized to zero as a placeholder and then set to the actual amount minted for epoch `e` by the audit budget subsystem (Option A) via `RecordAuditBudgetMint(ctx, epoch_id=e, amount)` exactly once per epoch.
 
-       * If minting occurs in the same epoch-boundary hook, recording MUST occur after minting completes.
-       * If audit budget minting depends on `Params.storage_price`, minting for epoch `e` MUST run **after** any market-pricing update to `storage_price` for epoch `e` has been applied, and metrics MUST record the minted amount **after** that minting has completed (see also §8.1).
+       * The epoch-`e` metrics entry MUST exist before `RecordAuditBudgetMint` is invoked. The application MUST ensure this by module ordering (market pricing metrics initialization runs before audit budget minting), or by defining `RecordAuditBudgetMint` to create the epoch metrics entry if absent (implementation choice).
+       * If audit budget minting depends on `Params.storage_price`, minting for epoch `e` MUST run **after** any market-pricing update to `storage_price` for epoch `e` has been applied (see also §8.1).
 
    * It MUST zero all accumulator-over-the-epoch fields.
 
@@ -959,9 +963,9 @@ At the epoch boundary into epoch `e`:
 
      * set `state.baseline_epoch = e`
      * set `state.last_update_epoch = e`
-     * set `state.baseline_storage_price = state.pending_baseline_storage_price`
-     * set `state.baseline_retrieval_price_per_blob = state.pending_baseline_retrieval_price_per_blob`
-     * set `state.month_len_blocks_snapshot = state.pending_month_len_blocks_snapshot`
+     * set `state.baseline_storage_price = Params.storage_price`
+     * set `state.baseline_retrieval_price_per_blob = Params.retrieval_price_per_blob`
+     * set `state.month_len_blocks_snapshot = Params.month_len_blocks`
      * set `state.storage_pressure_ema_microbps = 0`
      * set `state.retrieval_pressure_ema_microbps = 0`
      * set `state.pending_baseline_reset = false`
@@ -1030,15 +1034,17 @@ At the epoch boundary into epoch `e`:
 
 10. **Audit budget mint ordering (epoch `e`)**
 
-* If the audit budget subsystem mints the audit budget for epoch `e` at epoch boundaries and that mint amount depends on `Params.storage_price`, then the chain MUST ensure:
+* If the audit budget subsystem mints the audit budget for epoch `e` at epoch boundaries and that mint amount depends on `Params.storage_price`, then the chain MUST ensure the following ordering within the epoch boundary into `e`:
 
   * the `storage_price` update for epoch `e` (if applied in step 8) is committed **before** the audit budget minting logic for epoch `e` executes, and
-  * `MarketPricingEpochMetrics{epoch_id=e}.audit_budget_minted` is recorded **after** that minting for epoch `e` has completed.
-* The application MUST enforce this ordering via BeginBlocker module order or by orchestrating the mint call such that it occurs after step 8 and before step 11’s metrics recording.
+  * after minting for epoch `e` completes, the audit budget subsystem MUST call `RecordAuditBudgetMint(ctx, epoch_id=e, amount)` (see §6.5/§6.6) to record `MarketPricingEpochMetrics{epoch_id=e}.audit_budget_minted`.
+
+* The application MUST enforce this ordering via BeginBlocker module order or by orchestrating the audit budget mint call such that it occurs after step 8 and after step 11 has initialized the epoch-`e` metrics entry.
 
 11. **Initialize metrics for epoch `e`**
 
-* The keeper MUST initialize the mutable metrics entry for epoch `e` per §6.6 (snapshot + zeroed counters), including recording `audit_budget_minted` after minting per step 10.
+* The keeper MUST initialize the mutable metrics entry for epoch `e` per §6.6 (snapshot + zeroed counters).
+* As part of initialization, `audit_budget_minted` MUST be set to zero and then updated exactly once via `RecordAuditBudgetMint(ctx, epoch_id=e, amount)` after the audit budget subsystem mints for epoch `e` (step 10).
 
 12. **Emit `EventMarketPricingUpdate`**
 
@@ -1104,6 +1110,8 @@ Let:
 
 * `blocks_per_update = Params.epoch_len_blocks * update_period_epochs`
 * `month_len = state.month_len_blocks_snapshot`
+
+**Snapshot validity (normative):** if `state.month_len_blocks_snapshot == 0` (e.g., due to a bad genesis/migration), the keeper MUST use `Params.month_len_blocks` for this boundary’s cap computation instead. If both are `0`, the keeper MUST fail-closed for this boundary (skip all updates; emit `skip_reason_*=INVARIANT_VIOLATION`).
 
 All computations in this subsection are consensus-critical and MUST be overflow-safe.
 
@@ -1328,7 +1336,7 @@ Also compute signal availability per §8.5:
 * `proxy_available = (sessions_served >= market_pricing_min_retrieval_denominator_per_epoch)`
 * `pof_available   = (sessions_opened >= market_pricing_min_retrieval_denominator_per_epoch)`
 
-If a signal is unavailable, its pressure contribution MUST be treated as neutral (`0 bps`) for this epoch.
+If a signal is unavailable, its pressure contribution MUST be set to `0 bps` for this epoch. The combination rule below MUST ensure an unavailable signal does not mask an available signal (notably when the available signal is negative).
 
 ##### Proxy fraction pressure
 
@@ -1384,17 +1392,24 @@ Compute `p_pof_bps` analogously.
 
 ##### Combine retrieval pressure
 
-Combine:
+Combine (normative):
 
 ```
-p_retrieval_bps = max(p_proxy_bps, p_pof_bps)
+if proxy_available && pof_available:
+  p_retrieval_bps = max(p_proxy_bps, p_pof_bps)
+else if proxy_available:
+  p_retrieval_bps = p_proxy_bps
+else if pof_available:
+  p_retrieval_bps = p_pof_bps
+else:
+  p_retrieval_bps = 0
 ```
 
 Rationale:
 
 * any strong positive stress signal dominates (price increases),
-* negative pressure applies only when available signals are below target, and
-* unavailable signals contribute `0` (neutral), which is intentionally conservative.
+* negative pressure is allowed when the available signal(s) are below target, and
+* if exactly one signal is available, the update uses that signal rather than masking it with a neutral `0`.
 
 ### 8.8 EMA update (deterministic fixed-point)
 
@@ -1484,6 +1499,12 @@ Then:
 sp_next = clamp_dec(floor, ceil, sp_next)
 ```
 
+**Strict positivity (normative):** `sp_next` MUST be strictly positive. Because `LegacyDec` division may truncate small values to zero, after clamping the keeper MUST enforce:
+
+* `sp_next = max(sp_next, 1e-18)`
+
+where `1e-18` is the smallest non-zero value representable in `LegacyDec` (1 atom at 18 decimal places).
+
 **Bounded-volatility clarification (normative):** if `sp` is already outside `[floor, ceil]` (e.g., due to a governance override), then clamp enforcement MAY change the price by more than the per-update delta cap; this is the only case where a larger discrete change is permitted (§2.1, §10.2.2).
 
 #### 8.10.2 Retrieval price per blob
@@ -1532,6 +1553,10 @@ Then clamp:
 ```
 rp_next = clamp_int(floor_amt, ceil_amt, rp_next)
 ```
+
+**Strict positivity (normative):** `rp_next` MUST be `>= 1` in base denom units. After clamping, the keeper MUST enforce:
+
+* `rp_next = max(rp_next, sdk.OneInt())`
 
 Finally set:
 
@@ -1780,19 +1805,15 @@ Add a new authority-only message:
 
 On acceptance of the message at any height within an epoch:
 
-* The keeper MUST set `MarketPricingState.pending_baseline_reset = true`, and MUST overwrite the pending snapshot fields as follows:
+* The keeper MUST set `MarketPricingState.pending_baseline_reset = true`.
 
-  * `pending_baseline_storage_price = Params.storage_price`
-  * `pending_baseline_retrieval_price_per_blob = Params.retrieval_price_per_blob`
-  * `pending_month_len_blocks_snapshot = Params.month_len_blocks`
-
-If multiple reset messages are accepted before the next epoch boundary, the latest accepted message wins by overwriting the pending snapshot fields.
+If multiple reset messages are accepted before the next epoch boundary, the latest accepted message wins (the pending flag remains true).
 
 At the next epoch boundary into epoch `e` after the message is accepted, the keeper MUST apply the pending reset as specified in §8.1 step 4:
 
 * set `baseline_epoch = e`
 * set `last_update_epoch = e`
-* set baselines to the pending snapshot values
+* set baselines to the current `Params.storage_price`, `Params.retrieval_price_per_blob`, and `Params.month_len_blocks` as observed at the epoch boundary
 * reset EMAs to zero
 * clear `pending_baseline_reset`
 
