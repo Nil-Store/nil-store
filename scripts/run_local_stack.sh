@@ -295,19 +295,51 @@ ensure_nil_gateway() {
 }
 
 register_demo_provider() {
-  banner "Registering demo storage provider (faucet)"
-  # Use the faucet key as a General-capability provider with a large capacity.
+  # Local stacks (and CI) should have enough providers for Mode 2 placement.
+  # We keep this lightweight by registering multiple provider identities that
+  # can share the same local SP endpoint.
+  banner "Registering demo storage providers"
+  local provider_count="${NIL_LOCAL_PROVIDER_COUNT:-3}"
+  if [ "$provider_count" -lt 1 ]; then
+    provider_count=1
+  fi
+  local provider_funding_amount="${NIL_PROVIDER_FUNDING_AMOUNT:-$NIL_AMOUNT}"
+
+  # Use the faucet key as a General-capability provider with a large capacity,
+  # plus (provider_count-1) additional providers.
   # We retry a few times to avoid races with node startup.
   local extra_endpoints_raw="${NIL_PROVIDER_ENDPOINTS_EXTRA:-}"
-  IFS=',' read -r -a extra_endpoints <<<"$extra_endpoints_raw"
+  local -a extra_endpoints=()
+  if [ -n "$extra_endpoints_raw" ]; then
+    IFS=',' read -r -a extra_endpoints <<<"$extra_endpoints_raw"
+  fi
   local endpoint_args=()
   endpoint_args+=("--endpoint" "/ip4/127.0.0.1/tcp/8082/http")
-  for ep in "${extra_endpoints[@]}"; do
-    ep="$(echo "$ep" | xargs)"
-    if [ -n "$ep" ]; then
-      endpoint_args+=("--endpoint" "$ep")
+  if [ "${#extra_endpoints[@]}" -gt 0 ]; then
+    for ep in "${extra_endpoints[@]}"; do
+      ep="$(echo "$ep" | xargs)"
+      if [ -n "$ep" ]; then
+        endpoint_args+=("--endpoint" "$ep")
+      fi
+    done
+  fi
+
+  # Avoid racing nilchaind startup: wait for RPC to come up before attempting txs.
+  if command -v curl >/dev/null 2>&1; then
+    local rpc_ready=0
+    local rpc_tries=30
+    local rpc_try
+    for rpc_try in $(seq 1 "$rpc_tries"); do
+      if curl -sSf --max-time 1 "http://127.0.0.1:26657/status" >/dev/null 2>&1; then
+        rpc_ready=1
+        break
+      fi
+      sleep 1
+    done
+    if [ "$rpc_ready" != "1" ]; then
+      echo "Warning: RPC not responding; provider registration may be flaky."
     fi
-  done
+  fi
 
   local attempts=10
   local i
@@ -316,18 +348,55 @@ register_demo_provider() {
       --from faucet \
       "${endpoint_args[@]}" \
       --chain-id "$CHAIN_ID" \
+      --broadcast-mode block \
       --yes \
       --home "$CHAIN_HOME" \
       --keyring-backend test \
       --gas-prices "$GAS_PRICE" >/dev/null 2>&1 || true
 
-    # Check if a provider now exists.
-    if "$NILCHAIND_BIN" query nilchain list-providers --home "$CHAIN_HOME" 2>/dev/null | grep -q "address:"; then
-      echo "Demo provider registered successfully."
+    # Register additional provider identities for Mode 2 stripes.
+    # provider1..provider{provider_count-1}
+    if [ "$provider_count" -gt 1 ]; then
+      local idx
+      for idx in $(seq 1 $((provider_count - 1))); do
+        local key_name="provider${idx}"
+        if ! "$NILCHAIND_BIN" keys show "$key_name" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1; then
+          "$NILCHAIND_BIN" keys add "$key_name" --home "$CHAIN_HOME" --keyring-backend test >/dev/null 2>&1 || true
+        fi
+        local addr
+        addr=$("$NILCHAIND_BIN" keys show "$key_name" -a --home "$CHAIN_HOME" --keyring-backend test 2>/dev/null || true)
+        if [ -n "$addr" ]; then
+          # Fund provider so it can pay fees in the configured gas denom (aatom).
+          "$NILCHAIND_BIN" tx bank send faucet "$addr" "$provider_funding_amount" \
+            --chain-id "$CHAIN_ID" \
+            --broadcast-mode block \
+            --yes \
+            --home "$CHAIN_HOME" \
+            --keyring-backend test \
+            --gas-prices "$GAS_PRICE" >/dev/null 2>&1 || true
+
+          "$NILCHAIND_BIN" tx nilchain register-provider General 1099511627776 \
+            --from "$key_name" \
+            "${endpoint_args[@]}" \
+            --chain-id "$CHAIN_ID" \
+            --broadcast-mode block \
+            --yes \
+            --home "$CHAIN_HOME" \
+            --keyring-backend test \
+            --gas-prices "$GAS_PRICE" >/dev/null 2>&1 || true
+        fi
+      done
+    fi
+
+    # Check if we have enough providers for Mode 2 placement.
+    local count
+    count=$("$NILCHAIND_BIN" query nilchain list-providers --home "$CHAIN_HOME" 2>/dev/null | grep -c "address:" || true)
+    if [ "$count" -ge "$provider_count" ]; then
+      echo "Demo providers registered successfully ($count provider(s))."
       return 0
     fi
 
-    echo "Demo provider not yet registered (attempt $i/$attempts); retrying in 4s..."
+    echo "Demo providers not yet registered ($count/$provider_count) (attempt $i/$attempts); retrying in 4s..."
     sleep 4
   done
 
