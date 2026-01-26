@@ -348,7 +348,6 @@ register_demo_provider() {
       --from faucet \
       "${endpoint_args[@]}" \
       --chain-id "$CHAIN_ID" \
-      --broadcast-mode block \
       --yes \
       --home "$CHAIN_HOME" \
       --keyring-backend test \
@@ -369,7 +368,6 @@ register_demo_provider() {
           # Fund provider so it can pay fees in the configured gas denom (aatom).
           "$NILCHAIND_BIN" tx bank send faucet "$addr" "$provider_funding_amount" \
             --chain-id "$CHAIN_ID" \
-            --broadcast-mode block \
             --yes \
             --home "$CHAIN_HOME" \
             --keyring-backend test \
@@ -379,7 +377,6 @@ register_demo_provider() {
             --from "$key_name" \
             "${endpoint_args[@]}" \
             --chain-id "$CHAIN_ID" \
-            --broadcast-mode block \
             --yes \
             --home "$CHAIN_HOME" \
             --keyring-backend test \
