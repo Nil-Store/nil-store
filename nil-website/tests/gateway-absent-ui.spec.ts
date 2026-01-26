@@ -44,12 +44,12 @@ test.describe('gateway absent', () => {
   const stakeBalance = page.getByTestId('cosmos-stake-balance')
   await expect(stakeBalance).not.toHaveText(/^(?:—|0 stake)$/, { timeout: 120_000 })
 
-  const redundancySelect = page.getByTestId('alloc-redundancy-mode')
-  if (!(await redundancySelect.isVisible().catch(() => false))) {
+  const placementSelect = page.getByTestId('alloc-placement-profile')
+  if (!(await placementSelect.isVisible().catch(() => false))) {
     await page.getByTestId('workspace-advanced-toggle').click()
-    await expect(redundancySelect).toBeVisible({ timeout: 10_000 })
+    await expect(placementSelect).toBeVisible({ timeout: 10_000 })
   }
-  await redundancySelect.selectOption('mode1')
+  await placementSelect.selectOption('auto')
   await page.getByTestId('alloc-submit').click()
 
   await expect(page.getByTestId('workspace-deal-title')).toHaveText(/Deal #\d+/, { timeout: 120_000 })
