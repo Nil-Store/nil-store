@@ -17,6 +17,29 @@ banner() { printf '\n>>> %s\n' "$*"; }
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
 
+current_epoch() {
+  local epoch_len height
+
+  epoch_len=$($NILCHAIND query nilchain params --home "$CHAIN_HOME" --output json | jq -r '.params.epoch_len_blocks // "0"')
+  if [ -z "$epoch_len" ] || [ "$epoch_len" = "null" ]; then
+    epoch_len="0"
+  fi
+
+  # Prefer CometBFT RPC directly (faster than nilchaind status).
+  height=$(curl -s "http://127.0.0.1:26657/status" | jq -r '.result.sync_info.latest_block_height // "1"')
+  if [ -z "$height" ] || [ "$height" = "null" ]; then
+    height="1"
+  fi
+
+  if [ "$epoch_len" -le 0 ]; then
+    echo "1"
+    return 0
+  fi
+
+  # epoch_id is 1-indexed: epoch=(height-1)/epoch_len + 1
+  echo $(( (height - 1) / epoch_len + 1 ))
+}
+
 # 1. Setup
 banner "Generating Test Data"
 dd if=/dev/urandom of="$TMP_DIR/payload.bin" bs=1024 count=1024 2>/dev/null # 1MB
@@ -94,6 +117,8 @@ echo "Provider Port: $PORT"
 
 # 7. Prove Retrieval (The Regression Test)
 banner "Proving Retrieval (via Provider :$PORT)"
+EPOCH_ID="$(current_epoch)"
+echo "Current Epoch: $EPOCH_ID"
 # This call triggers 'submitRetrievalProofNew' on the provider.
 # BEFORE FIX: It would sign with the Provider's key -> Fail "unauthorized" on chain.
 # AFTER FIX: It should look up Owner's key in shared keyring -> Sign with Owner key -> Success.
@@ -102,7 +127,7 @@ PROVE_RESP=$(curl -s -X POST -H "Content-Type: application/json" -d '{
     "manifest_root": "'$CID'",
     "file_path": "payload.bin",
     "owner": "'$OWNER_ADDR'",
-    "epoch_id": 1
+    "epoch_id": '$EPOCH_ID'
 }' "http://localhost:$PORT/gateway/prove-retrieval")
 
 echo "Prove Response: $PROVE_RESP"
