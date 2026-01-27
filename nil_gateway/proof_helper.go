@@ -69,6 +69,13 @@ func submitRetrievalProofNew(ctx context.Context, dealID uint64, epoch uint64, m
 	signer := ownerAddr
 	if signer == "" {
 		signer = providerKeyName
+	} else {
+		// e2e passes a bech32 address; nilchaind expects a local key name for --from.
+		name, err := resolveKeyNameForAddress(ctx, signer)
+		if err != nil {
+			return "", fmt.Errorf("resolveKeyNameForAddress failed: %w", err)
+		}
+		signer = name
 	}
 
 	signOut, err := execNilchaind(
