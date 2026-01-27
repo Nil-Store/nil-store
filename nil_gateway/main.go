@@ -1898,7 +1898,13 @@ func GatewayProveRetrieval(w http.ResponseWriter, r *http.Request) {
 	txHash, err := submitRetrievalProofNew(r.Context(), dealID, epoch, mduIdx, mduPath, manifestPath, dealOwner)
 	if err != nil {
 		log.Printf("GatewayProveRetrieval: submitRetrievalProof failed: %v", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to submit retrieval proof", "check nilchaind logs")
+		// Surface the underlying chain/CLI error in the HTTP response so CI/E2E
+		// failures are diagnosable without digging through nilchaind logs.
+		hint := err.Error()
+		if len(hint) > 1024 {
+			hint = hint[:1024] + "..."
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to submit retrieval proof", hint)
 		return
 	}
 
