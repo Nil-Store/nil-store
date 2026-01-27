@@ -86,6 +86,8 @@ test.describe('gateway absent', () => {
   await expect(page.locator('text=/^Tx: 0x/i').first()).toBeVisible({ timeout: 180_000 })
   await expect(page.getByTestId(`deal-manifest-${dealId}`)).toContainText('0x', { timeout: 180_000 })
 
-  await expect(page.getByText(/Route: direct sp/i)).toBeVisible({ timeout: 120_000 })
+  const routeLabel = page.getByTestId('transport-route')
+  await expect(routeLabel).toBeVisible({ timeout: 120_000 })
+  await expect(routeLabel).toHaveText(/Route: direct sp/i, { timeout: 120_000 })
   })
 })
