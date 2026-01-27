@@ -51,7 +51,10 @@ echo "Owner (Provider1): $OWNER_ADDR"
 
 # 3. Create Deal
 banner "Creating Deal"
-CREATE_OUT=$($NILCHAIND tx nilchain create-deal 1000 1000000 1000000 --service-hint General --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+# NOTE: /gateway/prove-retrieval currently generates proofs by treating the provider's on-disk unit as a raw 8 MiB MDU.
+# Default Mode 2 (rs=8+4) stores per-slot shards (1 MiB) and cannot be proven with the legacy MDU-based helper.
+# Use rs=1+1 so each slot stores an 8 MiB shard, keeping this regression test meaningful while Mode 1 is deprecated.
+CREATE_OUT=$($NILCHAIND tx nilchain create-deal 1000 1000000 1000000 --service-hint "General:rs=1+1" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
 TX_HASH=$(echo "$CREATE_OUT" | jq -r '.txhash')
 echo "Create Deal Tx: $TX_HASH"
 
