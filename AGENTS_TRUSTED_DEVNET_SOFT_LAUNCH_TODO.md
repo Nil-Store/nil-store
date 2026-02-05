@@ -484,7 +484,7 @@ Checklist:
 
 - Branch: `codex/dynamic-pricing-e2e`
 - Goal: Add a deterministic E2E smoke path to validate the retrieval dynamic pricing controller updates `retrieval_price_per_blob` at the next epoch boundary.
-- PR: (pending)
+- PR: https://github.com/Nil-Store/nil-store/pull/93
 - Test gate:
   - `bash -n e2e_retrieval_fees.sh`
   - `NIL_DYNAMIC_PRICING_E2E=1 ./e2e_retrieval_fees.sh`
