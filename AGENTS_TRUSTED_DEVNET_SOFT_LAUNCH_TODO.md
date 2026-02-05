@@ -499,7 +499,7 @@ Checklist:
 
 - Branch: `codex/mode2-elasticity-gap`
 - Goal: Make `spec.md` + `docs/GAP_REPORT_REPO_ANCHORED.md` explicitly reflect the current implementation status of saturation/elastic scaling (Mode2 overlay stripes are not fully modeled yet).
-- PR: (pending)
+- PR: https://github.com/Nil-Store/nil-store/pull/94
 - Test gate:
   - `bash -n scripts/devnet_healthcheck.sh`
 
