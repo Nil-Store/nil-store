@@ -5,6 +5,7 @@ import { encodeFunctionData, type Hex } from 'viem'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { resolveActiveEvmAddress } from '../lib/walletAddress'
+import { classifyWalletError } from '../lib/walletErrors'
 
 export interface UpdateDealContentInput {
   creator: string
@@ -48,6 +49,12 @@ export function useUpdateDealContent() {
       setLastTx(txHash)
       await waitForTransactionReceipt(txHash)
       return { status: 'success', tx_hash: txHash }
+    } catch (error) {
+      const walletError = classifyWalletError(error)
+      if (walletError.reconnectSuggested) {
+        throw new Error(walletError.message)
+      }
+      throw error
     } finally {
       setLoading(false)
     }

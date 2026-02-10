@@ -18,6 +18,7 @@ import { FaucetAuthTokenInput } from './FaucetAuthTokenInput'
 import { buildServiceHint, parseServiceHint } from '../lib/serviceHint'
 import { maybeWrapNilceZstd } from '../lib/nilce'
 import { hasBuildFaucetAuthToken } from '../lib/faucetAuthToken'
+import { classifyWalletError } from '../lib/walletErrors'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
 import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
@@ -170,6 +171,7 @@ export function Dashboard() {
 
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<'neutral' | 'error' | 'success'>('neutral')
+  const [walletReconnectHint, setWalletReconnectHint] = useState(false)
   const [recentFiles, setRecentFiles] = useState<RecentFileEntry[]>([])
   const [recentDownloadId, setRecentDownloadId] = useState<string | null>(null)
   const [downloadToast, setDownloadToast] = useState<string | null>(null)
@@ -185,6 +187,44 @@ export function Dashboard() {
   const { proofs, loading: proofsLoading } = useProofs(PROOFS_POLL_MS)
   const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
   const { listFiles, slab } = useTransportRouter()
+
+  const handleWalletError = useCallback((error: unknown, fallback: string) => {
+    const walletError = classifyWalletError(error, fallback)
+    setStatusTone('error')
+    setStatusMsg(walletError.message)
+    if (walletError.reconnectSuggested) {
+      setWalletReconnectHint(true)
+    }
+  }, [])
+
+  const requestWalletReconnect = useCallback(async () => {
+    try {
+      const ethereum = (window as { ethereum?: { request?: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum
+      if (ethereum?.request) {
+        try {
+          await ethereum.request({
+            method: 'wallet_requestPermissions',
+            params: [{ eth_accounts: {} }],
+          })
+        } catch {
+          await ethereum.request({ method: 'eth_requestAccounts' })
+        }
+      } else {
+        openConnectModal?.()
+      }
+      setStatusTone('neutral')
+      setStatusMsg('Wallet access request sent. Approve in your wallet, then retry.')
+      setWalletReconnectHint(false)
+    } catch (error) {
+      handleWalletError(error, 'Wallet reconnection failed')
+    }
+  }, [handleWalletError, openConnectModal])
+
+  useEffect(() => {
+    if (isConnected && address) {
+      setWalletReconnectHint(false)
+    }
+  }, [isConnected, address])
 
   const [retrievalSessions, setRetrievalSessions] = useState<Record<string, unknown>[]>([])
   const [retrievalSessionsLoading, setRetrievalSessionsLoading] = useState(false)
@@ -950,8 +990,7 @@ export function Dashboard() {
       }
     } catch (e) {
       setTargetDealId(previousTargetDealId)
-      setStatusTone('error')
-      setStatusMsg(e instanceof Error ? e.message : 'Deal allocation failed. Check gateway logs.')
+      handleWalletError(e, 'Deal allocation failed. Check gateway logs.')
     }
   }
 
@@ -978,8 +1017,7 @@ export function Dashboard() {
       if (!address || !address.startsWith('0x')) throw new Error('Connect wallet to create a deal.')
       await handleCreateDeal(address)
     } catch (e) {
-      setStatusTone('error')
-      setStatusMsg(e instanceof Error ? e.message : 'Failed to connect wallet')
+      handleWalletError(e, 'Failed to connect wallet')
     }
   }
 
@@ -1056,15 +1094,15 @@ export function Dashboard() {
         recordUpload('success')
         return true
     } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/expired at end_block/i.test(msg || '')) {
         setStatusTone('error')
-        if (/expired at end_block/i.test(msg || '')) {
-          setStatusMsg(targetDealExpiryMsg || 'Deal is expired. Create a new deal to continue.')
-        } else {
-          setStatusMsg('Content commit failed. Check gateway + chain logs.')
-        }
-        recordUpload('failed', msg || 'commit failed')
-        return false
+        setStatusMsg(targetDealExpiryMsg || 'Deal is expired. Create a new deal to continue.')
+      } else {
+        handleWalletError(e, 'Content commit failed. Check gateway + chain logs.')
+      }
+      recordUpload('failed', msg || 'commit failed')
+      return false
     }
   }
 
@@ -1610,6 +1648,24 @@ export function Dashboard() {
         </div>
       )}
 
+      {walletReconnectHint && (
+        <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-200 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="font-semibold">Wallet access needs refresh</div>
+            <div className="text-xs text-yellow-700/90 dark:text-yellow-200/90">
+              If you switched accounts in MetaMask, reconnect and approve access for the active account.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void requestWalletReconnect()}
+            className="inline-flex items-center justify-center rounded-md border border-yellow-600/40 bg-yellow-500/15 px-3 py-2 text-xs font-semibold text-yellow-700 hover:bg-yellow-500/25 dark:text-yellow-200"
+          >
+            Reconnect Wallet
+          </button>
+        </div>
+      )}
+
       <div className="rounded-xl border border-border bg-card shadow-sm" data-testid="dashboard-utility-bar">
         <div className="grid gap-3 p-4 lg:grid-cols-3">
           <div className="rounded-lg border border-border bg-background/60 px-3 py-2">
@@ -1654,7 +1710,16 @@ export function Dashboard() {
                   {isWrongNetwork ? `Wrong chain (${activeChainId})` : `Chain ${activeChainId}`}
                 </div>
               </div>
-              {isWrongNetwork ? (
+              {walletReconnectHint ? (
+                <button
+                  type="button"
+                  onClick={() => void requestWalletReconnect()}
+                  className="inline-flex items-center gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs font-semibold text-yellow-700 hover:bg-yellow-500/20 dark:text-yellow-200"
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  Reconnect
+                </button>
+              ) : isWrongNetwork ? (
                 <button
                   type="button"
                   onClick={handleSwitchNetwork}

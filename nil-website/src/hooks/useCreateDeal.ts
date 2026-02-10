@@ -6,6 +6,7 @@ import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { buildServiceHint } from '../lib/serviceHint'
 import { resolveActiveEvmAddress } from '../lib/walletAddress'
+import { classifyWalletError } from '../lib/walletErrors'
 
 export interface CreateDealInput {
   creator: string
@@ -68,6 +69,12 @@ export function useCreateDeal() {
         }
       }
       throw new Error('createDeal tx confirmed but DealCreated event not found')
+    } catch (error) {
+      const walletError = classifyWalletError(error)
+      if (walletError.reconnectSuggested) {
+        throw new Error(walletError.message)
+      }
+      throw error
     } finally {
       setLoading(false)
     }

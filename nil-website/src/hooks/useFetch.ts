@@ -16,6 +16,7 @@ import {
 } from '../lib/nilstorePrecompile'
 import { planNilfsFileRangeChunks } from '../lib/rangeChunker'
 import { decodeNilceV1 } from '../lib/nilce'
+import { classifyWalletError } from '../lib/walletErrors'
 import {
   resolveProviderEndpoint,
   resolveProviderEndpointByAddress,
@@ -637,9 +638,11 @@ export function useFetch() {
       return { url, blob }
     } catch (e) {
       console.error(e)
-      setProgress((p) => ({ ...p, phase: 'error', message: (e as Error).message }))
+      const walletError = classifyWalletError(e, 'Fetch failed')
+      const errorMessage = walletError.message
+      setProgress((p) => ({ ...p, phase: 'error', message: errorMessage }))
       setReceiptStatus('failed')
-      setReceiptError((e as Error).message)
+      setReceiptError(errorMessage)
       return null
     } finally {
       setLoading(false)

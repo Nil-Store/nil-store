@@ -17,6 +17,7 @@ import { useFetch } from '../hooks/useFetch'
 import { ethToNil } from '../lib/address'
 import { buildServiceHint } from '../lib/serviceHint'
 import { toHexFromBase64OrHex } from '../domain/hex'
+import { classifyWalletError } from '../lib/walletErrors'
 
 function bytesToHex(bytes: Uint8Array): string {
   let out = ''
@@ -154,7 +155,8 @@ export function FirstFile() {
       })
       setDealId(String(res.deal_id))
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e) || 'Create deal failed')
+      const walletError = classifyWalletError(e, 'Create deal failed')
+      setError(walletError.message)
     }
   }
 
@@ -225,7 +227,8 @@ export function FirstFile() {
       })
       setCommitOk(true)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e) || 'Commit failed')
+      const walletError = classifyWalletError(e, 'Commit failed')
+      setError(walletError.message)
     }
   }
 
