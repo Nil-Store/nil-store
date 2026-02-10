@@ -133,7 +133,7 @@ export function FirstFile() {
     setError(null)
     setNotice(null)
     if (!address) {
-      setError('Connect MetaMask first')
+      setError('Connect wallet first')
       return
     }
     if (!address.startsWith('0x')) {
@@ -190,7 +190,7 @@ export function FirstFile() {
       return
     }
     if (!address?.startsWith('0x')) {
-      setError('Connect MetaMask to commit on-chain')
+      setError('Connect wallet to commit on-chain')
       return
     }
 
