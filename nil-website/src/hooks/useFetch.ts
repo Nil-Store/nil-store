@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { useAccount } from 'wagmi'
-import { numberToHex, type Hex } from 'viem'
+import { useAccount, usePublicClient, useWalletClient } from 'wagmi'
+import { type Hex } from 'viem'
 
 import { appConfig } from '../config'
 import { ethToNil } from '../lib/address'
@@ -123,6 +123,8 @@ function decodeHttpError(bodyText: string): string {
 
 export function useFetch() {
   const { address } = useAccount()
+  const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient({ chainId: appConfig.chainId })
   const transport = useTransportRouter()
   const [loading, setLoading] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
@@ -157,10 +159,9 @@ export function useFetch() {
 
     try {
       if (!address) throw new Error('Connect a wallet to submit retrieval proofs')
-      const ethereum = window.ethereum
-      if (!ethereum || typeof ethereum.request !== 'function') {
-        throw new Error('Ethereum provider (MetaMask) not available')
-      }
+      if (!walletClient) throw new Error('Wallet not connected')
+      if (!publicClient) throw new Error('EVM RPC client unavailable')
+      const signerAddress = (walletClient.account?.address || address) as Hex
 
       const dealId = normalizeDealId(input.dealId)
       const owner = String(input.owner ?? '').trim()
@@ -353,10 +354,15 @@ export function useFetch() {
       })
 
       const computeData = encodeComputeRetrievalSessionIdsData(openRequests)
-      const computeResult = (await ethereum.request({
-        method: 'eth_call',
-        params: [{ from: address, to: appConfig.nilstorePrecompile, data: computeData }, 'latest'],
-      })) as Hex
+      const computeCall = await publicClient.call({
+        account: signerAddress,
+        to: appConfig.nilstorePrecompile as Hex,
+        data: computeData,
+      })
+      const computeResult = computeCall.data as Hex
+      if (!computeResult || computeResult === '0x') {
+        throw new Error('computeRetrievalSessionIds call returned empty data')
+      }
       const { providers: computedProviders, sessionIds: computedSessionIds } =
         decodeComputeRetrievalSessionIdsResult(computeResult)
       const sessionsByProvider = new Map<string, Hex>()
@@ -373,7 +379,7 @@ export function useFetch() {
       }
 
       const openTxData = encodeOpenRetrievalSessionsData(openRequests)
-      const callerNil = ethToNil(address)
+      const callerNil = ethToNil(signerAddress)
       const isDealOwner = callerNil && callerNil === owner
       const sponsoredAuth = input.sponsoredAuth ?? { type: 'none' }
       const authType =
@@ -402,17 +408,12 @@ export function useFetch() {
         voucherSignature,
       }))
       const sponsoredTxData = encodeOpenRetrievalSessionsSponsoredData(sponsoredOpenRequests)
-      const openTxHash = (await ethereum.request({
-        method: 'eth_sendTransaction',
-        params: [
-          {
-            from: address,
-            to: appConfig.nilstorePrecompile,
-            data: isDealOwner ? openTxData : sponsoredTxData,
-            gas: numberToHex(7_000_000),
-          },
-        ],
-      })) as Hex
+      const openTxHash = await walletClient.sendTransaction({
+        account: signerAddress,
+        to: appConfig.nilstorePrecompile as Hex,
+        data: isDealOwner ? openTxData : sponsoredTxData,
+        gas: 7_000_000n,
+      })
 
       await waitForTransactionReceipt(openTxHash)
 
@@ -456,10 +457,28 @@ export function useFetch() {
           },
           appConfig.chainId,
         )
-        const reqSig = (await ethereum.request({
-          method: 'eth_signTypedData_v4',
-          params: [address, JSON.stringify(typedData)],
-        })) as string
+        const typedDataForViem = typedData as {
+          domain: {
+            name: string
+            version: string
+            chainId: number
+            verifyingContract: Hex
+          }
+          types: Record<string, readonly { name: string; type: string }[]>
+          primaryType: 'RetrievalRequest'
+          message: Record<string, unknown>
+        }
+
+        const reqSig = await walletClient.signTypedData({
+          account: signerAddress,
+          domain: {
+            ...typedDataForViem.domain,
+            chainId: BigInt(typedDataForViem.domain.chainId),
+          },
+          types: typedDataForViem.types,
+          primaryType: typedDataForViem.primaryType,
+          message: typedDataForViem.message,
+        })
 
         metaAuth = {
           reqSig,
@@ -544,10 +563,12 @@ export function useFetch() {
 
       const sessionIds = groups.map((group) => sessionsByProvider.get(group.provider) as Hex)
       const confirmTxData = encodeConfirmRetrievalSessionsData(sessionIds)
-      const confirmTxHash = (await ethereum.request({
-        method: 'eth_sendTransaction',
-        params: [{ from: address, to: appConfig.nilstorePrecompile, data: confirmTxData, gas: numberToHex(3_000_000) }],
-      })) as Hex
+      const confirmTxHash = await walletClient.sendTransaction({
+        account: signerAddress,
+        to: appConfig.nilstorePrecompile as Hex,
+        data: confirmTxData,
+        gas: 3_000_000n,
+      })
       await waitForTransactionReceipt(confirmTxHash)
       receiptsSubmitted = 2
 
