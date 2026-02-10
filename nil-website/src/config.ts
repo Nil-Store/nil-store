@@ -23,6 +23,8 @@ function inferPublicDomain(runtimeHost: string): string {
 
   if (!runtimeHost) return ''
   if (runtimeHost === 'nilstore.org' || runtimeHost.endsWith('.nilstore.org')) return 'nilstore.org'
+  // Cloudflare preview hosts should resolve to production public service subdomains.
+  if (runtimeHost.endsWith('.workers.dev') || runtimeHost.endsWith('.pages.dev')) return 'nilstore.org'
   if (runtimeHost.startsWith('web.') && runtimeHost.split('.').length >= 3) {
     return runtimeHost.slice(4)
   }

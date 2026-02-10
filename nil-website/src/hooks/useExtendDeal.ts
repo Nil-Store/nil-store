@@ -5,6 +5,7 @@ import { appConfig } from '../config'
 import { NILSTORE_PRECOMPILE_ABI } from '../lib/nilstorePrecompile'
 import { waitForTransactionReceipt } from '../lib/evmRpc'
 import { resolveActiveEvmAddress } from '../lib/walletAddress'
+import { classifyWalletError } from '../lib/walletErrors'
 
 export interface ExtendDealInput {
   creator: string
@@ -44,6 +45,12 @@ export function useExtendDeal() {
       setLastTx(txHash)
       await waitForTransactionReceipt(txHash)
       return { status: 'success', tx_hash: txHash }
+    } catch (error) {
+      const walletError = classifyWalletError(error)
+      if (walletError.reconnectSuggested) {
+        throw new Error(walletError.message)
+      }
+      throw error
     } finally {
       setLoading(false)
     }
