@@ -183,7 +183,10 @@ fn repo_root() -> Result<PathBuf, String> {
         .map_err(|err| format!("failed to resolve repo root: {err}"))
 }
 
-fn run_provider_script(action: &str, envs: &HashMap<&str, String>) -> Result<SpCommandResponse, String> {
+fn run_provider_script(
+    action: &str,
+    envs: &HashMap<&str, String>,
+) -> Result<SpCommandResponse, String> {
     let root = repo_root()?;
     let mut command = Command::new("bash");
     command
@@ -235,7 +238,11 @@ fn validate_multiaddr(endpoint: &str) -> Vec<SpCheckResult> {
         } else {
             "endpoint must start with /ip4/ or /dns4/".to_string()
         },
-        severity: if has_prefix { "info".to_string() } else { "error".to_string() },
+        severity: if has_prefix {
+            "info".to_string()
+        } else {
+            "error".to_string()
+        },
     });
 
     let has_tcp = normalized.contains("/tcp/");
@@ -247,7 +254,11 @@ fn validate_multiaddr(endpoint: &str) -> Vec<SpCheckResult> {
         } else {
             "endpoint must include /tcp/<port>".to_string()
         },
-        severity: if has_tcp { "info".to_string() } else { "error".to_string() },
+        severity: if has_tcp {
+            "info".to_string()
+        } else {
+            "error".to_string()
+        },
     });
 
     let has_http = normalized.ends_with("/http") || normalized.ends_with("/https");
@@ -259,7 +270,11 @@ fn validate_multiaddr(endpoint: &str) -> Vec<SpCheckResult> {
         } else {
             "endpoint should end with /http or /https".to_string()
         },
-        severity: if has_http { "info".to_string() } else { "error".to_string() },
+        severity: if has_http {
+            "info".to_string()
+        } else {
+            "error".to_string()
+        },
     });
 
     checks
@@ -346,7 +361,9 @@ pub async fn balance_check(req: SpBalanceCheckRequest) -> Result<SpBalanceCheckR
     })
 }
 
-pub async fn endpoint_validate(req: SpEndpointValidateRequest) -> Result<SpEndpointValidateResponse, String> {
+pub async fn endpoint_validate(
+    req: SpEndpointValidateRequest,
+) -> Result<SpEndpointValidateResponse, String> {
     let normalized = req.endpoint.trim().to_string();
     let mut checks = validate_multiaddr(&normalized);
 
@@ -381,7 +398,9 @@ pub async fn endpoint_validate(req: SpEndpointValidateRequest) -> Result<SpEndpo
         }
     }
 
-    let valid = checks.iter().all(|check| check.ok || check.severity != "error");
+    let valid = checks
+        .iter()
+        .all(|check| check.ok || check.severity != "error");
 
     Ok(SpEndpointValidateResponse {
         valid,
@@ -390,7 +409,9 @@ pub async fn endpoint_validate(req: SpEndpointValidateRequest) -> Result<SpEndpo
     })
 }
 
-pub async fn register_provider(req: SpRegisterProviderRequest) -> Result<SpCommandResponse, String> {
+pub async fn register_provider(
+    req: SpRegisterProviderRequest,
+) -> Result<SpCommandResponse, String> {
     let mut envs = HashMap::new();
     envs.insert("PROVIDER_KEY", req.provider_key);
     envs.insert("CHAIN_ID", req.chain_id);
@@ -399,7 +420,8 @@ pub async fn register_provider(req: SpRegisterProviderRequest) -> Result<SpComma
     envs.insert("PROVIDER_ENDPOINT", req.provider_endpoint);
     envs.insert(
         "PROVIDER_CAPABILITIES",
-        req.provider_capabilities.unwrap_or_else(|| "General".to_string()),
+        req.provider_capabilities
+            .unwrap_or_else(|| "General".to_string()),
     );
     envs.insert(
         "PROVIDER_TOTAL_STORAGE",
@@ -414,7 +436,9 @@ pub async fn register_provider(req: SpRegisterProviderRequest) -> Result<SpComma
     run_provider_script("register", &envs)
 }
 
-pub async fn start_provider_local(req: SpStartProviderRequest) -> Result<SpCommandResponse, String> {
+pub async fn start_provider_local(
+    req: SpStartProviderRequest,
+) -> Result<SpCommandResponse, String> {
     let mut envs = HashMap::new();
     envs.insert("PROVIDER_KEY", req.provider_key);
     envs.insert("CHAIN_ID", req.chain_id);
@@ -460,7 +484,8 @@ pub async fn health_snapshot(req: SpHealthSnapshotRequest) -> Result<SpHealthSna
                 code: "service_down".to_string(),
                 severity: "critical".to_string(),
                 message: "provider health endpoint is not healthy".to_string(),
-                recommended_action: "Start/restart provider service and verify listen endpoint.".to_string(),
+                recommended_action: "Start/restart provider service and verify listen endpoint."
+                    .to_string(),
             });
         }
         Err(err) => {
@@ -474,7 +499,8 @@ pub async fn health_snapshot(req: SpHealthSnapshotRequest) -> Result<SpHealthSna
                 code: "service_down".to_string(),
                 severity: "critical".to_string(),
                 message: "provider health endpoint is unreachable".to_string(),
-                recommended_action: "Ensure provider process is running and endpoint is reachable.".to_string(),
+                recommended_action: "Ensure provider process is running and endpoint is reachable."
+                    .to_string(),
             });
         }
     }
@@ -539,14 +565,19 @@ pub async fn health_snapshot(req: SpHealthSnapshotRequest) -> Result<SpHealthSna
                     name: "chain_id_match".to_string(),
                     ok: match_ok,
                     detail: format!("expected {}, got {}", expected_chain_id, network),
-                    severity: if match_ok { "info".to_string() } else { "error".to_string() },
+                    severity: if match_ok {
+                        "info".to_string()
+                    } else {
+                        "error".to_string()
+                    },
                 });
                 if !match_ok {
                     issues.push(SpIssue {
                         code: "chain_id_mismatch".to_string(),
                         severity: "critical".to_string(),
                         message: "hub chain id does not match expected chain id".to_string(),
-                        recommended_action: "Switch profile defaults to the correct hub chain.".to_string(),
+                        recommended_action: "Switch profile defaults to the correct hub chain."
+                            .to_string(),
                     });
                 }
             }
@@ -599,7 +630,8 @@ pub async fn health_snapshot(req: SpHealthSnapshotRequest) -> Result<SpHealthSna
                     code: "provider_unregistered".to_string(),
                     severity: "degraded".to_string(),
                     message: "provider registration check failed".to_string(),
-                    recommended_action: "Re-run registration and validate provider address.".to_string(),
+                    recommended_action: "Re-run registration and validate provider address."
+                        .to_string(),
                 });
             }
         }
@@ -661,10 +693,12 @@ pub fn generate_remote_bundle(req: SpRemoteBundleRequest) -> SpRemoteBundleRespo
         req.shared_auth
     );
 
-    let init_command = "PROVIDER_KEY=$PROVIDER_KEY ./scripts/run_devnet_provider.sh init".to_string();
+    let init_command =
+        "PROVIDER_KEY=$PROVIDER_KEY ./scripts/run_devnet_provider.sh init".to_string();
     let register_command = "PROVIDER_KEY=$PROVIDER_KEY PROVIDER_ENDPOINT=$PROVIDER_ENDPOINT CHAIN_ID=$CHAIN_ID HUB_LCD=$HUB_LCD HUB_NODE=$HUB_NODE ./scripts/run_devnet_provider.sh register".to_string();
     let start_command = "PROVIDER_KEY=$PROVIDER_KEY CHAIN_ID=$CHAIN_ID HUB_LCD=$HUB_LCD HUB_NODE=$HUB_NODE PROVIDER_LISTEN=$PROVIDER_LISTEN NIL_GATEWAY_SP_AUTH=$NIL_GATEWAY_SP_AUTH ./scripts/run_devnet_provider.sh start".to_string();
-    let stop_command = "PROVIDER_KEY=$PROVIDER_KEY ./scripts/run_devnet_provider.sh stop".to_string();
+    let stop_command =
+        "PROVIDER_KEY=$PROVIDER_KEY ./scripts/run_devnet_provider.sh stop".to_string();
     let healthcheck_command = "scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1${PROVIDER_LISTEN} --hub-lcd $HUB_LCD".to_string();
 
     let systemd_unit = r#"[Unit]
