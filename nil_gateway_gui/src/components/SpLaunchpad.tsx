@@ -82,6 +82,16 @@ function statusLabel(status: SpHealthSnapshot["status"] | "unknown"): string {
   return "Unknown";
 }
 
+function stepActionLabel(stepId: StepId, deploymentMode: SpDeploymentMode): string {
+  if (stepId === "defaults") return "Load defaults";
+  if (stepId === "identity") return "Create key";
+  if (stepId === "funding") return "Check funding";
+  if (stepId === "endpoint") return "Validate endpoint";
+  if (stepId === "register") return "Register on chain";
+  if (stepId === "service") return deploymentMode === "local" ? "Start provider" : "Generate runbook";
+  return "Run health check";
+}
+
 async function copyToClipboard(text: string): Promise<void> {
   if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
@@ -127,9 +137,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
   const [hubNode, setHubNode] = useState("tcp://127.0.0.1:26657");
   const [providerKey, setProviderKey] = useState("provider1");
   const [providerAddress, setProviderAddress] = useState("");
-  const [providerEndpoint, setProviderEndpoint] = useState(
-    "/ip4/127.0.0.1/tcp/8091/http",
-  );
+  const [providerEndpoint, setProviderEndpoint] = useState("/ip4/127.0.0.1/tcp/8091/http");
   const [providerListen, setProviderListen] = useState(":8091");
   const [providerBaseUrl, setProviderBaseUrl] = useState("http://127.0.0.1:8091");
   const [providerCapabilities, setProviderCapabilities] = useState("General");
@@ -166,11 +174,16 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
     }));
   }, []);
 
-  const onboardingProgress = useMemo(() => {
-    const done = Object.values(stepStatus).filter((step) => step.state === "done").length;
-    return `${done}/${steps.length}`;
+  const onboardingSnapshot = useMemo(() => {
+    const completedSteps = Object.values(stepStatus).filter(
+      (step) => step.state === "done",
+    ).length;
+    const nextStep = steps.find((step) => stepStatus[step.id].state !== "done") ?? null;
+    const progressPercent = Math.round((completedSteps / steps.length) * 100);
+    return { completedSteps, nextStep, progressPercent };
   }, [stepStatus]);
 
+  const onboardingProgress = `${onboardingSnapshot.completedSteps}/${steps.length}`;
   const healthStatus = health?.status ?? "unknown";
   const issueCount = health?.issues.length ?? 0;
 
@@ -210,7 +223,11 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
       }
       setProviderAddress(info.address || providerAddress);
       setStatusMessage("Provider identity ready. Check funding next.");
-      setStep("identity", "done", info.address ? `Address: ${info.address}` : "Provider key ready");
+      setStep(
+        "identity",
+        "done",
+        info.address ? `Address: ${info.address}` : "Provider key ready",
+      );
       addLog(`sp.onboarding.identity: key ${providerKey} ready ${info.address || ""}`);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -269,9 +286,9 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
         mode: endpointMode,
         provider_base_url: providerBaseUrl,
       });
-      const lines = response.checks.map((check) => {
-        return `${check.ok ? "OK" : "FAIL"} ${check.name}: ${check.detail}`;
-      });
+      const lines = response.checks.map(
+        (check) => `${check.ok ? "OK" : "FAIL"} ${check.name}: ${check.detail}`,
+      );
       setEndpointValidationText(lines.join("\n"));
       if (!response.valid) {
         setStep("endpoint", "error", "Endpoint checks failed.");
@@ -310,7 +327,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
         throw new Error(response.stderr || response.stdout || "register-provider failed");
       }
       setStep("register", "done", "Provider registration accepted");
-      setStatusMessage("Registration submitted. Start service (or generate remote runbook). ");
+      setStatusMessage("Registration submitted. Start service (or generate remote runbook).");
       addLog("sp.onboarding.register: provider registered");
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -334,7 +351,13 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
 
   const handleServiceStep = useCallback(async () => {
     setBusy(true);
-    setStep("service", "running", deploymentMode === "local" ? "Starting local provider..." : "Generating remote runbook...");
+    setStep(
+      "service",
+      "running",
+      deploymentMode === "local"
+        ? "Starting local provider..."
+        : "Generating remote runbook...",
+    );
     try {
       if (deploymentMode === "local") {
         const response = await spStartProviderLocal({
@@ -409,7 +432,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
       } else {
         setStep("health", "error", `Status=${snapshot.status}`);
         setStatusMessage(
-          `SP health is ${snapshot.status}. Use Issues & remediation in Operations tab to fix blockers.`,
+          `SP health is ${snapshot.status}. Use issues and remediation in Operations to fix blockers.`,
         );
         addLog(`sp.health.snapshot: ${snapshot.status}`);
       }
@@ -444,7 +467,11 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
       const response = await spStopProviderLocal({ provider_key: providerKey });
       setServiceResult(response);
       setStatusMessage(response.ok ? "Provider stopped." : "Provider stop reported an error.");
-      addLog(response.ok ? "sp.operations.stop: provider stopped" : "sp.operations.stop: provider stop failed");
+      addLog(
+        response.ok
+          ? "sp.operations.stop: provider stopped"
+          : "sp.operations.stop: provider stop failed",
+      );
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setStatusMessage(`Stop provider failed: ${detail}`);
@@ -502,6 +529,32 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
     stepStatus,
   ]);
 
+  const runStepById = useCallback(
+    async (stepId: StepId) => {
+      if (stepId === "defaults") return handleLoadDefaults();
+      if (stepId === "identity") return handleCreateIdentity();
+      if (stepId === "funding") return handleCheckFunding();
+      if (stepId === "endpoint") return handleValidateEndpoint();
+      if (stepId === "register") return handleRegister();
+      if (stepId === "service") return handleServiceStep();
+      return handleHealthCheck();
+    },
+    [
+      handleCheckFunding,
+      handleCreateIdentity,
+      handleHealthCheck,
+      handleLoadDefaults,
+      handleRegister,
+      handleServiceStep,
+      handleValidateEndpoint,
+    ],
+  );
+
+  const handleRunNextStep = useCallback(async () => {
+    if (busy || !onboardingSnapshot.nextStep) return;
+    await runStepById(onboardingSnapshot.nextStep.id);
+  }, [busy, onboardingSnapshot.nextStep, runStepById]);
+
   return (
     <div className="surface-card p-5">
       <div className="sp-topbar">
@@ -509,12 +562,16 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
           <p className="soft-label">Storage Provider</p>
           <h2 className="text-2xl font-semibold text-slate-900">SP Launchpad</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Guided onboarding and operations dashboard for NilStore Storage Providers.
+            Guided onboarding and operations for NilStore Storage Providers.
           </p>
         </div>
         <div className="sp-topbar-actions">
           {onBack ? (
-            <button type="button" className="control-btn control-btn-inline" onClick={onBack}>
+            <button
+              type="button"
+              className="control-btn control-btn-inline"
+              onClick={onBack}
+            >
               Back to Local Gateway
             </button>
           ) : null}
@@ -530,7 +587,7 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
           className={["panel-tab", tab === "onboarding" ? "panel-tab-active" : ""].join(" ")}
           onClick={() => setTab("onboarding")}
         >
-          Onboarding
+          Guided setup
         </button>
         <button
           type="button"
@@ -542,6 +599,9 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
         <span className="meta-chip">
           <strong>Progress</strong> {onboardingProgress}
         </span>
+        <span className="meta-chip">
+          <strong>Mode</strong> {deploymentMode === "local" ? "Local" : "Remote"}
+        </span>
       </div>
 
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
@@ -549,247 +609,424 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
       </div>
 
       {tab === "onboarding" ? (
-        <div className="sp-grid mt-4">
-          <div className="metric-card p-3">
-            <p className="soft-label">Deployment mode</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={["control-btn control-btn-inline", deploymentMode === "local" ? "control-btn-primary" : ""].join(" ")}
-                onClick={() => setDeploymentMode("local")}
-                disabled={busy}
-              >
-                Local provider
-              </button>
-              <button
-                type="button"
-                className={["control-btn control-btn-inline", deploymentMode === "remote" ? "control-btn-primary" : ""].join(" ")}
-                onClick={() => setDeploymentMode("remote")}
-                disabled={busy}
-              >
-                Remote provider
-              </button>
-            </div>
-
-            <p className="soft-label mt-4">Endpoint mode</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={["control-btn control-btn-inline", endpointMode === "direct" ? "control-btn-primary" : ""].join(" ")}
-                onClick={() => setEndpointMode("direct")}
-                disabled={busy}
-              >
-                Direct
-              </button>
-              <button
-                type="button"
-                className={["control-btn control-btn-inline", endpointMode === "cloudflare_tunnel" ? "control-btn-primary" : ""].join(" ")}
-                onClick={() => setEndpointMode("cloudflare_tunnel")}
-                disabled={busy}
-              >
-                Cloudflare tunnel
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {steps.map((step) => {
-                const status = stepStatus[step.id];
-                return (
-                  <div key={step.id} className="sp-step-row">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{step.label}</p>
-                      <p className="text-xs text-slate-500">{status.detail}</p>
-                    </div>
-                    <span className={stepBadgeClass(status.state)}>{status.state}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="metric-card p-3">
-              <p className="soft-label">Network profile</p>
-              <div className="sp-form-grid mt-2">
-                <label className="sp-field">
-                  Chain ID
-                  <input className="sp-input" value={chainId} onChange={(event) => setChainId(event.target.value)} />
-                </label>
-                <label className="sp-field">
-                  Hub LCD
-                  <input className="sp-input" value={hubLcd} onChange={(event) => setHubLcd(event.target.value)} />
-                </label>
-                <label className="sp-field">
-                  Hub RPC
-                  <input className="sp-input" value={hubNode} onChange={(event) => setHubNode(event.target.value)} />
-                </label>
+        <div className="mt-4 space-y-4">
+          <div className="sp-overview-grid">
+            <div className="metric-card p-4">
+              <p className="soft-label">Guided onboarding</p>
+              <h3 className="mt-2 text-lg font-semibold text-slate-900">
+                {onboardingSnapshot.nextStep
+                  ? `Next step: ${onboardingSnapshot.nextStep.label}`
+                  : "Setup complete"}
+              </h3>
+              <p className="mt-1 text-sm text-slate-600">
+                {onboardingSnapshot.nextStep
+                  ? "Run the next step, review result, then continue."
+                  : "All onboarding steps are complete. Use Operations for ongoing management."}
+              </p>
+              <div className="sp-progress-track mt-3">
+                <div
+                  className="sp-progress-fill"
+                  style={{ width: `${onboardingSnapshot.progressPercent}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {onboardingSnapshot.progressPercent}% complete ({onboardingProgress})
+              </p>
+              <div className="sp-actions mt-3">
+                <button
+                  type="button"
+                  className="control-btn control-btn-inline control-btn-primary"
+                  onClick={() => void handleRunNextStep()}
+                  disabled={busy || !onboardingSnapshot.nextStep}
+                >
+                  {busy
+                    ? "Running..."
+                    : onboardingSnapshot.nextStep
+                      ? "Run next step"
+                      : "All steps complete"}
+                </button>
                 <button
                   type="button"
                   className="control-btn control-btn-inline"
-                  onClick={() => {
-                    void handleLoadDefaults();
-                  }}
+                  onClick={() => void handleHealthCheck()}
                   disabled={busy}
                 >
-                  {busy && stepStatus.defaults.state === "running" ? "Loading..." : "Load defaults"}
+                  Quick health check
                 </button>
               </div>
             </div>
 
-            <div className="metric-card p-3">
-              <p className="soft-label">Identity and endpoint</p>
-              <div className="sp-form-grid mt-2">
-                <label className="sp-field">
-                  Provider key alias
-                  <input className="sp-input" value={providerKey} onChange={(event) => setProviderKey(event.target.value)} />
-                </label>
-                <label className="sp-field">
-                  Provider address
-                  <input className="sp-input" value={providerAddress} onChange={(event) => setProviderAddress(event.target.value)} placeholder="nil1..." />
-                </label>
-                <label className="sp-field">
-                  Provider endpoint (multiaddr)
-                  <input className="sp-input" value={providerEndpoint} onChange={(event) => setProviderEndpoint(event.target.value)} />
-                </label>
-                <label className="sp-field">
-                  Provider base URL
-                  <input className="sp-input" value={providerBaseUrl} onChange={(event) => setProviderBaseUrl(event.target.value)} />
-                </label>
-                <label className="sp-field">
-                  Listen address
-                  <input className="sp-input" value={providerListen} onChange={(event) => setProviderListen(event.target.value)} />
-                </label>
-                <label className="sp-field">
-                  Shared auth token
-                  <input className="sp-input" value={sharedAuth} onChange={(event) => setSharedAuth(event.target.value)} placeholder="NIL_GATEWAY_SP_AUTH" />
-                </label>
-              </div>
-              <div className="sp-actions mt-3">
-                <button type="button" className="control-btn control-btn-inline" onClick={() => void handleCreateIdentity()} disabled={busy}>
-                  {busy && stepStatus.identity.state === "running" ? "Creating..." : "Create key"}
-                </button>
-                <button type="button" className="control-btn control-btn-inline" onClick={() => void handleCheckFunding()} disabled={busy}>
-                  {busy && stepStatus.funding.state === "running" ? "Checking..." : "Check funding"}
-                </button>
-                <button type="button" className="control-btn control-btn-inline" onClick={() => void handleValidateEndpoint()} disabled={busy}>
-                  {busy && stepStatus.endpoint.state === "running" ? "Validating..." : "Validate endpoint"}
-                </button>
-              </div>
-            </div>
-
-            <div className="metric-card p-3">
-              <p className="soft-label">Registration and activation</p>
-              <div className="sp-form-grid mt-2">
-                <label className="sp-field">
-                  Capabilities
-                  <input className="sp-input" value={providerCapabilities} onChange={(event) => setProviderCapabilities(event.target.value)} />
-                </label>
-                <label className="sp-field">
-                  Total storage (bytes)
-                  <input className="sp-input" value={providerTotalStorage} onChange={(event) => setProviderTotalStorage(event.target.value)} />
-                </label>
-              </div>
-              <div className="sp-actions mt-3">
-                <button type="button" className="control-btn control-btn-inline" onClick={() => void handleRegister()} disabled={busy}>
-                  {busy && stepStatus.register.state === "running" ? "Registering..." : "Register on chain"}
-                </button>
-                <button type="button" className="control-btn control-btn-inline" onClick={() => void handleServiceStep()} disabled={busy}>
-                  {busy && stepStatus.service.state === "running"
-                    ? deploymentMode === "local"
-                      ? "Starting..."
-                      : "Generating..."
-                    : deploymentMode === "local"
-                      ? "Start provider"
-                      : "Generate runbook"}
-                </button>
-                <button type="button" className="control-btn control-btn-inline" onClick={() => void handleHealthCheck()} disabled={busy}>
-                  {busy && stepStatus.health.state === "running" ? "Checking..." : "Run health check"}
-                </button>
-              </div>
-            </div>
-
-            <div className="grid gap-3 lg:grid-cols-2">
-              <div className="metric-card p-3">
-                <p className="soft-label">Funding result</p>
-                {balanceCheck ? (
-                  <p className="mt-2 text-xs text-slate-700">
-                    {balanceCheck.amount} {balanceCheck.denom} · minimum {balanceCheck.min_recommended} · {balanceCheck.sufficient ? "sufficient" : "insufficient"}
-                  </p>
-                ) : (
-                  <p className="mt-2 text-xs text-slate-500">Run Check funding to populate this step.</p>
-                )}
-              </div>
-
-              <div className="metric-card p-3">
-                <p className="soft-label">Endpoint checks</p>
-                {endpointValidationText ? (
-                  <pre className="sp-pre mt-2">{endpointValidationText}</pre>
-                ) : (
-                  <p className="mt-2 text-xs text-slate-500">Run Validate endpoint to populate this step.</p>
-                )}
+            <div className="metric-card p-4">
+              <p className="soft-label">Current configuration</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="sp-summary-cell">
+                  <span>Deployment</span>
+                  <strong>{deploymentMode === "local" ? "Local provider" : "Remote provider"}</strong>
+                </div>
+                <div className="sp-summary-cell">
+                  <span>Endpoint mode</span>
+                  <strong>
+                    {endpointMode === "direct" ? "Direct" : "Cloudflare tunnel"}
+                  </strong>
+                </div>
+                <div className="sp-summary-cell">
+                  <span>Chain ID</span>
+                  <strong>{chainId}</strong>
+                </div>
+                <div className="sp-summary-cell">
+                  <span>Provider route</span>
+                  <strong>{providerBaseUrl}</strong>
+                </div>
               </div>
             </div>
           </div>
+
+          <div className="metric-card p-4">
+            <p className="soft-label">Step-by-step checklist</p>
+            <ol className="sp-step-list mt-3">
+              {steps.map((step, index) => {
+                const status = stepStatus[step.id];
+                const isNext = onboardingSnapshot.nextStep?.id === step.id;
+                const actionLabel =
+                  status.state === "done"
+                    ? "Run again"
+                    : stepActionLabel(step.id, deploymentMode);
+
+                return (
+                  <li
+                    key={step.id}
+                    className={["sp-step-card", isNext ? "sp-step-card-next" : ""].join(" ")}
+                  >
+                    <div className="sp-step-main">
+                      <span className="sp-step-index">{index + 1}</span>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{step.label}</p>
+                        <p className="text-xs text-slate-500">{status.detail}</p>
+                      </div>
+                    </div>
+                    <div className="sp-step-tail">
+                      <span className={stepBadgeClass(status.state)}>{status.state}</span>
+                      <button
+                        type="button"
+                        className="control-btn control-btn-inline"
+                        onClick={() => void runStepById(step.id)}
+                        disabled={busy}
+                      >
+                        {busy && status.state === "running" ? "Running..." : actionLabel}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+
+          <details className="sp-collapsible">
+            <summary>Network + identity settings</summary>
+            <div className="sp-collapsible-body">
+              <div className="mb-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={[
+                    "control-btn control-btn-inline",
+                    deploymentMode === "local" ? "control-btn-primary" : "",
+                  ].join(" ")}
+                  onClick={() => setDeploymentMode("local")}
+                  disabled={busy}
+                >
+                  Local provider
+                </button>
+                <button
+                  type="button"
+                  className={[
+                    "control-btn control-btn-inline",
+                    deploymentMode === "remote" ? "control-btn-primary" : "",
+                  ].join(" ")}
+                  onClick={() => setDeploymentMode("remote")}
+                  disabled={busy}
+                >
+                  Remote provider
+                </button>
+                <button
+                  type="button"
+                  className={[
+                    "control-btn control-btn-inline",
+                    endpointMode === "direct" ? "control-btn-primary" : "",
+                  ].join(" ")}
+                  onClick={() => setEndpointMode("direct")}
+                  disabled={busy}
+                >
+                  Direct endpoint
+                </button>
+                <button
+                  type="button"
+                  className={[
+                    "control-btn control-btn-inline",
+                    endpointMode === "cloudflare_tunnel" ? "control-btn-primary" : "",
+                  ].join(" ")}
+                  onClick={() => setEndpointMode("cloudflare_tunnel")}
+                  disabled={busy}
+                >
+                  Cloudflare tunnel
+                </button>
+              </div>
+              <div className="sp-form-grid">
+                <label className="sp-field">
+                  Chain ID
+                  <input
+                    className="sp-input"
+                    value={chainId}
+                    onChange={(event) => setChainId(event.target.value)}
+                  />
+                </label>
+                <label className="sp-field">
+                  Hub LCD
+                  <input
+                    className="sp-input"
+                    value={hubLcd}
+                    onChange={(event) => setHubLcd(event.target.value)}
+                  />
+                </label>
+                <label className="sp-field">
+                  Hub RPC
+                  <input
+                    className="sp-input"
+                    value={hubNode}
+                    onChange={(event) => setHubNode(event.target.value)}
+                  />
+                </label>
+                <div className="sp-field">
+                  Action
+                  <button
+                    type="button"
+                    className="control-btn control-btn-inline"
+                    onClick={() => void handleLoadDefaults()}
+                    disabled={busy}
+                  >
+                    {busy && stepStatus.defaults.state === "running"
+                      ? "Loading..."
+                      : "Load defaults"}
+                  </button>
+                </div>
+                <label className="sp-field">
+                  Provider key alias
+                  <input
+                    className="sp-input"
+                    value={providerKey}
+                    onChange={(event) => setProviderKey(event.target.value)}
+                  />
+                </label>
+                <label className="sp-field">
+                  Provider address
+                  <input
+                    className="sp-input"
+                    value={providerAddress}
+                    onChange={(event) => setProviderAddress(event.target.value)}
+                    placeholder="nil1..."
+                  />
+                </label>
+                <label className="sp-field">
+                  Provider endpoint (multiaddr)
+                  <input
+                    className="sp-input"
+                    value={providerEndpoint}
+                    onChange={(event) => setProviderEndpoint(event.target.value)}
+                  />
+                </label>
+                <label className="sp-field">
+                  Provider base URL
+                  <input
+                    className="sp-input"
+                    value={providerBaseUrl}
+                    onChange={(event) => setProviderBaseUrl(event.target.value)}
+                  />
+                </label>
+                <label className="sp-field">
+                  Listen address
+                  <input
+                    className="sp-input"
+                    value={providerListen}
+                    onChange={(event) => setProviderListen(event.target.value)}
+                  />
+                </label>
+                <label className="sp-field">
+                  Shared auth token
+                  <input
+                    className="sp-input"
+                    value={sharedAuth}
+                    onChange={(event) => setSharedAuth(event.target.value)}
+                    placeholder="NIL_GATEWAY_SP_AUTH"
+                  />
+                </label>
+              </div>
+            </div>
+          </details>
+
+          <details className="sp-collapsible">
+            <summary>Registration settings + step outputs</summary>
+            <div className="sp-collapsible-body">
+              <div className="sp-form-grid">
+                <label className="sp-field">
+                  Capabilities
+                  <input
+                    className="sp-input"
+                    value={providerCapabilities}
+                    onChange={(event) => setProviderCapabilities(event.target.value)}
+                  />
+                </label>
+                <label className="sp-field">
+                  Total storage (bytes)
+                  <input
+                    className="sp-input"
+                    value={providerTotalStorage}
+                    onChange={(event) => setProviderTotalStorage(event.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                <div className="metric-card p-3">
+                  <p className="soft-label">Funding result</p>
+                  {balanceCheck ? (
+                    <p className="mt-2 text-xs text-slate-700">
+                      {balanceCheck.amount} {balanceCheck.denom} · minimum{" "}
+                      {balanceCheck.min_recommended} ·{" "}
+                      {balanceCheck.sufficient ? "sufficient" : "insufficient"}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Run Check funding to populate this step.
+                    </p>
+                  )}
+                </div>
+
+                <div className="metric-card p-3">
+                  <p className="soft-label">Endpoint checks</p>
+                  {endpointValidationText ? (
+                    <pre className="sp-pre mt-2">{endpointValidationText}</pre>
+                  ) : (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Run Validate endpoint to populate this step.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </details>
         </div>
       ) : null}
 
       {tab === "operations" ? (
-        <div className="sp-grid mt-4">
-          <div className="metric-card p-3">
-            <p className="soft-label">Operations summary</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <div className="sp-summary-cell">
-                <span>Health</span>
-                <strong>{statusLabel(healthStatus)}</strong>
+        <div className="mt-4 space-y-4">
+          <div className="sp-overview-grid">
+            <div className="metric-card p-4">
+              <p className="soft-label">Operations summary</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="sp-summary-cell">
+                  <span>Health</span>
+                  <strong>{statusLabel(healthStatus)}</strong>
+                </div>
+                <div className="sp-summary-cell">
+                  <span>Issues</span>
+                  <strong>{issueCount}</strong>
+                </div>
+                <div className="sp-summary-cell">
+                  <span>Provider</span>
+                  <strong>{providerAddress || "unknown"}</strong>
+                </div>
+                <div className="sp-summary-cell">
+                  <span>Route</span>
+                  <strong>{providerBaseUrl}</strong>
+                </div>
               </div>
-              <div className="sp-summary-cell">
-                <span>Issues</span>
-                <strong>{issueCount}</strong>
-              </div>
-              <div className="sp-summary-cell">
-                <span>Provider</span>
-                <strong>{providerAddress || "unknown"}</strong>
-              </div>
-              <div className="sp-summary-cell">
-                <span>Route</span>
-                <strong>{providerBaseUrl}</strong>
+              <div className="sp-actions mt-3">
+                <button
+                  type="button"
+                  className="control-btn control-btn-inline"
+                  onClick={() => void handleHealthCheck()}
+                  disabled={busy}
+                >
+                  Re-check health
+                </button>
+                <button
+                  type="button"
+                  className="control-btn control-btn-inline"
+                  onClick={() => void handleRegister()}
+                  disabled={busy}
+                >
+                  Re-register provider
+                </button>
+                <button
+                  type="button"
+                  className="control-btn control-btn-inline"
+                  onClick={() => void handleServiceStep()}
+                  disabled={busy}
+                >
+                  {deploymentMode === "local" ? "Restart provider" : "Refresh runbook"}
+                </button>
+                <button
+                  type="button"
+                  className="control-btn control-btn-inline"
+                  onClick={() => void handleStopProvider()}
+                  disabled={busy || deploymentMode !== "local"}
+                >
+                  Stop provider
+                </button>
+                <button
+                  type="button"
+                  className="control-btn control-btn-inline"
+                  onClick={() => void handleCopyDiagnostics()}
+                >
+                  Copy diagnostics
+                </button>
               </div>
             </div>
 
-            <div className="sp-actions mt-3">
-              <button type="button" className="control-btn control-btn-inline" onClick={() => void handleHealthCheck()} disabled={busy}>
-                Re-check health
-              </button>
-              <button type="button" className="control-btn control-btn-inline" onClick={() => void handleRegister()} disabled={busy}>
-                Re-register provider
-              </button>
-              <button type="button" className="control-btn control-btn-inline" onClick={() => void handleServiceStep()} disabled={busy}>
-                {deploymentMode === "local" ? "Restart provider" : "Refresh runbook"}
-              </button>
-              <button type="button" className="control-btn control-btn-inline" onClick={() => void handleStopProvider()} disabled={busy || deploymentMode !== "local"}>
-                Stop provider
-              </button>
-              <button type="button" className="control-btn control-btn-inline" onClick={() => void handleCopyDiagnostics()}>
-                Copy diagnostics
-              </button>
+            <div className="metric-card p-4">
+              <p className="soft-label">Recent activity</p>
+              {launchpadLogs.length === 0 ? (
+                <p className="mt-2 text-xs text-slate-500">No SP actions yet.</p>
+              ) : (
+                <div className="sp-log-lite mt-2">
+                  {launchpadLogs
+                    .slice()
+                    .reverse()
+                    .slice(0, 12)
+                    .map((line, index) => (
+                      <p key={`${index}-${line}`} className="text-xs text-slate-700">
+                        {line}
+                      </p>
+                    ))}
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="sp-grid-operations">
             <div className="metric-card p-3">
-              <p className="soft-label">Issues & remediation</p>
+              <p className="soft-label">Issues and remediation</p>
               {!health || health.issues.length === 0 ? (
                 <p className="mt-2 text-xs text-slate-500">No current issues detected.</p>
               ) : (
                 <ul className="mt-2 space-y-2">
                   {health.issues.map((issue) => (
-                    <li key={`${issue.code}-${issue.message}`} className="sp-issue-row">
+                    <li
+                      key={`${issue.code}-${issue.message}`}
+                      className="sp-issue-row"
+                    >
                       <div>
                         <p className="text-sm font-semibold text-slate-800">{issue.code}</p>
                         <p className="text-xs text-slate-600">{issue.message}</p>
-                        <p className="text-xs text-slate-500">Fix: {issue.recommended_action}</p>
+                        <p className="text-xs text-slate-500">
+                          Fix: {issue.recommended_action}
+                        </p>
                       </div>
-                      <span className={statusBadgeClass(issue.severity === "critical" ? "critical" : "degraded")}>{issue.severity}</span>
+                      <span
+                        className={statusBadgeClass(
+                          issue.severity === "critical" ? "critical" : "degraded",
+                        )}
+                      >
+                        {issue.severity}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -799,12 +1036,16 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
             <div className="metric-card p-3">
               <p className="soft-label">Health checks</p>
               {!health ? (
-                <p className="mt-2 text-xs text-slate-500">Run health check to populate checks.</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Run health check to populate checks.
+                </p>
               ) : (
                 <div className="mt-2 space-y-1.5">
                   {health.checks.map((check) => (
                     <div key={`${check.name}-${check.detail}`} className="sp-check-row">
-                      <span className={check.ok ? "text-emerald-700" : "text-rose-600"}>{check.ok ? "OK" : "FAIL"}</span>
+                      <span className={check.ok ? "text-emerald-700" : "text-rose-600"}>
+                        {check.ok ? "OK" : "FAIL"}
+                      </span>
                       <span className="font-semibold text-slate-700">{check.name}</span>
                       <span className="text-slate-500">{check.detail}</span>
                     </div>
@@ -812,64 +1053,81 @@ export function SpLaunchpad({ onBack }: { onBack?: () => void }) {
                 </div>
               )}
             </div>
+          </div>
 
-            {remoteBundle ? (
-              <div className="metric-card p-3">
-                <p className="soft-label">Remote runbook</p>
-                <p className="mt-2 text-xs text-slate-600">
-                  Use this on the remote provider host. It includes environment bootstrap, registration/start commands, and systemd templates.
+          {remoteBundle ? (
+            <details className="sp-collapsible" open>
+              <summary>Remote runbook</summary>
+              <div className="sp-collapsible-body">
+                <p className="mb-2 text-xs text-slate-600">
+                  Use this on the remote provider host. It includes environment bootstrap,
+                  registration/start commands, and health checks.
                 </p>
-                <div className="mt-2 space-y-2">
+                <div className="space-y-2">
                   <label className="sp-field">
                     Environment
                     <textarea className="sp-textarea" value={remoteBundle.env_block} readOnly />
                   </label>
                   <label className="sp-field">
                     Start command
-                    <textarea className="sp-textarea" value={remoteBundle.start_command} readOnly />
+                    <textarea
+                      className="sp-textarea"
+                      value={remoteBundle.start_command}
+                      readOnly
+                    />
                   </label>
                   <label className="sp-field">
                     Healthcheck command
-                    <textarea className="sp-textarea" value={remoteBundle.healthcheck_command} readOnly />
+                    <textarea
+                      className="sp-textarea"
+                      value={remoteBundle.healthcheck_command}
+                      readOnly
+                    />
                   </label>
                 </div>
               </div>
-            ) : null}
+            </details>
+          ) : null}
 
-            <div className="metric-card p-3">
-              <p className="soft-label">Command results</p>
-              <div className="mt-2 grid gap-2 lg:grid-cols-2">
+          <details className="sp-collapsible">
+            <summary>Raw command output</summary>
+            <div className="sp-collapsible-body">
+              <div className="grid gap-2 lg:grid-cols-2">
                 <div>
                   <p className="text-xs font-semibold text-slate-700">Register result</p>
-                  <pre className="sp-pre mt-1">{renderCommandResult(registerResult) || "No register action yet."}</pre>
+                  <pre className="sp-pre mt-1">
+                    {renderCommandResult(registerResult) || "No register action yet."}
+                  </pre>
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-slate-700">Service result</p>
-                  <pre className="sp-pre mt-1">{renderCommandResult(serviceResult) || "No service action yet."}</pre>
+                  <pre className="sp-pre mt-1">
+                    {renderCommandResult(serviceResult) || "No service action yet."}
+                  </pre>
                 </div>
               </div>
             </div>
+          </details>
 
-            <div className="metric-card p-3">
-              <p className="soft-label">SP activity log</p>
-              {launchpadLogs.length === 0 ? (
-                <p className="mt-2 text-xs text-slate-500">No SP actions yet.</p>
-              ) : (
-                <div className="sp-log-panel mt-2">
-                  {launchpadLogs.slice().reverse().map((line, index) => (
-                    <p key={`${index}-${line}`} className="text-xs text-emerald-200">
-                      {line}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
+          <div className="metric-card p-3">
+            <p className="soft-label">Full SP activity log</p>
+            {launchpadLogs.length === 0 ? (
+              <p className="mt-2 text-xs text-slate-500">No SP actions yet.</p>
+            ) : (
+              <div className="sp-log-panel mt-2">
+                {launchpadLogs.slice().reverse().map((line, index) => (
+                  <p key={`${index}-${line}`} className="text-xs text-emerald-200">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       ) : null}
 
       <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-500">
-        Expected onboarding target: time-to-first-healthy SP under 10 minutes on trusted devnet.
+        Target onboarding window: time-to-first-healthy SP under 10 minutes on trusted devnet.
       </div>
     </div>
   );
