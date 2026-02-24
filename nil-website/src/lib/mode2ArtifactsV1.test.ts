@@ -8,7 +8,12 @@ import { createHash } from 'crypto'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; NilWasm: new (trustedSetupBytes: Uint8Array) => unknown; wasmPath: string }> {
+type NilWasmLike = {
+  expand_mdu_rs: (encodedUserMdu: Uint8Array, k: number, m: number) => unknown
+  compute_mdu_root: (witnessFlat: Uint8Array) => unknown
+}
+
+async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; NilWasm: new (trustedSetupBytes: Uint8Array) => NilWasmLike; wasmPath: string }> {
   const jsPath = path.resolve(__dirname, '../../public/wasm/nil_core.js')
   const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm')
   try {
@@ -19,7 +24,7 @@ async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Prom
   }
   const mod = (await import(pathToFileURL(jsPath).href)) as {
     default: (args: unknown) => Promise<unknown>
-    NilWasm: new (trustedSetupBytes: Uint8Array) => unknown
+    NilWasm: new (trustedSetupBytes: Uint8Array) => NilWasmLike
   }
   return { init: mod.default, NilWasm: mod.NilWasm, wasmPath }
 }

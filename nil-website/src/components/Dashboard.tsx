@@ -1,7 +1,7 @@
 import { useAccount, useBalance, useChainId } from 'wagmi'
 import { ethToNil } from '../lib/address'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database, Download, ExternalLink, Copy } from 'lucide-react'
+import { Coins, RefreshCw, Wallet, CheckCircle2, ArrowDownRight, HardDrive, Database, ExternalLink, Copy } from 'lucide-react'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useFaucet } from '../hooks/useFaucet'
 import { useCreateDeal } from '../hooks/useCreateDeal'
@@ -21,11 +21,10 @@ import { hasBuildFaucetAuthToken } from '../lib/faucetAuthToken'
 import { classifyWalletError } from '../lib/walletErrors'
 import { lcdFetchDeals, lcdFetchParams } from '../api/lcdClient'
 import type { LcdDeal as Deal, LcdParams } from '../domain/lcd'
-import type { NilfsFileEntry, SlabLayoutData } from '../domain/nilfs'
+import type { SlabLayoutData } from '../domain/nilfs'
 import { toHexFromBase64OrHex } from '../domain/hex'
 import { useTransportRouter } from '../hooks/useTransportRouter'
 import { multiaddrToHttpUrl, multiaddrToP2pTarget } from '../lib/multiaddr'
-import { useLocalGateway } from '../hooks/useLocalGateway'
 import { useWalletNetworkGuard } from '../hooks/useWalletNetworkGuard'
 import { Link } from 'react-router-dom'
 
@@ -140,11 +139,9 @@ export function Dashboard() {
     address,
     chainId: appConfig.chainId,
   })
-  const localGateway = useLocalGateway(60_000)
   const providerCount = providers.length
   const defaultRsLabel = `${appConfig.defaultRsK}+${appConfig.defaultRsM}`
   const defaultMode2Slots = appConfig.defaultRsK + appConfig.defaultRsM
-  const gatewayDesktopReleaseUrl = 'https://github.com/Nil-Store/nil-store/releases/latest'
   const activeChainId = walletChainId ?? chainId
   const isWrongNetwork = isConnected && walletIsWrongNetwork
   const walletReady = Boolean(isConnected && address && !accountPermissionMismatch && !isWrongNetwork)
@@ -259,9 +256,6 @@ export function Dashboard() {
   // Step 2: Content State
   const [targetDealId, setTargetDealId] = useState('')
   const [stagedUpload, setStagedUpload] = useState<StagedUpload | null>(null)
-  const [contentFiles, setContentFiles] = useState<NilfsFileEntry[] | null>(null)
-  const [contentFilesLoading, setContentFilesLoading] = useState(false)
-  const [contentFilesError, setContentFilesError] = useState<string | null>(null)
   const [contentSlab, setContentSlab] = useState<SlabLayoutData | null>(null)
   const [, setContentSlabLoading] = useState(false)
   const [, setContentSlabError] = useState<string | null>(null)
@@ -289,7 +283,7 @@ export function Dashboard() {
     pollMs: PROOFS_POLL_MS,
     hiddenPollMs: PROOFS_HIDDEN_POLL_MS,
   })
-  const { fetchFile, loading: downloading, receiptStatus, receiptError } = useFetch()
+  const { fetchFile, loading: downloading } = useFetch()
   const { listFiles, slab } = useTransportRouter()
 
   const handleWalletError = useCallback((error: unknown, fallback: string) => {
@@ -643,9 +637,6 @@ export function Dashboard() {
 
   useEffect(() => {
     setStagedUpload(null)
-    setContentFiles(null)
-    setContentFilesError(null)
-    setContentFilesLoading(false)
     setContentSlab(null)
     setContentSlabError(null)
     setContentSlabLoading(false)
@@ -655,9 +646,6 @@ export function Dashboard() {
     const manifestRoot = targetDeal?.cid
     const owner = nilAddress || targetDeal?.owner || ''
     if (!manifestRoot || !targetDealId || !owner) {
-      setContentFiles(null)
-      setContentFilesError(null)
-      setContentFilesLoading(false)
       setContentSlab(null)
       setContentSlabError(null)
       setContentSlabLoading(false)
@@ -667,56 +655,30 @@ export function Dashboard() {
     let cancelled = false
 
     const load = async () => {
-      setContentFilesLoading(true)
-      setContentFilesError(null)
       setContentSlabLoading(true)
       setContentSlabError(null)
       try {
         const directBase = resolveProviderBase(targetDeal)
         const p2pTarget = appConfig.p2pEnabled ? resolveProviderP2pTarget(targetDeal) : undefined
-        const [filesResult, slabResult] = await Promise.allSettled([
-          listFiles({
-            manifestRoot,
-            dealId: targetDealId,
-            owner,
-            directBase,
-            p2pTarget,
-          }),
-          slab({
-            manifestRoot,
-            dealId: targetDealId,
-            owner,
-            directBase,
-            p2pTarget,
-          }),
-        ])
+        const slabResult = await slab({
+          manifestRoot,
+          dealId: targetDealId,
+          owner,
+          directBase,
+          p2pTarget,
+        })
 
         if (cancelled) return
 
-        if (filesResult.status === 'fulfilled') {
-          setContentFiles(filesResult.value.data)
-        } else {
-          setContentFiles([])
-          setContentFilesError(filesResult.reason instanceof Error ? filesResult.reason.message : 'Failed to load NilFS file table')
-        }
-
-        if (slabResult.status === 'fulfilled') {
-          setContentSlab(slabResult.value.data)
-        } else {
-          setContentSlab(null)
-          setContentSlabError(slabResult.reason instanceof Error ? slabResult.reason.message : 'Failed to load slab layout')
-        }
+        setContentSlab(slabResult.data)
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'Failed to load deal content observables'
         if (!cancelled) {
-          setContentFiles([])
           setContentSlab(null)
-          setContentFilesError(msg)
           setContentSlabError(msg)
         }
       } finally {
         if (!cancelled) {
-          setContentFilesLoading(false)
           setContentSlabLoading(false)
         }
       }
@@ -726,7 +688,7 @@ export function Dashboard() {
     return () => {
       cancelled = true
     }
-  }, [nilAddress, resolveProviderBase, resolveProviderP2pTarget, targetDeal, targetDeal?.cid, targetDealId, listFiles, slab])
+  }, [nilAddress, resolveProviderBase, resolveProviderP2pTarget, targetDeal, targetDeal?.cid, targetDealId, slab])
 
   useEffect(() => {
     if (address) {
@@ -1540,49 +1502,7 @@ export function Dashboard() {
     [showDownloadToast, upsertRecentFile],
   )
 
-  const handleContentDownload = useCallback(
-    async (file: NilfsFileEntry) => {
-      if (!targetDealId) return
-      const dealId = String(targetDealId)
-      const manifestHex = toHexFromBase64OrHex(contentManifestRoot) || contentManifestRoot
-      const id = `${dealId}:${file.path}`
-      updateRecentFile(id, { status: 'pending', lastAction: 'download', error: undefined })
-      upsertRecentFile({
-        dealId,
-        filePath: file.path,
-        sizeBytes: file.size_bytes || 0,
-        manifestRoot: manifestHex,
-        lastAction: 'download',
-        status: 'pending',
-      })
-      try {
-        const result = await fetchFile({
-          dealId,
-          manifestRoot: manifestHex,
-          owner: nilAddress,
-          filePath: file.path,
-          rangeStart: 0,
-          rangeLen: file.size_bytes,
-          fileStartOffset: file.start_offset,
-          fileSizeBytes: file.size_bytes,
-          mduSizeBytes: contentSlab?.mdu_size_bytes ?? 8 * 1024 * 1024,
-          blobSizeBytes: contentSlab?.blob_size_bytes ?? 128 * 1024,
-        })
-        if (!result?.url) throw new Error('Download failed')
-        const anchor = document.createElement('a')
-        anchor.href = result.url
-        anchor.download = file.path.split('/').pop() || 'download'
-        anchor.click()
-        setTimeout(() => window.URL.revokeObjectURL(result.url), 1000)
-        updateRecentFile(id, { status: 'success', lastAction: 'download', error: undefined })
-        showDownloadToast(file.path)
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        updateRecentFile(id, { status: 'failed', lastAction: 'download', error: msg || 'Download failed' })
-      }
-    },
-    [contentManifestRoot, contentSlab, fetchFile, nilAddress, showDownloadToast, targetDealId, upsertRecentFile, updateRecentFile],
-  )
+  // Content downloads are tracked via Recent Files and Deal Explorer download actions.
 
   useEffect(() => {
     if (!appConfig.faucetEnabled) return

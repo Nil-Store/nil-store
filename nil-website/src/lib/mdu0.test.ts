@@ -8,7 +8,12 @@ import { sanitizeNilfsRecordPath } from './nilfsPath'
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; WasmMdu0Builder: new (maxUserMdus: bigint) => unknown; wasmPath: string }> {
+type WasmMdu0BuilderLike = {
+    append_file: (path: string, sizeBytes: bigint, startOffset: bigint) => void
+    bytes: () => Uint8Array
+}
+
+async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Promise<unknown>; WasmMdu0Builder: new (maxUserMdus: bigint) => WasmMdu0BuilderLike; wasmPath: string }> {
     const jsPath = path.resolve(__dirname, '../../public/wasm/nil_core.js')
     const wasmPath = path.resolve(__dirname, '../../public/wasm/nil_core_bg.wasm')
     try {
@@ -20,7 +25,7 @@ async function loadNilCoreWasm(): Promise<null | { init: (args: unknown) => Prom
 
     const mod = (await import(pathToFileURL(jsPath).href)) as {
         default: (args: unknown) => Promise<unknown>
-        WasmMdu0Builder: new (maxUserMdus: bigint) => unknown
+        WasmMdu0Builder: new (maxUserMdus: bigint) => WasmMdu0BuilderLike
     }
     return { init: mod.default, WasmMdu0Builder: mod.WasmMdu0Builder, wasmPath }
 }
