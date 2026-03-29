@@ -62,7 +62,7 @@ Your job:
      - mark `stage2_gateway_large_file` as `blocked` with reason, then continue to Stage 3
 5. Stage 3 (CLI path, optimistic):
    - relay-capable environments: try `scripts/enterprise_upload_job.sh <file_path> [deal_id] [nilfs_path]`
-   - testnet burner-key fallback (no pre-provisioned `EVM_PRIVKEY`): `scripts/stage3_testnet_burner_upload.sh <file_path> [deal_id] [nilfs_path]`
+   - testnet burner-key fallback (no pre-provisioned `EVM_PRIVKEY`): `scripts/testnet_burner_upload.sh <file_path> [deal_id] [nilfs_path]`
    - wallet-first/public environments: follow `Public CLI smoke` in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`
    - capture command output, artifacts, and CLI UX friction points
 6. Failure handling policy:

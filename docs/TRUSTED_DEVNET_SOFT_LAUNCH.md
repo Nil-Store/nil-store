@@ -654,7 +654,7 @@ Use this flow instead:
 For trusted testnet onboarding where `EVM_PRIVKEY` is not pre-provisioned, use:
 
 ```bash
-scripts/stage3_testnet_burner_upload.sh <file_path> [deal_id] [nilfs_path]
+scripts/testnet_burner_upload.sh <file_path> [deal_id] [nilfs_path]
 ```
 
 Behavior:

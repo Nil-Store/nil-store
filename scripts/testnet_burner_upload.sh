@@ -5,9 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 usage() {
   cat <<'USAGE'
-usage: stage3_testnet_burner_upload.sh [options] <file_path> [deal_id] [nilfs_path]
+usage: testnet_burner_upload.sh [options] <file_path> [deal_id] [nilfs_path]
 
-Testnet-only Stage 3 helper:
+Testnet-only burner-key helper:
 - generates a burner EVM key locally
 - requests faucet funds for the mapped nil1 address
 - runs create/upload/commit via enterprise_upload_job.sh
@@ -137,7 +137,6 @@ fi
 
 require_cmd jq
 require_cmd curl
-require_cmd python3
 require_cmd npm
 
 if [[ ! -x "$ROOT_DIR/scripts/enterprise_upload_job.sh" ]]; then
@@ -256,7 +255,7 @@ if [[ "$ALLOW_RAW_KEY_EXPORT" == "1" && -n "$RAW_KEY_OUT" ]]; then
 fi
 
 echo
-echo "Stage 3 testnet burner-key flow complete."
+echo "Testnet burner-key flow complete."
 echo "Keystore JSON (MetaMask import): $KEYSTORE_PATH"
 echo "Wallet address: $EVM_ADDRESS"
 echo "Security note: burner key flow is testnet-only and not for production custody."
