@@ -649,7 +649,7 @@ Use this flow instead:
 6) Fetch bytes from `http://127.0.0.1:8080/gateway/fetch/<manifest_root>?...` with session + signed request headers.
 7) Verify byte equality (`cmp` / sha256).
 
-### Testnet CLI burner-key helper (onboarding fallback)
+### Testnet CLI burner-key helper (onboarding bootstrap)
 
 For trusted testnet onboarding where `EVM_PRIVKEY` is not pre-provisioned, use:
 
@@ -662,6 +662,12 @@ Behavior:
 - requests faucet funds for its mapped `nil1...` address
 - runs create/upload/commit via `scripts/enterprise_upload_job.sh`
 - exports an encrypted keystore JSON for MetaMask import handoff
+
+Recommended onboarding order:
+- bring up the local gateway first
+- run the burner helper with a small file to establish the wallet and first committed deal
+- import the exported keystore into MetaMask
+- continue browser and gateway verification with that same wallet
 
 Important:
 - this is **testnet-only** convenience flow, not production custody
