@@ -30,7 +30,7 @@ Execution order:
 - Downgrade to browser-only only if local gateway or CLI cannot be brought up.
 
 Context:
-- Primary homepage: https://nilstore.org (fallback https://web.nilstore.org).
+- Primary homepage: https://nilstore.org/#/first-file.
 - Primary local gateway: http://localhost:8080.
 - Use docs/ALPHA_STORAGE_USER_QUICKSTART.md and docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md.
 - Never print secrets or private keys in full.
@@ -54,7 +54,7 @@ Canonical onboarding milestones:
    - import the exported keystore into MetaMask
    - confirm the MetaMask address exactly matches the CLI-generated address
 4. Browser Continuity Check
-   - open https://nilstore.org
+   - open https://nilstore.org/#/first-file
    - connect the imported MetaMask wallet
    - verify the site sees the same address and local gateway
    - perform retrieval and/or a small browser upload/retrieve using that same wallet

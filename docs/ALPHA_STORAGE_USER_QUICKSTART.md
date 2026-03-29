@@ -8,7 +8,7 @@ Recommended target:
 - full local onboarding with one identity across CLI, MetaMask, browser, and local gateway
 
 Fallback target:
-- browser-only flow through `https://nilstore.org` (fallback `https://web.nilstore.org` if needed) when local gateway or CLI are unavailable
+- browser-only flow through `https://nilstore.org` when local gateway or CLI are unavailable
 
 ## Recommended Onboarding Order
 

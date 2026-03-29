@@ -22,7 +22,7 @@ Execution order:
 - Downgrade to browser-only onboarding only if local gateway or CLI cannot be brought up.
 
 Context:
-- Primary homepage for this deployment: `https://nilstore.org` (fallback `https://web.nilstore.org` if needed).
+- Primary homepage for this deployment: `https://nilstore.org/#/first-file`.
 - Primary local gateway for this onboarding path: `http://localhost:8080`.
 - Use `docs/ALPHA_STORAGE_USER_QUICKSTART.md` and `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`.
 - The best UX for users who want local gateway + CLI is local-first bootstrap, then MetaMask handoff, then browser continuity verification.
@@ -51,7 +51,7 @@ Canonical onboarding milestones (run in order unless the user asks to skip):
    - confirm the imported MetaMask address exactly matches the CLI-generated EVM address
    - confirm the wallet is on the expected chain and funded
 4. Browser Continuity Check
-   - open `https://nilstore.org`
+   - open `https://nilstore.org/#/first-file`
    - connect the imported MetaMask wallet
    - verify the site sees the same identity and local gateway
    - perform retrieval and/or a small browser upload/retrieve with the same wallet
