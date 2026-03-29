@@ -21,6 +21,7 @@ Context:
 - Primary homepage for this deployment: `https://nilstore.org` (fallback `https://web.nilstore.org` if needed).
 - Use `docs/ALPHA_STORAGE_USER_QUICKSTART.md` and `docs/TRUSTED_DEVNET_COLLABORATOR_PACKET.md`.
 - If local gateway is unavailable, continue browser-only flow and explicitly note skipped local diagnostics.
+- If local gateway upload paths fail repeatedly, treat Stage 2 as blocked, capture evidence, and continue to Stage 3.
 - Never print secrets or private keys in full; redact sensitive values.
 
 Operating mode:
@@ -53,11 +54,21 @@ Your job:
    - help the user set up local gateway at `http://localhost:8080`
    - re-run upload/commit/retrieve with a larger file (`64 MiB+`)
    - capture gateway health and retrieval evidence
+   - if Stage 2 fails after bounded retries (for example, 2 attempts per strategy), do not loop indefinitely:
+     - capture exact UI error text and provider endpoint if shown
+     - capture gateway `/health` and `/status` outputs
+     - capture SP `/health` checks (`sp1/sp2/sp3`) and chain provider records from LCD
+     - if `gh` is authenticated, open/update a GitHub issue with repro + raw error text
+     - mark `stage2_gateway_large_file` as `blocked` with reason, then continue to Stage 3
 5. Stage 3 (CLI path, optimistic):
    - relay-capable environments: try `scripts/enterprise_upload_job.sh <file_path> [deal_id] [nilfs_path]`
+   - testnet burner-key fallback (no pre-provisioned `EVM_PRIVKEY`): `scripts/stage3_testnet_burner_upload.sh <file_path> [deal_id] [nilfs_path]`
    - wallet-first/public environments: follow `Public CLI smoke` in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`
    - capture command output, artifacts, and CLI UX friction points
-6. If anything fails, inspect relevant browser/gateway/chain checks and retry until healthy.
+6. Failure handling policy:
+   - Retry with intent, not indefinitely.
+   - When a stage remains unhealthy after bounded retries, mark that stage as `blocked` and continue the remaining stages so the run still produces actionable output.
+   - Always include enough evidence for engineering follow-up (error text, endpoints, timestamps, and command output).
 
 At the end, print:
 1. A JSON summary with fields:

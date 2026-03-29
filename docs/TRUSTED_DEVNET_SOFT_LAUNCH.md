@@ -649,6 +649,24 @@ Use this flow instead:
 6) Fetch bytes from `http://127.0.0.1:8080/gateway/fetch/<manifest_root>?...` with session + signed request headers.
 7) Verify byte equality (`cmp` / sha256).
 
+### Testnet CLI burner-key helper (onboarding fallback)
+
+For trusted testnet onboarding where `EVM_PRIVKEY` is not pre-provisioned, use:
+
+```bash
+scripts/stage3_testnet_burner_upload.sh <file_path> [deal_id] [nilfs_path]
+```
+
+Behavior:
+- generates a local burner EVM key
+- requests faucet funds for its mapped `nil1...` address
+- runs create/upload/commit via `scripts/enterprise_upload_job.sh`
+- exports an encrypted keystore JSON for MetaMask import handoff
+
+Important:
+- this is **testnet-only** convenience flow, not production custody
+- the flow still requires relay-capable gateway behavior for create/update endpoints
+
 ## Troubleshooting (hub)
 
 - Provider doesn’t show up on `/nilchain/nilchain/v1/providers`:

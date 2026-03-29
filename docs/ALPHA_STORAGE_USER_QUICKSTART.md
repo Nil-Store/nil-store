@@ -26,6 +26,8 @@ Optional power-user target:
 
 3. CLI upload path (optimistic, UX in progress)
 - Preferred helper path (local relay-capable environment): `scripts/enterprise_upload_job.sh <file_path> [deal_id] [nilfs_path]`
+- Testnet burner-key helper (no pre-provisioned `EVM_PRIVKEY`): `scripts/stage3_testnet_burner_upload.sh <file_path> [deal_id] [nilfs_path]`
+  - Generates a local burner key, requests faucet funds, runs create/upload/commit, and exports an encrypted keystore JSON for MetaMask import.
 - Wallet-first/public path (relay disabled): follow the `Public CLI smoke` section in `docs/TRUSTED_DEVNET_SOFT_LAUNCH.md`.
 - Capture evidence: command log, deal ID, manifest root, tx hash(es), retrieval match, and friction points.
 
