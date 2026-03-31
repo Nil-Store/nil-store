@@ -133,7 +133,7 @@ curl -sf http://127.0.0.1:8091/health
 Or run the healthcheck script (recommended):
 
 ```bash
-scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd "$HUB_LCD" --provider-addr <nil1...>
+scripts/devnet_healthcheck.sh provider --provider http://127.0.0.1:8091 --hub-lcd "${HUB_LCD:-https://lcd.nilstore.org}" --provider-addr <nil1...>
 ```
 
 Agent-oriented diagnostics:
