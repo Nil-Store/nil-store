@@ -31,7 +31,7 @@ You only need to override RPC/LCD/chain settings if you are deliberately targeti
    - your public hostname or multiaddr
    - `PAIRING_ID` if you opened pairing from the website
 5. Let the agent install, configure, pair if applicable, register or update endpoints, verify, and retry until healthy.
-5. Confirm:
+6. Confirm:
    - local `http://127.0.0.1:8091/health`
    - public `https://sp.<domain>/health`
    - provider appears on `https://lcd.<domain>/nilchain/nilchain/v1/providers`

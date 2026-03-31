@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"runtime/debug"
@@ -454,7 +455,7 @@ func fetchStatusJSON(ctx context.Context, url string, dest any) (int, error) {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return res.StatusCode, nil
+		return res.StatusCode, fmt.Errorf("unexpected status %d for %s", res.StatusCode, url)
 	}
 	if err := json.NewDecoder(res.Body).Decode(dest); err != nil {
 		return res.StatusCode, err
