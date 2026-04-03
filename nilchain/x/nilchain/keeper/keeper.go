@@ -70,6 +70,15 @@ type Keeper struct {
 	CreditSeen              collections.Map[[]byte, bool]
 	SyntheticSeen           collections.Map[[]byte, bool]
 	DeputySeen              collections.Map[[]byte, bool]
+
+	// --- Provider discipline windows (conviction state, epoch-decayed) ---
+	ProviderDisciplineWindowEpoch  collections.Map[string, uint64]
+	ProviderDisciplineInvalidProof collections.Map[string, uint64]
+	ProviderDisciplineNonResponse  collections.Map[string, uint64]
+	ProviderDisciplineQuotaMiss    collections.Map[string, uint64]
+	ProviderDisciplineDeputyMiss   collections.Map[string, uint64]
+	ProviderDisciplineHealthFail   collections.Map[string, uint64]
+	ProviderDisciplineTotal        collections.Map[string, uint64]
 }
 
 func NewKeeper(
@@ -219,6 +228,14 @@ func NewKeeper(
 		CreditSeen:    collections.NewMap(sb, types.CreditSeenKey, "credit_seen", collections.BytesKey, collections.BoolValue),
 		SyntheticSeen: collections.NewMap(sb, types.SyntheticSeenKey, "synthetic_seen", collections.BytesKey, collections.BoolValue),
 		DeputySeen:    collections.NewMap(sb, types.DeputySeenKey, "deputy_seen", collections.BytesKey, collections.BoolValue),
+
+		ProviderDisciplineWindowEpoch:  collections.NewMap(sb, types.ProviderDisciplineWindowEpochKey, "provider_discipline_window_epoch", collections.StringKey, collections.Uint64Value),
+		ProviderDisciplineInvalidProof: collections.NewMap(sb, types.ProviderDisciplineInvalidProofKey, "provider_discipline_invalid_proof", collections.StringKey, collections.Uint64Value),
+		ProviderDisciplineNonResponse:  collections.NewMap(sb, types.ProviderDisciplineNonResponseKey, "provider_discipline_non_response", collections.StringKey, collections.Uint64Value),
+		ProviderDisciplineQuotaMiss:    collections.NewMap(sb, types.ProviderDisciplineQuotaMissKey, "provider_discipline_quota_miss", collections.StringKey, collections.Uint64Value),
+		ProviderDisciplineDeputyMiss:   collections.NewMap(sb, types.ProviderDisciplineDeputyMissKey, "provider_discipline_deputy_miss", collections.StringKey, collections.Uint64Value),
+		ProviderDisciplineHealthFail:   collections.NewMap(sb, types.ProviderDisciplineHealthFailKey, "provider_discipline_health_fail", collections.StringKey, collections.Uint64Value),
+		ProviderDisciplineTotal:        collections.NewMap(sb, types.ProviderDisciplineTotalKey, "provider_discipline_total", collections.StringKey, collections.Uint64Value),
 	}
 
 	schema, err := sb.Build()
