@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/ci/check_yes_merge.sh --fixture <path>
+  scripts/ci/check_yes_merge.sh --repo <owner/repo> --pr-number <num> --token <github_token>
+
+Behavior:
+- Passes only if at least one human-authored comment body contains the exact phrase: YES MERGE
+- Human-authored means GitHub user type is "User" (bots are ignored)
+USAGE
+}
+
+require_cmd() {
+  local cmd="$1"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "ERROR: required command not found: $cmd" >&2
+    exit 2
+  fi
+}
+
+fixture=""
+repo="${GITHUB_REPOSITORY:-}"
+pr_number=""
+token="${GITHUB_TOKEN:-}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --fixture)
+      fixture="${2:-}"
+      shift 2
+      ;;
+    --repo)
+      repo="${2:-}"
+      shift 2
+      ;;
+    --pr-number)
+      pr_number="${2:-}"
+      shift 2
+      ;;
+    --token)
+      token="${2:-}"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "ERROR: unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+require_cmd jq
+require_cmd curl
+
+data_file=""
+tmpdir=""
+cleanup() {
+  if [[ -n "$tmpdir" && -d "$tmpdir" ]]; then
+    rm -rf "$tmpdir"
+  fi
+}
+trap cleanup EXIT
+
+if [[ -n "$fixture" ]]; then
+  if [[ ! -f "$fixture" ]]; then
+    echo "ERROR: fixture file not found: $fixture" >&2
+    exit 2
+  fi
+  data_file="$fixture"
+else
+  if [[ -z "$repo" || -z "$pr_number" || -z "$token" ]]; then
+    echo "ERROR: --repo, --pr-number, and --token are required when --fixture is not used" >&2
+    usage >&2
+    exit 2
+  fi
+
+  tmpdir="$(mktemp -d)"
+  issue_comments="$tmpdir/issue_comments.json"
+  review_comments="$tmpdir/review_comments.json"
+  reviews="$tmpdir/reviews.json"
+  combined="$tmpdir/combined.json"
+
+  api_base="https://api.github.com/repos/$repo"
+  auth_header="Authorization: Bearer $token"
+
+  curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "$auth_header" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "$api_base/issues/$pr_number/comments?per_page=100" \
+    -o "$issue_comments"
+
+  curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "$auth_header" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "$api_base/pulls/$pr_number/comments?per_page=100" \
+    -o "$review_comments"
+
+  curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "$auth_header" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "$api_base/pulls/$pr_number/reviews?per_page=100" \
+    -o "$reviews"
+
+  jq -s 'add' "$issue_comments" "$review_comments" "$reviews" > "$combined"
+  data_file="$combined"
+fi
+
+count="$(jq -r '
+  [ .[]
+    | select((.user.type // "") == "User")
+    | (.body // "")
+    | tostring
+    | select(contains("YES MERGE"))
+  ] | length
+' "$data_file")"
+
+if [[ "$count" -gt 0 ]]; then
+  echo "PASS: found human-authored YES MERGE approval"
+  exit 0
+fi
+
+echo "FAIL: missing required human-authored approval phrase: YES MERGE" >&2
+exit 1

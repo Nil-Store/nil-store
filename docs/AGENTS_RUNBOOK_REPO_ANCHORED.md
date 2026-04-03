@@ -125,6 +125,7 @@ In this repo, provider byte-serving endpoints are implemented in `nil_gateway/` 
 The authoritative source of “what CI runs” is `.github/workflows/ci.yml`.
 
 At a high level, CI exercises:
+- Merge approval gate: `.github/workflows/require-yes-merge.yml` enforces human approval phrase `YES MERGE` before merge.
 - Go unit tests: `nilchain`, `nil_faucet`, `nil_gateway`, `nil_relayer`
 - Rust unit tests: `nil_core`, `nil_cli`, `nil_p2p`, `nil_mock_l1`
 - Frontend: build + unit tests + lint (`nil-website`)
