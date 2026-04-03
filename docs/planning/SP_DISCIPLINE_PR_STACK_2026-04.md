@@ -46,6 +46,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 20. `stack/sp-discipline-19-evidence-capture-scenarios`
 21. `stack/sp-discipline-20-gate-runner-scenarios`
 22. `stack/sp-discipline-21-evidence-collision-guard`
+23. `stack/sp-discipline-22-doc-sequence-guard`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -533,6 +534,28 @@ Exit Criteria:
 - Reused timestamps fail fast by default when artifacts already exist.
 - Intentional overwrite is explicit and regression-tested.
 - Full stack gate runner remains green with new evidence collision checks.
+
+## PR 22: Docs Branch Sequence Guard and Scenario Coverage
+Scope:
+- Enforce contiguous stack branch numbering (`00..N` without gaps or reordering) in docs consistency validation.
+- Fail fast when either plan or evidence branch lists drift from contiguous numbering.
+- Extend docs consistency scenario tests with branch-gap and out-of-order branch cases.
+
+Files (expected):
+- `scripts/ci/check_sp_discipline_docs_consistency.sh`
+- `scripts/ci/test_sp_discipline_docs_consistency.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/test_sp_discipline_docs_consistency.sh` (must pass)
+2. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with numbering scenarios included)
+3. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Plan/evidence docs fail validation on branch gaps or out-of-order numbering.
+- Contiguous numbering checks are deterministic and regression-tested.
+- Full stack gate runner remains green with sequence guard checks enabled.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
