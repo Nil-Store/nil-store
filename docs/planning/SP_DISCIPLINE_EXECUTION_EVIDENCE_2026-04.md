@@ -14,6 +14,7 @@
 6. `stack/sp-discipline-05-repair-integration`
 7. `stack/sp-discipline-06-ui-and-runbooks`
 8. `stack/sp-discipline-07-test-hardening`
+9. `stack/sp-discipline-08-gate-runner`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -47,6 +48,14 @@ All commands below were executed from repo root unless noted.
 
 8. `npm --prefix nil-website run build:app`
 - Result: pass
+
+9. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Executes checks 1-8 in one command and reports a final all-green summary.
+
+10. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (second run)
+- Result: pass
+- Notes: Deterministic re-run also returned all-green.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`
