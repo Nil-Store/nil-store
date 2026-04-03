@@ -15,6 +15,7 @@
 7. `stack/sp-discipline-06-ui-and-runbooks`
 8. `stack/sp-discipline-07-test-hardening`
 9. `stack/sp-discipline-08-gate-runner`
+10. `stack/sp-discipline-09-evidence-capture`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -56,6 +57,10 @@ All commands below were executed from repo root unless noted.
 10. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (second run)
 - Result: pass
 - Notes: Deterministic re-run also returned all-green.
+
+11. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Produced timestamped log + markdown summary under `_artifacts/ci/` and preserved the `YES MERGE` merge block reminder.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`
