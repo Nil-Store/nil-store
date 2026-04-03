@@ -29,6 +29,21 @@ func providerMatchesServiceHint(provider types.Provider, serviceHint string) boo
 	}
 }
 
+func deterministicIndex(seed [32]byte, dealID uint64, slot uint32, currentGen uint64, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	buf := make([]byte, 0, 32+8+4+8)
+	buf = append(buf, seed[:]...)
+	buf = append(buf, sdk.Uint64ToBigEndian(dealID)...)
+	var slotBytes [4]byte
+	binary.BigEndian.PutUint32(slotBytes[:], slot)
+	buf = append(buf, slotBytes[:]...)
+	buf = append(buf, sdk.Uint64ToBigEndian(currentGen)...)
+	sum := sha256.Sum256(buf)
+	return int(binary.BigEndian.Uint64(sum[:8]) % uint64(n))
+}
+
 func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal, slot uint32, epochID uint64) (string, error) {
 	if len(deal.Mode2Slots) == 0 {
 		return "", fmt.Errorf("mode2 slot map is empty")
@@ -104,15 +119,6 @@ func (k Keeper) selectMode2ReplacementProvider(ctx sdk.Context, deal types.Deal,
 	}
 
 	seed := k.getEpochSeed(ctx, epochID)
-	buf := make([]byte, 0, 32+8+4+8)
-	buf = append(buf, seed[:]...)
-	buf = append(buf, sdk.Uint64ToBigEndian(deal.Id)...)
-	var slotBytes [4]byte
-	binary.BigEndian.PutUint32(slotBytes[:], slot)
-	buf = append(buf, slotBytes[:]...)
-	buf = append(buf, sdk.Uint64ToBigEndian(deal.CurrentGen)...)
-	sum := sha256.Sum256(buf)
-
-	idx := int(binary.BigEndian.Uint64(sum[:8]) % uint64(len(candidates)))
+	idx := deterministicIndex(seed, deal.Id, slot, deal.CurrentGen, len(candidates))
 	return candidates[idx], nil
 }
