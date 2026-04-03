@@ -34,6 +34,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 8. `stack/sp-discipline-07-test-hardening`
 9. `stack/sp-discipline-08-gate-runner`
 10. `stack/sp-discipline-09-evidence-capture`
+11. `stack/sp-discipline-10-stack-integrity-guard`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -240,6 +241,27 @@ Test Gate:
 Exit Criteria:
 - Operators can generate a full, timestamped evidence bundle with one command.
 - Evidence summary explicitly includes the `YES MERGE` merge block requirement.
+
+## PR 10: Stack Integrity Guardrail
+Scope:
+- Add a stack-integrity checker that validates branch presence and ancestry order from the planning doc.
+- Fail fast if any stack branch appears already merged into `origin/main` before explicit approval flow.
+- Integrate this check into the one-command gate runner so process safety is enforced every run.
+
+Files (expected):
+- `scripts/ci/check_sp_discipline_stack_integrity.sh`
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/check_sp_discipline_stack_integrity.sh` (must pass)
+2. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with integrity check included)
+3. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Stack branch order is machine-checked before every full gate run.
+- The gate runner blocks when stack branches are missing, out of order, or already merged into `main`.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):

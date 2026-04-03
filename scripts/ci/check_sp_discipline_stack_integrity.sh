@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+
+STACK_DOC="${SP_STACK_DOC:-docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md}"
+REMOTE="${SP_STACK_REMOTE:-origin}"
+BASE_REF="${SP_STACK_BASE_REF:-refs/remotes/$REMOTE/main}"
+
+if [ ! -f "$STACK_DOC" ]; then
+  echo "ERROR: stack doc not found: $STACK_DOC" >&2
+  exit 2
+fi
+
+if ! git remote get-url "$REMOTE" >/dev/null 2>&1; then
+  echo "ERROR: git remote not found: $REMOTE" >&2
+  exit 2
+fi
+
+echo "==> Fetching remote refs from $REMOTE..."
+git fetch "$REMOTE" --prune >/dev/null
+
+STACK_BRANCHES=()
+while IFS= read -r branch; do
+  [ -n "$branch" ] || continue
+  STACK_BRANCHES+=("$branch")
+done < <(
+  sed -n 's/^[0-9][0-9]*\. `\(stack\/sp-discipline-[^`]*\)`/\1/p' "$STACK_DOC" \
+    | awk '!seen[$0]++'
+)
+
+if [ "${#STACK_BRANCHES[@]}" -lt 2 ]; then
+  echo "ERROR: expected at least 2 stack branches in $STACK_DOC" >&2
+  exit 2
+fi
+
+HEAD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+STACK_REFS=()
+
+echo "==> Resolving stack branch refs..."
+for branch in "${STACK_BRANCHES[@]}"; do
+  remote_ref="refs/remotes/$REMOTE/$branch"
+  local_ref="refs/heads/$branch"
+  if git show-ref --verify --quiet "$remote_ref"; then
+    STACK_REFS+=("$remote_ref")
+    echo "    OK: $REMOTE/$branch"
+    continue
+  fi
+  if [ "$branch" = "$HEAD_BRANCH" ] && git show-ref --verify --quiet "$local_ref"; then
+    STACK_REFS+=("$local_ref")
+    echo "    OK: $branch (local only, not pushed yet)"
+    continue
+  fi
+  echo "ERROR: missing required stack branch ref: $REMOTE/$branch" >&2
+  exit 1
+done
+
+echo "==> Validating ancestry order across stacked branches..."
+prev_ref="${STACK_REFS[0]}"
+for i in "${!STACK_REFS[@]}"; do
+  if [ "$i" -eq 0 ]; then
+    continue
+  fi
+  cur_ref="${STACK_REFS[$i]}"
+  if ! git merge-base --is-ancestor "$prev_ref" "$cur_ref"; then
+    echo "ERROR: stack order violation: $prev_ref is not an ancestor of $cur_ref" >&2
+    exit 1
+  fi
+  echo "    OK: $prev_ref -> $cur_ref"
+  prev_ref="$cur_ref"
+done
+
+if ! git show-ref --verify --quiet "$BASE_REF"; then
+  echo "ERROR: base ref not found: $BASE_REF" >&2
+  exit 2
+fi
+
+echo "==> Ensuring stack branches are not already merged into $BASE_REF..."
+for i in "${!STACK_BRANCHES[@]}"; do
+  branch="${STACK_BRANCHES[$i]}"
+  cur_ref="${STACK_REFS[$i]}"
+  if git merge-base --is-ancestor "$cur_ref" "$BASE_REF"; then
+    echo "ERROR: stack branch appears merged into base ref: $branch ($cur_ref) -> $BASE_REF" >&2
+    echo "       Merge is blocked unless a human explicitly approves with YES MERGE." >&2
+    exit 1
+  fi
+  echo "    OK: not merged -> $branch"
+done
+
+echo "SP discipline stack integrity check passed."

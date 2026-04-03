@@ -16,6 +16,7 @@
 8. `stack/sp-discipline-07-test-hardening`
 9. `stack/sp-discipline-08-gate-runner`
 10. `stack/sp-discipline-09-evidence-capture`
+11. `stack/sp-discipline-10-stack-integrity-guard`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -61,6 +62,18 @@ All commands below were executed from repo root unless noted.
 11. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
 - Result: pass
 - Notes: Produced timestamped log + markdown summary under `_artifacts/ci/` and preserved the `YES MERGE` merge block reminder.
+
+12. `bash scripts/ci/check_sp_discipline_stack_integrity.sh`
+- Result: pass
+- Notes: Verified remote stack branch presence, ancestry order, and “not merged into origin/main” condition.
+
+13. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Includes integrity check as first step, then all existing gate checks.
+
+14. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated a fresh timestamped evidence bundle after enabling integrity checks in the gate runner.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`
