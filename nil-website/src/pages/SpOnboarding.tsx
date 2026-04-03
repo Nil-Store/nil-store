@@ -29,12 +29,16 @@ import { useNetwork } from '../hooks/useNetwork'
 import { useSessionStatus } from '../hooks/useSessionStatus'
 import {
   DEVNET_SHARED_GATEWAY_AUTH_TOKEN,
+  buildProviderStatusRecoveryCommand,
   buildProviderAgentPrompt,
   buildProviderBootstrapCommand,
   buildCloudflareTunnelBootstrapCommand,
   buildProviderEndpointPlan,
   deriveEndpointInputPrefillFromProviderEndpoint,
+  formatProviderOnchainStatusLabel,
   buildProviderHealthCommands,
+  isProviderOnchainStatusBlocked,
+  normalizeProviderOnchainStatus,
   buildProviderPairCommand,
   buildProviderLinkCommand,
   findConfirmedProviderPairing,
@@ -367,6 +371,10 @@ export function SpOnboarding() {
   const effectivePublicBase = onchainBases[0] || effectiveEndpointPlan?.publicBase || null
   const providerStatusDetail = publicStatus?.provider ?? null
   const providerDaemonStatusReady = String(publicStatus?.persona || '').trim().toLowerCase() === 'provider-daemon'
+  const providerOnchainStatusRaw = String(providerRecord?.status || providerStatusDetail?.onchain_status || '').trim()
+  const providerOnchainStatus = normalizeProviderOnchainStatus(providerOnchainStatusRaw)
+  const providerOnchainStatusLabel = formatProviderOnchainStatusLabel(providerOnchainStatusRaw)
+  const providerOnchainStatusBlocked = isProviderOnchainStatusBlocked(providerOnchainStatusRaw)
   const approvedProviderAddress = String(confirmedPairing?.provider || '').trim()
   const statusProviderAddress = String(providerStatusDetail?.address || '').trim()
   const providerIdentityMismatch = Boolean(
@@ -394,18 +402,35 @@ export function SpOnboarding() {
   const pairingLinked = Boolean(pendingLink)
   const pairingConfirmed = Boolean(confirmedPairing)
   const providerRegistered = Boolean(providerRecord)
-  const publicHealthReady = providerDaemonStatusReady
+  const publicHealthReady = providerOnchainStatusBlocked
+    ? false
+    : providerDaemonStatusReady
     ? !providerIdentityMismatch && Boolean(providerStatusDetail?.public_health_ok)
     : healthProbe.status === 'ok' && healthProbe.base === effectivePublicBase
   const providerStatusIssues = useMemo(() => {
     const issues = Array.isArray(publicStatus?.issues) ? [...publicStatus.issues] : []
+    if (providerOnchainStatusBlocked) {
+      issues.unshift(
+        `on-chain provider status is ${providerOnchainStatusLabel}; this provider is excluded from new assignments until it returns to Active`,
+      )
+    }
     if (providerIdentityMismatch) {
       issues.unshift(
         `public endpoint is serving provider ${statusProviderAddress}, but this onboarding session is approved for ${approvedProviderAddress}`,
       )
     }
     return issues
-  }, [approvedProviderAddress, providerIdentityMismatch, publicStatus?.issues, statusProviderAddress])
+  }, [
+    approvedProviderAddress,
+    providerIdentityMismatch,
+    providerOnchainStatusBlocked,
+    providerOnchainStatusLabel,
+    publicStatus?.issues,
+    statusProviderAddress,
+  ])
+  const providerStatusBlocker = providerOnchainStatus === 'offline' || providerOnchainStatus === 'jailed'
+    ? providerOnchainStatus
+    : null
   const flow = useMemo(
     () =>
       buildProviderOnboardingFlow({
@@ -419,6 +444,7 @@ export function SpOnboarding() {
         endpointReady,
         providerRegistered,
         publicHealthReady,
+        providerStatusBlocker,
       }),
     [
       funded,
@@ -429,6 +455,8 @@ export function SpOnboarding() {
       providerRegistered,
       providerRepoReady,
       publicHealthReady,
+      providerOnchainStatus,
+      providerStatusBlocker,
       walletReady,
       endpointReady,
     ],
@@ -538,6 +566,27 @@ export function SpOnboarding() {
     nilAddress,
     providerKeyLabel,
   ])
+  const providerStatusRecoveryFix = useMemo(
+    () => buildProviderStatusRecoveryCommand({
+      onchainStatus: providerOnchainStatusRaw,
+      providerKey: providerKeyLabel,
+      operatorAddress: nilAddress || '',
+      providerEndpoint: effectiveEndpointPlan?.providerEndpoint || '',
+      authToken: effectiveGatewayAuthToken,
+      approvedProviderAddress: approvedProviderAddress || '',
+      publicBase: authoritativePublicBase || effectivePublicBase || '',
+    }),
+    [
+      approvedProviderAddress,
+      authoritativePublicBase,
+      effectiveEndpointPlan?.providerEndpoint,
+      effectiveGatewayAuthToken,
+      effectivePublicBase,
+      nilAddress,
+      providerKeyLabel,
+      providerOnchainStatusRaw,
+    ],
+  )
   const agentPrompt = useMemo(
     () =>
       buildProviderAgentPrompt({
@@ -740,6 +789,8 @@ export function SpOnboarding() {
     ? 'ready'
     : !pairingConfirmed || !endpointReady
       ? 'action'
+      : providerOnchainStatusBlocked
+        ? 'action'
       : !providerRegistered && !publicHealthReady
         ? 'action'
         : 'pending'
@@ -749,6 +800,8 @@ export function SpOnboarding() {
       ? 'Approve link first'
       : !endpointReady
         ? 'Set endpoint'
+        : providerOnchainStatusBlocked
+          ? `${providerOnchainStatusLabel} on-chain`
         : !providerRegistered && !publicHealthReady
           ? 'Run bootstrap'
           : !providerRegistered
@@ -1266,7 +1319,7 @@ export function SpOnboarding() {
                     Configure how browsers should reach your provider, then run the bootstrap command on the provider host and watch registration plus health converge in this same step.
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Done when: <span className="font-semibold text-foreground">public endpoint is defined, provider is registered on-chain, and public health is healthy</span>.
+                    Done when: <span className="font-semibold text-foreground">public endpoint is defined, provider is Active on-chain, and public health is healthy</span>.
                   </p>
                 </div>
                 <StatusPill label={publishBootstrapLabel} state={publishBootstrapState} />
@@ -1447,6 +1500,20 @@ export function SpOnboarding() {
                 <div className="border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
                   Run the bootstrap command from a terminal on the provider host. It starts or restarts the <span className="font-mono">provider-daemon</span>, registers endpoints, and runs verification checks.
                 </div>
+                {providerHealthy ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border border-accent/40 bg-background px-4 py-3 text-sm text-accent">
+                    <div>
+                      Step 4 is complete. Continue in <span className="font-semibold">Provider Console</span> for ongoing operations.
+                    </div>
+                    <Link
+                      to="/sp-dashboard"
+                      className="inline-flex items-center gap-2 border border-border bg-background/60 px-3 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                    >
+                      <Shield className="h-4 w-4" />
+                      Open Provider Console
+                    </Link>
+                  </div>
+                ) : null}
 
                 <div className="grid gap-4 lg:grid-cols-3">
                   <div className="border border-border bg-background p-4 text-sm">
@@ -1475,6 +1542,12 @@ export function SpOnboarding() {
                           ? 'Waiting for bootstrap to register or update endpoints.'
                           : 'Registration starts after link approval.'}
                     </div>
+                    <div className="mt-3 border-t border-border/60 pt-3">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Provider status</div>
+                      <div className={`mt-1 font-mono-data ${providerOnchainStatusBlocked ? 'text-destructive' : 'text-foreground'}`}>
+                        {providerRecord ? providerOnchainStatusLabel : '—'}
+                      </div>
+                    </div>
                   </div>
 
                   <div data-testid="provider-daemon-status-card" className="border border-border bg-background p-4 text-sm">
@@ -1484,6 +1557,8 @@ export function SpOnboarding() {
                         label={
                           providerIdentityMismatch
                             ? 'Wrong provider'
+                            : providerOnchainStatusBlocked
+                              ? providerOnchainStatusLabel
                             : providerDaemonStatusReady
                             ? providerStatusDetail?.public_health_ok
                               ? 'Healthy'
@@ -1497,6 +1572,8 @@ export function SpOnboarding() {
                         state={
                           providerIdentityMismatch
                             ? 'action'
+                            : providerOnchainStatusBlocked
+                              ? 'action'
                             : providerDaemonStatusReady
                             ? providerStatusDetail?.public_health_ok
                               ? 'ready'
@@ -1510,6 +1587,8 @@ export function SpOnboarding() {
                     <div className="mt-2 break-all text-foreground">
                       {providerIdentityMismatch
                         ? `${authoritativePublicBase || effectivePublicBase || 'public base unavailable'} is serving ${statusProviderAddress}, but this onboarding is approved for ${approvedProviderAddress}. Run the recommended fix commands below to restart with the correct provider key and re-bootstrap.`
+                        : providerOnchainStatusBlocked
+                          ? `Provider is ${providerOnchainStatusLabel} on-chain and will not receive new assignments until it returns to Active. Run the status recovery commands below, then refresh this card.`
                         : providerDaemonStatusReady
                         ? providerStatusDetail?.public_health_ok
                           ? `${providerStatusDetail.public_health_url || `${authoritativePublicBase || effectivePublicBase}/health`} is reachable from the provider host`
@@ -1550,6 +1629,32 @@ export function SpOnboarding() {
                         ) : (
                           <div className="text-sm text-muted-foreground">
                             Could not build fix commands yet. Missing: {wrongProviderFix.missing.join(', ')}.
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                    {providerOnchainStatusBlocked ? (
+                      <div className="mt-4 space-y-3 border border-destructive/40 bg-background p-3">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">On-chain status blocker</div>
+                        <div className="text-sm text-foreground">
+                          This provider is currently <span className="font-semibold">{providerOnchainStatusLabel}</span> on-chain.
+                          New assignments are blocked until status returns to <span className="font-semibold">Active</span>.
+                        </div>
+                        <div className="text-sm text-muted-foreground">{providerStatusRecoveryFix.note}</div>
+                        {providerStatusRecoveryFix.command ? (
+                          <>
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="text-sm font-semibold text-foreground">Copyable status recovery commands</div>
+                              <CopyButton
+                                label="Copy"
+                                onClick={() => void handleCopy('Status recovery commands', providerStatusRecoveryFix.command || '')}
+                              />
+                            </div>
+                            <pre className="overflow-auto whitespace-pre-wrap break-words border border-border bg-background p-4 text-xs text-muted-foreground">{providerStatusRecoveryFix.command}</pre>
+                          </>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">
+                            Could not build status recovery commands yet. Missing: {providerStatusRecoveryFix.missing.join(', ')}.
                           </div>
                         )}
                       </div>

@@ -391,10 +391,14 @@ Following the latter half of `scripts/e2e_deputy_ghost_repair_multi_sp.sh`:
 Manual checks derived from keeper tests:
 
 - Query `nilchain query nilchain params` and `nilchain query nilchain list-deals` to examine `Params.max_drain_bytes_per_epoch`, `Params.max_repairing_bytes_ratio_bps`, and deal heat statistics.
-- Verify current enforcement behavior: missed quotas and repeated failures should trigger `REPAIRING` slot transitions and evidence summaries; direct provider stake slashing/jailing is not the primary devnet enforcement path yet.
+- Verify current enforcement behavior: missed quotas and repeated failures should trigger `REPAIRING` slot transitions, provider discipline accumulation, and provider status transitions (`Active` -> `Offline` -> `Jailed`) in the provider registry.
 - Execute `nilchain tx nilchain set-provider-draining <provider>` to test that new placement requests avoid that provider, as tested in `nilchain/x/nilchain/keeper/draining_test.go`.
 - Open sponsored retrieval sessions and vouchers via `/gateway/plan-retrieval-session` + `/gateway/session-receipt`; inspect `nilchain query nilchain retrieval-sessions` to ensure quotas decrement just like `msg_server_sponsored_sessions_test.go`.
 - Watch reward distribution by querying `nilchain query nilchain rewards` or running dedicated `go test ./nilchain/x/nilchain/keeper/base_rewards_test.go` for a reference baseline.
+- For website operator UX checks, force a degraded provider and confirm:
+  1. `/sp/onboarding` Step 4 shows the provider as `Offline` or `Jailed` with copyable recovery commands.
+  2. `/sp/dashboard` shows the same status blocker with copyable recovery commands and a link back to onboarding.
+  3. After running recovery commands on the provider host, the provider returns to `Active` and onboarding advances to Step 5 (Open Provider Console).
 
 ## 6. Keeping the runbook up to date
 

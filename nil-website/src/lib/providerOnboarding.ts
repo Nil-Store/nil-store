@@ -3,6 +3,7 @@ import { normalizeHttpBase } from './spDashboard'
 
 export type ProviderHostMode = 'home-tunnel' | 'public-vps'
 export type ProviderEndpointInputMode = 'domain' | 'ipv4' | 'multiaddr'
+export type ProviderOnchainStatus = 'active' | 'offline' | 'jailed' | 'unknown'
 
 export interface ProviderEndpointDraft {
   hostMode: ProviderHostMode
@@ -43,6 +44,25 @@ export interface ProviderRunbookReadiness {
   missing: Array<'endpoint' | 'operator'>
 }
 
+export interface ProviderStatusRecoveryCommandDraft {
+  onchainStatus?: string
+  providerKey?: string
+  operatorAddress?: string
+  providerEndpoint?: string
+  authToken?: string
+  approvedProviderAddress?: string
+  publicBase?: string | null
+}
+
+export interface ProviderStatusRecoveryCommandResult {
+  status: ProviderOnchainStatus
+  label: string
+  blocked: boolean
+  note: string
+  command: string | null
+  missing: string[]
+}
+
 const DEFAULT_PROVIDER_KEY = 'provider1'
 const DEFAULT_DOMAIN_PORT = 443
 const DEFAULT_IPV4_PORT = 8091
@@ -53,6 +73,95 @@ const DEFAULT_TUNNEL_LOCAL_SERVICE_URL = 'http://127.0.0.1:8091'
 
 function trimNonEmpty(input: unknown): string {
   return String(input || '').trim()
+}
+
+export function normalizeProviderOnchainStatus(input: unknown): ProviderOnchainStatus {
+  const normalized = trimNonEmpty(input).toLowerCase()
+  if (normalized === 'active') return 'active'
+  if (normalized === 'offline') return 'offline'
+  if (normalized === 'jailed') return 'jailed'
+  return 'unknown'
+}
+
+export function formatProviderOnchainStatusLabel(input: unknown): string {
+  const status = normalizeProviderOnchainStatus(input)
+  if (status === 'active') return 'Active'
+  if (status === 'offline') return 'Offline'
+  if (status === 'jailed') return 'Jailed'
+  const raw = trimNonEmpty(input)
+  return raw || 'Unknown'
+}
+
+export function isProviderOnchainStatusBlocked(input: unknown): boolean {
+  const status = normalizeProviderOnchainStatus(input)
+  return status === 'offline' || status === 'jailed'
+}
+
+function providerStatusRecoveryNote(status: ProviderOnchainStatus): string {
+  if (status === 'jailed') {
+    return 'Jailed status means repeated discipline evidence crossed the stricter threshold. Keep the provider healthy and rerun bootstrap/verify so status can decay by epoch back toward Active.'
+  }
+  if (status === 'offline') {
+    return 'Offline status means recent discipline evidence exceeded the active threshold. Keep the provider healthy and rerun bootstrap/verify so status can decay by epoch back to Active.'
+  }
+  return 'If status is not Active, restart with the approved key and endpoint, rerun bootstrap, then verify /status and on-chain registration again.'
+}
+
+export function buildProviderStatusRecoveryCommand(
+  draft: ProviderStatusRecoveryCommandDraft,
+): ProviderStatusRecoveryCommandResult {
+  const status = normalizeProviderOnchainStatus(draft.onchainStatus)
+  const label = formatProviderOnchainStatusLabel(draft.onchainStatus)
+  const blocked = isProviderOnchainStatusBlocked(draft.onchainStatus)
+  const note = providerStatusRecoveryNote(status)
+
+  const providerKey = trimNonEmpty(draft.providerKey)
+  const operatorAddress = trimNonEmpty(draft.operatorAddress)
+  const providerEndpoint = trimNonEmpty(draft.providerEndpoint)
+  const authToken = trimNonEmpty(draft.authToken) || DEVNET_SHARED_GATEWAY_AUTH_TOKEN
+  const approvedProviderAddress = trimNonEmpty(draft.approvedProviderAddress)
+  const publicBase = trimNonEmpty(draft.publicBase).replace(/\/$/, '')
+
+  const missing: string[] = []
+  if (!providerKey) missing.push('provider key')
+  if (!operatorAddress) missing.push('operator address')
+  if (!providerEndpoint) missing.push('provider endpoint')
+
+  if (missing.length > 0) {
+    return {
+      status,
+      label,
+      blocked,
+      note,
+      command: null,
+      missing,
+    }
+  }
+
+  const bootstrapSegments = [
+    `PROVIDER_KEY=${shellQuote(providerKey)}`,
+    `OPERATOR_ADDRESS=${shellQuote(operatorAddress)}`,
+    ...(approvedProviderAddress ? [`EXPECTED_PROVIDER_ADDRESS=${shellQuote(approvedProviderAddress)}`] : []),
+    `PROVIDER_ENDPOINT=${shellQuote(providerEndpoint)}`,
+    `NIL_GATEWAY_SP_AUTH=${shellQuote(authToken)}`,
+    './scripts/run_devnet_provider.sh bootstrap',
+  ]
+  const command = [
+    '# Run this on the provider host to recover to Active on-chain status.',
+    `PROVIDER_KEY=${shellQuote(providerKey)} ./scripts/run_devnet_provider.sh stop || true`,
+    bootstrapSegments.join(' '),
+    `PROVIDER_KEY=${shellQuote(providerKey)} ./scripts/run_devnet_provider.sh verify`,
+    ...(publicBase ? [`curl -sS ${shellQuote(`${publicBase}/status`)} | jq -r '.provider.address, .provider.onchain_status // "unknown"'`] : []),
+  ].join('\n')
+
+  return {
+    status,
+    label,
+    blocked,
+    note,
+    command,
+    missing,
+  }
 }
 
 function shellQuote(input: string): string {
