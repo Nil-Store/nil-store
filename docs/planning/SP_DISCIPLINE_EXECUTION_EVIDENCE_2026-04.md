@@ -25,6 +25,7 @@
 17. `stack/sp-discipline-16-stack-integrity-scenarios`
 18. `stack/sp-discipline-17-policy-template-scenarios`
 19. `stack/sp-discipline-18-yes-merge-scenarios`
+20. `stack/sp-discipline-19-evidence-capture-scenarios`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -214,6 +215,26 @@ All commands below were executed from repo root unless noted.
 47. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
 - Result: pass
 - Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T103519Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T103519Z.md` after PR18 changes.
+
+48. `bash scripts/ci/test_sp_discipline_evidence_capture.sh`
+- Result: pass
+- Notes: Scenario matrix validated pass/fail gate-runner outcomes, deterministic timestamp overrides, summary content assertions, and missing-runner failure handling.
+
+49. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Full matrix pass with evidence-capture scenarios integrated into the gate runner.
+
+50. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T104615Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T104615Z.md` after PR19 changes.
+
+51. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Revalidated plan/evidence branch-list parity and `YES MERGE` wording after PR19 doc updates.
+
+52. `bash scripts/ci/test_sp_discipline_evidence_capture.sh`
+- Result: pass
+- Notes: Revalidated deterministic evidence-capture scenarios after PR19 doc updates.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`

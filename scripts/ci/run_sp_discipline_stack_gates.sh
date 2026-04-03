@@ -61,6 +61,9 @@ run_ok "YES MERGE positive fixture check (must pass)" \
 run_ok "YES MERGE scenario checks" \
   bash scripts/ci/test_yes_merge_check.sh
 
+run_ok "SP discipline evidence-capture scenarios" \
+  bash scripts/ci/test_sp_discipline_evidence_capture.sh
+
 run_ok "keeper determinism/status subset (count=2)" \
   bash -lc "cd nilchain && GOFLAGS=-mod=mod go test ./x/nilchain/keeper -run 'TestCheckMissedProofs_.*|Test.*Discipline.*|Test.*Status.*' -count=2"
 
