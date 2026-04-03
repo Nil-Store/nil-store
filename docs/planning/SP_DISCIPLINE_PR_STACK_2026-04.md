@@ -41,6 +41,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 15. `stack/sp-discipline-14-policy-install-tests`
 16. `stack/sp-discipline-15-doc-consistency-scenarios`
 17. `stack/sp-discipline-16-stack-integrity-scenarios`
+18. `stack/sp-discipline-17-policy-template-scenarios`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -409,6 +410,31 @@ Exit Criteria:
 - Duplicate stack branches in plan docs fail fast.
 - Stack integrity behavior is verified by deterministic positive and negative scenario cases.
 - Gate runner includes explicit stack-integrity scenario coverage, not only a single happy-path check.
+
+## PR 17: Policy Template Scenario Tests and Path Overrides
+Scope:
+- Add deterministic policy-template scenario tests for missing template, invalid YAML, missing installer, and installer dry-run failures.
+- Allow policy-template checker and installer scripts to accept env-path overrides for isolated scenario execution.
+- Integrate policy-template scenarios into the one-command gate runner ahead of heavyweight matrix steps.
+
+Files (expected):
+- `scripts/ci/check_sp_discipline_policy_template.sh`
+- `scripts/ci/install_sp_discipline_policy_workflow.sh`
+- `scripts/ci/test_sp_discipline_policy_template.sh`
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/test_sp_discipline_policy_template.sh` (must pass)
+2. `bash scripts/ci/check_sp_discipline_policy_template.sh` (must pass on repo template)
+3. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with policy-template scenarios included)
+4. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Policy-template guard behavior is covered by deterministic positive and negative scenario tests.
+- Template and installer scripts are testable in isolated temp environments.
+- Gate runner includes explicit policy-template scenario coverage, not only a single happy-path check.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):

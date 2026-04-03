@@ -23,6 +23,7 @@
 15. `stack/sp-discipline-14-policy-install-tests`
 16. `stack/sp-discipline-15-doc-consistency-scenarios`
 17. `stack/sp-discipline-16-stack-integrity-scenarios`
+18. `stack/sp-discipline-17-policy-template-scenarios`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -176,6 +177,22 @@ All commands below were executed from repo root unless noted.
 38. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
 - Result: pass
 - Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T101620Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T101620Z.md` after PR16 changes.
+
+39. `bash scripts/ci/test_sp_discipline_policy_template.sh`
+- Result: pass
+- Notes: Scenario matrix validated missing template, invalid YAML, missing installer, and installer dry-run failure handling.
+
+40. `bash scripts/ci/check_sp_discipline_policy_template.sh`
+- Result: pass
+- Notes: Repo policy template and installer dry-run checks pass with path-override support enabled.
+
+41. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Full matrix pass with policy-template scenarios integrated into the gate runner.
+
+42. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T102612Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T102612Z.md` after PR17 changes.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`
