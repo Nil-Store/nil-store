@@ -3642,7 +3642,9 @@ func shouldCountEvidenceAsFailedChallenge(kind string, ok bool) bool {
 	case "deputy_served",
 		"deputy_miss_repair_started",
 		"quota_miss_repair_started",
+		"mode1_provider_repair_started",
 		"provider_degraded_repair_started",
+		"provider_status_repair_started",
 		"system_proof_invalid",
 		"system_proof_rejected",
 		"system_proof_wrong_challenge",
@@ -3666,6 +3668,8 @@ func evidencePenaltyUnits(kind string, ok bool) uint64 {
 	case "retrieval_non_response",
 		"deputy_miss_repair_started",
 		"quota_miss_repair_started",
+		"mode1_provider_repair_started",
+		"provider_status_repair_started",
 		"provider_degraded_repair_started":
 		return 1
 	default:

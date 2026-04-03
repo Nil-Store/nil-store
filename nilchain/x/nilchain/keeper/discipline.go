@@ -37,6 +37,9 @@ func disciplineBucketFromEvidence(kind string, ok bool) providerDisciplineBucket
 		return disciplineBucketDeputyMiss
 	case "provider_degraded_repair_started":
 		return disciplineBucketHealthFail
+	case "provider_status_repair_started",
+		"mode1_provider_repair_started":
+		return disciplineBucketHealthFail
 	default:
 		return ""
 	}
