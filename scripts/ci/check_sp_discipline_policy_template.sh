@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-TEMPLATE="ci/workflow_templates/sp_discipline_stack_policy.yml"
-INSTALLER="scripts/ci/install_sp_discipline_policy_workflow.sh"
+TEMPLATE="${SP_POLICY_TEMPLATE_PATH:-ci/workflow_templates/sp_discipline_stack_policy.yml}"
+INSTALLER="${SP_POLICY_INSTALLER_PATH:-scripts/ci/install_sp_discipline_policy_workflow.sh}"
 
 if [ ! -f "$TEMPLATE" ]; then
   echo "ERROR: missing workflow template: $TEMPLATE" >&2

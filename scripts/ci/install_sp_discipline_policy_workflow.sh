@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-SRC="ci/workflow_templates/sp_discipline_stack_policy.yml"
-DST=".github/workflows/sp_discipline_stack_policy.yml"
+SRC="${SP_POLICY_INSTALL_SRC_PATH:-ci/workflow_templates/sp_discipline_stack_policy.yml}"
+DST="${SP_POLICY_INSTALL_DST_PATH:-.github/workflows/sp_discipline_stack_policy.yml}"
 MODE="${1:-dry-run}"
 
 if [ ! -f "$SRC" ]; then
