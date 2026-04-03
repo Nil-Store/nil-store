@@ -22,6 +22,7 @@
 14. `stack/sp-discipline-13-policy-install-state`
 15. `stack/sp-discipline-14-policy-install-tests`
 16. `stack/sp-discipline-15-doc-consistency-scenarios`
+17. `stack/sp-discipline-16-stack-integrity-scenarios`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -159,6 +160,22 @@ All commands below were executed from repo root unless noted.
 34. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
 - Result: pass
 - Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T100655Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T100655Z.md` after PR15 changes.
+
+35. `bash scripts/ci/test_sp_discipline_stack_integrity.sh`
+- Result: pass
+- Notes: Scenario matrix validated duplicate entries, missing branches, ancestry order violations, and merged-into-base blocking.
+
+36. `bash scripts/ci/check_sp_discipline_stack_integrity.sh`
+- Result: pass
+- Notes: Repo stack passes with strict duplicate-branch detection enabled.
+
+37. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Full matrix pass with stack-integrity scenarios integrated into the gate runner.
+
+38. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T101620Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T101620Z.md` after PR16 changes.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`

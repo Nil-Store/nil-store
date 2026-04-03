@@ -26,13 +26,21 @@ while IFS= read -r branch; do
   [ -n "$branch" ] || continue
   STACK_BRANCHES+=("$branch")
 done < <(
-  sed -n 's/^[0-9][0-9]*\. `\(stack\/sp-discipline-[^`]*\)`/\1/p' "$STACK_DOC" \
-    | awk '!seen[$0]++'
+  sed -n 's/^[0-9][0-9]*\. `\(stack\/sp-discipline-[^`]*\)`/\1/p' "$STACK_DOC"
 )
 
 if [ "${#STACK_BRANCHES[@]}" -lt 2 ]; then
   echo "ERROR: expected at least 2 stack branches in $STACK_DOC" >&2
   exit 2
+fi
+
+DUP_BRANCHES="$(
+  printf '%s\n' "${STACK_BRANCHES[@]}" | sort | uniq -d
+)"
+if [ -n "$DUP_BRANCHES" ]; then
+  echo "ERROR: duplicate stack branches found in $STACK_DOC:" >&2
+  echo "$DUP_BRANCHES" >&2
+  exit 1
 fi
 
 HEAD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
