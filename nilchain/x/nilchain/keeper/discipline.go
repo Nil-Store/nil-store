@@ -149,6 +149,57 @@ func (k Keeper) incrementProviderDiscipline(ctx sdk.Context, provider string, ki
 	if err := k.ProviderDisciplineTotal.Set(ctx, provider, curTotal+1); err != nil {
 		return err
 	}
+	if err := k.ProviderDisciplineWindowEpoch.Set(ctx, provider, currentEpoch); err != nil {
+		return err
+	}
+	return k.applyProviderStatusFromDiscipline(ctx, provider)
+}
 
-	return k.ProviderDisciplineWindowEpoch.Set(ctx, provider, currentEpoch)
+func (k Keeper) applyProviderStatusFromDiscipline(ctx sdk.Context, provider string) error {
+	p, err := k.Providers.Get(ctx, provider)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	total, err := k.ProviderDisciplineTotal.Get(ctx, provider)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return err
+	}
+
+	params := k.GetParams(ctx)
+	offlineThreshold := params.EvictAfterMissedEpochs
+	if offlineThreshold == 0 {
+		offlineThreshold = 1
+	}
+	jailedThreshold := offlineThreshold * 2
+
+	nextStatus := "Active"
+	if total >= jailedThreshold {
+		nextStatus = "Jailed"
+	} else if total >= offlineThreshold {
+		nextStatus = "Offline"
+	}
+
+	if p.Status == nextStatus {
+		return nil
+	}
+	p.Status = nextStatus
+	return k.Providers.Set(ctx, provider, p)
+}
+
+// refreshProviderDisciplineAndStatus applies epoch decay and updates provider
+// status before selection logic reads provider eligibility.
+func (k Keeper) refreshProviderDisciplineAndStatus(ctx sdk.Context, provider string) error {
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return nil
+	}
+	currentEpoch := k.currentDisciplineEpoch(ctx)
+	if err := k.applyProviderDisciplineDecay(ctx, provider, currentEpoch); err != nil {
+		return err
+	}
+	return k.applyProviderStatusFromDiscipline(ctx, provider)
 }

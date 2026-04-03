@@ -269,6 +269,14 @@ func (k Keeper) AssignProviders(ctx sdk.Context, dealID uint64, blockHash []byte
 	var candidateProviders []types.Provider
 	// Filter by capabilities based on serviceHint
 	for _, provider := range allProviders {
+		if err := k.refreshProviderDisciplineAndStatus(ctx, provider.Address); err != nil {
+			return nil, fmt.Errorf("failed to refresh provider discipline status for %s: %w", provider.Address, err)
+		}
+		latest, err := k.Providers.Get(ctx, provider.Address)
+		if err == nil {
+			provider = latest
+		}
+
 		// Only consider "Active" providers for assignment
 		if provider.Status != "Active" {
 			continue
