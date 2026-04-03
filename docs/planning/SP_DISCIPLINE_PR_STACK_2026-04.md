@@ -42,6 +42,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 16. `stack/sp-discipline-15-doc-consistency-scenarios`
 17. `stack/sp-discipline-16-stack-integrity-scenarios`
 18. `stack/sp-discipline-17-policy-template-scenarios`
+19. `stack/sp-discipline-18-yes-merge-scenarios`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -435,6 +436,31 @@ Exit Criteria:
 - Policy-template guard behavior is covered by deterministic positive and negative scenario tests.
 - Template and installer scripts are testable in isolated temp environments.
 - Gate runner includes explicit policy-template scenario coverage, not only a single happy-path check.
+
+## PR 18: YES MERGE Scenario Tests and Near-Miss Guard
+Scope:
+- Add deterministic `YES MERGE` scenario tests covering human approvals, bot-only approvals, near-miss strings, wrong-case text, and missing bodies.
+- Harden `check_yes_merge.sh` phrase matching so near-miss tokens like `YES MERGED` do not pass.
+- Integrate `YES MERGE` scenario tests into the gate runner in addition to existing fixture checks.
+
+Files (expected):
+- `scripts/ci/check_yes_merge.sh`
+- `scripts/ci/test_yes_merge_check.sh`
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/test_yes_merge_check.sh` (must pass)
+2. `bash scripts/ci/check_yes_merge.sh --fixture scripts/ci/fixtures/no_approval.json` (must fail)
+3. `bash scripts/ci/check_yes_merge.sh --fixture scripts/ci/fixtures/yes_merge.json` (must pass)
+4. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with YES MERGE scenarios included)
+5. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- `YES MERGE` guard behavior is covered by deterministic positive and negative scenario tests.
+- Near-miss phrases are explicitly rejected by the checker.
+- Gate runner includes explicit scenario coverage for merge-approval enforcement.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):

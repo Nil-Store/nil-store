@@ -24,6 +24,7 @@
 16. `stack/sp-discipline-15-doc-consistency-scenarios`
 17. `stack/sp-discipline-16-stack-integrity-scenarios`
 18. `stack/sp-discipline-17-policy-template-scenarios`
+19. `stack/sp-discipline-18-yes-merge-scenarios`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -193,6 +194,26 @@ All commands below were executed from repo root unless noted.
 42. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
 - Result: pass
 - Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T102612Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T102612Z.md` after PR17 changes.
+
+43. `bash scripts/ci/test_yes_merge_check.sh`
+- Result: pass
+- Notes: Scenario matrix validated human approvals, bot-only failures, near-miss phrase rejection, wrong-case rejection, and missing-body rejection.
+
+44. `bash scripts/ci/check_yes_merge.sh --fixture scripts/ci/fixtures/no_approval.json`
+- Result: fail (expected)
+- Notes: Negative fixture remains red without human-authored `YES MERGE`.
+
+45. `bash scripts/ci/check_yes_merge.sh --fixture scripts/ci/fixtures/yes_merge.json`
+- Result: pass
+- Notes: Positive fixture remains green with human-authored `YES MERGE`.
+
+46. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Full matrix pass with YES MERGE scenario tests integrated into the gate runner.
+
+47. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T103519Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T103519Z.md` after PR18 changes.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`
