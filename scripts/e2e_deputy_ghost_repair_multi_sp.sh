@@ -144,7 +144,11 @@ print(json.dumps(obj))
 parse_create_deal_id() {
   python3 -c '
 import json, sys
-tx = json.load(sys.stdin)
+try:
+  tx = json.load(sys.stdin)
+except Exception:
+  print("")
+  raise SystemExit(0)
 logs = tx.get("logs") or []
 events = []
 for item in logs:
@@ -220,6 +224,7 @@ fi
 echo "==> Using deal owner: $FAUCET_ADDR"
 
 SERVICE_HINT="General:rs=8+4"
+CREATE_DEAL_GAS="${CREATE_DEAL_GAS:-450000}"
 
 echo "==> Creating Mode 2 deal..."
 CREATE_RES_RAW="$("$NILCHAIND_BIN" tx nilchain create-deal 200 1000000 500000 \
@@ -230,7 +235,7 @@ CREATE_RES_RAW="$("$NILCHAIND_BIN" tx nilchain create-deal 200 1000000 500000 \
   --home "$CHAIN_HOME" \
   --keyring-backend test \
   --yes \
-  --gas 250000 \
+  --gas "$CREATE_DEAL_GAS" \
   --gas-prices 0.001aatom \
   --broadcast-mode sync \
   --output json)"
@@ -241,10 +246,18 @@ if [ -z "$TXHASH" ]; then
   echo "$CREATE_RES_RAW" >&2
   exit 1
 fi
-sleep 2
-CREATE_TX_RAW="$("$NILCHAIND_BIN" query tx "$TXHASH" --node tcp://127.0.0.1:26657 --output json --home "$CHAIN_HOME" 2>/dev/null || true)"
-CREATE_TX="$(echo "$CREATE_TX_RAW" | extract_last_json)"
-DEAL_ID="$(echo "$CREATE_TX" | parse_create_deal_id)"
+CREATE_TX_RAW=""
+CREATE_TX=""
+DEAL_ID=""
+for attempt in $(seq 1 12); do
+  sleep 1
+  CREATE_TX_RAW="$("$NILCHAIND_BIN" query tx "$TXHASH" --node tcp://127.0.0.1:26657 --output json --home "$CHAIN_HOME" 2>/dev/null || true)"
+  CREATE_TX="$(echo "$CREATE_TX_RAW" | extract_last_json)"
+  DEAL_ID="$(echo "$CREATE_TX" | parse_create_deal_id)"
+  if [ -n "$DEAL_ID" ]; then
+    break
+  fi
+done
 if [ -z "$DEAL_ID" ]; then
   echo "ERROR: failed to parse deal id from tx" >&2
   echo "$CREATE_TX_RAW" >&2
@@ -355,7 +368,32 @@ if [ "$HEIGHT" -le 0 ]; then
   echo "ERROR: failed to resolve chain height" >&2
   exit 1
 fi
-EXPIRES_AT="$((HEIGHT + 200))"
+DEAL_END_BLOCK="$(echo "${DEAL_JSON:-}" | python3 -c '
+import json, sys
+try:
+  data = json.load(sys.stdin)
+except Exception:
+  print(0)
+  raise SystemExit(0)
+deal = data.get("deal") or {}
+try:
+  print(int(deal.get("end_block", 0) or 0))
+except Exception:
+  print(0)
+' 2>/dev/null || true)"
+if [ -z "$DEAL_END_BLOCK" ] || [ "$DEAL_END_BLOCK" -le 0 ]; then
+  echo "ERROR: failed to resolve deal end_block for retrieval session expiry" >&2
+  echo "$DEAL_JSON" >&2
+  exit 1
+fi
+if [ "$DEAL_END_BLOCK" -le "$HEIGHT" ]; then
+  echo "ERROR: deal already expired at current height (height=$HEIGHT end_block=$DEAL_END_BLOCK)" >&2
+  exit 1
+fi
+EXPIRES_AT="$((HEIGHT + 20))"
+if [ "$EXPIRES_AT" -gt "$DEAL_END_BLOCK" ]; then
+  EXPIRES_AT="$DEAL_END_BLOCK"
+fi
 NONCE="$(python3 - <<'PY'
 import time
 print(time.time_ns())

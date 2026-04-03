@@ -31,6 +31,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 5. `stack/sp-discipline-04-economic-penalties`
 6. `stack/sp-discipline-05-repair-integration`
 7. `stack/sp-discipline-06-ui-and-runbooks`
+8. `stack/sp-discipline-07-test-hardening`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -172,6 +173,32 @@ Test Gate:
 Exit Criteria:
 - Operators understand why a provider is blocked and exactly how to recover.
 
+## PR 07: Test Harness Hardening and Execution Evidence
+Scope:
+- Harden long-running e2e scripts so CI/manual runs are deterministic across macOS/Linux.
+- Remove false negatives from nil_core symbol checks on platforms where C symbols are prefixed with `_`.
+- Stabilize retrieval-session setup in deputy repair e2e (bounded expiry and tx query retries).
+- Record executed command evidence for the full stack test matrix.
+
+Files (expected):
+- `scripts/run_devnet_alpha_multi_sp.sh`
+- `scripts/e2e_deputy_ghost_repair_multi_sp.sh`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/check_yes_merge.sh --fixture scripts/ci/fixtures/no_approval.json` (must fail)
+2. `bash scripts/ci/check_yes_merge.sh --fixture scripts/ci/fixtures/yes_merge.json` (must pass)
+3. `GOFLAGS=-mod=mod go test ./x/nilchain/keeper -run 'TestCheckMissedProofs_.*|Test.*Discipline.*|Test.*Status.*' -count=2` (run from `nilchain/`)
+4. `GOFLAGS=-mod=mod go test ./x/nilchain/keeper` (run from `nilchain/`)
+5. `GOFLAGS=-mod=mod go test ./x/nilchain/...` (run from `nilchain/`)
+6. `bash ./scripts/e2e_deputy_ghost_repair_multi_sp.sh` (must pass)
+7. `npm --prefix nil-website run test:unit`
+8. `npm --prefix nil-website run build:app`
+
+Exit Criteria:
+- E2E repair script passes without local one-off edits.
+- Evidence log includes command list + pass/fail outcomes for all mandatory gates.
+
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
 1. Determinism:
@@ -187,6 +214,8 @@ Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
 - `./scripts/e2e_deputy_ghost_repair_multi_sp.sh`
 6. UI/operator manual checks (for PR 06 and any UX text changes):
 - Verify wrong-provider, offline, jailed, and recovered-provider states are explicit and include exact remediation commands.
+7. Harness reliability (for PR 07):
+- Verify `scripts/e2e_deputy_ghost_repair_multi_sp.sh` passes on a clean local run without manual script edits.
 
 ## Full Stack Validation Before Any Merge to Main
 Run after PR 06 rebased on latest stack head:
