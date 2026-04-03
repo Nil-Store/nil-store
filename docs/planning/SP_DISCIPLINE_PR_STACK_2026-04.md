@@ -39,6 +39,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 13. `stack/sp-discipline-12-ci-policy-handoff`
 14. `stack/sp-discipline-13-policy-install-state`
 15. `stack/sp-discipline-14-policy-install-tests`
+16. `stack/sp-discipline-15-doc-consistency-scenarios`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -358,6 +359,31 @@ Test Gate:
 Exit Criteria:
 - Policy install-state behavior is regression-tested across both positive and negative paths.
 - Gate runner includes explicit scenario-level verification, not just a single happy-path probe.
+
+## PR 15: Docs Consistency Scenario Tests and Duplicate Detection
+Scope:
+- Harden docs-consistency checks so duplicate stack-branch entries fail instead of being silently deduplicated.
+- Allow docs-consistency checker path overrides via env vars so scenario tests can run in isolated temp docs.
+- Add deterministic scenario tests for mismatched branch lists, duplicates, and missing `YES MERGE` text.
+- Integrate docs-consistency scenarios into the one-command gate runner.
+
+Files (expected):
+- `scripts/ci/check_sp_discipline_docs_consistency.sh`
+- `scripts/ci/test_sp_discipline_docs_consistency.sh`
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/test_sp_discipline_docs_consistency.sh` (must pass)
+2. `bash scripts/ci/check_sp_discipline_docs_consistency.sh` (must pass on repo docs)
+3. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with docs-consistency scenarios included)
+4. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Duplicate stack entries in either plan/evidence docs fail fast.
+- Docs consistency is validated by deterministic positive and negative scenario cases.
+- Gate runner executes scenario tests before the heavyweight keeper/e2e/frontend matrix.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):

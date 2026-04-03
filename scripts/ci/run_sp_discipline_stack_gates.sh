@@ -34,6 +34,9 @@ run_ok "SP discipline stack integrity" \
 run_ok "SP discipline docs consistency" \
   bash scripts/ci/check_sp_discipline_docs_consistency.sh
 
+run_ok "SP discipline docs consistency scenarios" \
+  bash scripts/ci/test_sp_discipline_docs_consistency.sh
+
 run_ok "SP discipline policy template" \
   bash scripts/ci/check_sp_discipline_policy_template.sh
 
