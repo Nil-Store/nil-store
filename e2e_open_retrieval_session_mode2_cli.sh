@@ -85,6 +85,45 @@ wait_for_tx() {
   return 1
 }
 
+parse_create_deal_id() {
+  python3 -c '
+import base64, json, sys
+def maybe_b64(s: str) -> str:
+  if not s:
+    return ""
+  try:
+    pad = "=" * ((4 - (len(s) % 4)) % 4)
+    return base64.b64decode((s + pad).encode("utf-8"), validate=False).decode("utf-8", errors="ignore")
+  except Exception:
+    return ""
+try:
+  tx = json.load(sys.stdin)
+except Exception:
+  print("")
+  raise SystemExit(0)
+events = []
+for item in (tx.get("logs") or []):
+  events.extend(item.get("events") or [])
+events.extend(tx.get("events") or [])
+for ev in events:
+  ev_type = ev.get("type") or ""
+  if ev_type not in ("create_deal", "nilchain.nilchain.v1.EventCreateDeal"):
+    continue
+  for a in (ev.get("attributes") or []):
+    key = a.get("key") or ""
+    val = a.get("value") or ""
+    dkey = maybe_b64(key)
+    dval = maybe_b64(val)
+    if key in ("deal_id", "id"):
+      print(val)
+      raise SystemExit(0)
+    if dkey in ("deal_id", "id"):
+      print(dval or val)
+      raise SystemExit(0)
+print("")
+'
+}
+
 cleanup() {
   if [ -n "${CHAIN_PID:-}" ]; then
     kill "$CHAIN_PID" >/dev/null 2>&1 || true
@@ -195,10 +234,27 @@ banner "Creating Mode 2 deal"
 CREATE_RES=$(run_yes "$BINARY" tx nilchain create-deal 50 1000000 5000 --service-hint "$SERVICE_HINT" \
   --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
 CREATE_HASH=$(echo "$CREATE_RES" | jq -r '.txhash')
-CREATE_TX=$(wait_for_tx "$CREATE_HASH" 30 1) || { echo "CreateDeal tx not found"; exit 1; }
-DEAL_ID=$(echo "$CREATE_TX" | jq -r '(.logs[0].events[]? // .events[]?) | select(.type=="create_deal") | .attributes[] | select(.key=="deal_id") | .value' | head -n 1)
+CREATE_TX=$(wait_for_tx "$CREATE_HASH" 40 1) || { echo "CreateDeal tx not found"; exit 1; }
+CREATE_CODE=$(echo "$CREATE_TX" | jq -r '.code // .tx_response.code // 0')
+if [ "$CREATE_CODE" != "0" ]; then
+  CREATE_RAW_LOG=$(echo "$CREATE_TX" | jq -r '.raw_log // .tx_response.raw_log // empty')
+  echo "CreateDeal failed: code=$CREATE_CODE raw_log=${CREATE_RAW_LOG:-unknown}"
+  exit 1
+fi
+DEAL_ID="$(echo "$CREATE_TX" | parse_create_deal_id)"
+if [ -z "$DEAL_ID" ] || [ "$DEAL_ID" = "null" ]; then
+  for _ in {1..10}; do
+    DEAL_LIST="$("$BINARY" query nilchain list-deals --home "$HOME_DIR" --output json 2>/dev/null || echo '{}')"
+    DEAL_ID="$(echo "$DEAL_LIST" | jq -r '.deals // [] | .[-1].id // empty')"
+    if [ -n "$DEAL_ID" ] && [ "$DEAL_ID" != "null" ]; then
+      break
+    fi
+    sleep 1
+  done
+fi
 if [ -z "$DEAL_ID" ] || [ "$DEAL_ID" = "null" ]; then
   echo "Failed to parse deal id"
+  echo "Create tx payload: $CREATE_TX"
   exit 1
 fi
 
