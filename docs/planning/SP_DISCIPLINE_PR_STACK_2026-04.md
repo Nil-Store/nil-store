@@ -40,6 +40,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 14. `stack/sp-discipline-13-policy-install-state`
 15. `stack/sp-discipline-14-policy-install-tests`
 16. `stack/sp-discipline-15-doc-consistency-scenarios`
+17. `stack/sp-discipline-16-stack-integrity-scenarios`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -384,6 +385,30 @@ Exit Criteria:
 - Duplicate stack entries in either plan/evidence docs fail fast.
 - Docs consistency is validated by deterministic positive and negative scenario cases.
 - Gate runner executes scenario tests before the heavyweight keeper/e2e/frontend matrix.
+
+## PR 16: Stack Integrity Scenario Tests and Duplicate Detection
+Scope:
+- Harden stack-integrity parsing so duplicate branch entries fail instead of being silently deduplicated.
+- Add deterministic stack-integrity scenario tests covering valid order, duplicate entries, missing branches, ancestry violations, and merged-into-base blocking.
+- Integrate stack-integrity scenarios into the one-command gate runner before heavy keeper/e2e/frontend checks.
+
+Files (expected):
+- `scripts/ci/check_sp_discipline_stack_integrity.sh`
+- `scripts/ci/test_sp_discipline_stack_integrity.sh`
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/test_sp_discipline_stack_integrity.sh` (must pass)
+2. `bash scripts/ci/check_sp_discipline_stack_integrity.sh` (must pass on repo stack)
+3. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with stack-integrity scenarios included)
+4. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Duplicate stack branches in plan docs fail fast.
+- Stack integrity behavior is verified by deterministic positive and negative scenario cases.
+- Gate runner includes explicit stack-integrity scenario coverage, not only a single happy-path check.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):

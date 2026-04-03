@@ -31,6 +31,9 @@ run_ok() {
 run_ok "SP discipline stack integrity" \
   bash scripts/ci/check_sp_discipline_stack_integrity.sh
 
+run_ok "SP discipline stack-integrity scenarios" \
+  bash scripts/ci/test_sp_discipline_stack_integrity.sh
+
 run_ok "SP discipline docs consistency" \
   bash scripts/ci/check_sp_discipline_docs_consistency.sh
 
