@@ -29,6 +29,7 @@
 21. `stack/sp-discipline-20-gate-runner-scenarios`
 22. `stack/sp-discipline-21-evidence-collision-guard`
 23. `stack/sp-discipline-22-doc-sequence-guard`
+24. `stack/sp-discipline-23-doc-ordinal-guard`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -302,6 +303,30 @@ All commands below were executed from repo root unless noted.
 68. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
 - Result: pass
 - Notes: Final parity check after appending PR22 evidence entries.
+
+69. `bash scripts/ci/test_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Extended scenario matrix validated markdown list ordinal continuity and ordinal-to-branch index alignment failures.
+
+70. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Repo docs pass with combined sequence + ordinal alignment enforcement.
+
+71. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Full matrix pass with ordinal scenario coverage integrated into docs-consistency checks.
+
+72. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T112943Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T112943Z.md` after PR23 changes.
+
+73. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Final branch-list parity and ordinal alignment check after appending PR23 evidence entries.
+
+74. `bash scripts/ci/test_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Revalidated ordinal and sequence scenario coverage after PR23 doc updates.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`

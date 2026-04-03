@@ -47,6 +47,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 21. `stack/sp-discipline-20-gate-runner-scenarios`
 22. `stack/sp-discipline-21-evidence-collision-guard`
 23. `stack/sp-discipline-22-doc-sequence-guard`
+24. `stack/sp-discipline-23-doc-ordinal-guard`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -556,6 +557,28 @@ Exit Criteria:
 - Plan/evidence docs fail validation on branch gaps or out-of-order numbering.
 - Contiguous numbering checks are deterministic and regression-tested.
 - Full stack gate runner remains green with sequence guard checks enabled.
+
+## PR 23: Docs List Ordinal Alignment Guard and Scenarios
+Scope:
+- Enforce markdown list ordinal continuity (`1..N`) for stack branch rows in both plan and evidence docs.
+- Enforce ordinal-to-branch index alignment (`item 1 -> stack ...-00-*`, `item 2 -> stack ...-01-*`, etc.).
+- Extend docs consistency scenario tests to cover ordinal gaps and ordinal-offset errors.
+
+Files (expected):
+- `scripts/ci/check_sp_discipline_docs_consistency.sh`
+- `scripts/ci/test_sp_discipline_docs_consistency.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/test_sp_discipline_docs_consistency.sh` (must pass)
+2. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with ordinal scenarios included)
+3. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Plan/evidence docs fail validation on markdown list ordinal gaps or ordinal offsets.
+- Ordinal alignment checks are deterministic and regression-tested.
+- Full stack gate runner remains green with ordinal guard checks enabled.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):

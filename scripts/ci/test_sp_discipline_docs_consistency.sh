@@ -66,6 +66,8 @@ DUP_PLAN_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-
 DUP_EVIDENCE_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-01-taxonomy-and-signals`\n3. `stack/sp-discipline-01-taxonomy-and-signals`'
 GAP_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-02-conviction-state`'
 OUT_OF_ORDER_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-02-conviction-state`\n3. `stack/sp-discipline-01-taxonomy-and-signals`'
+ORDINAL_GAP_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n3. `stack/sp-discipline-01-taxonomy-and-signals`'
+ORDINAL_OFFSET_LIST=$'2. `stack/sp-discipline-00-merge-gate`\n3. `stack/sp-discipline-01-taxonomy-and-signals`'
 
 echo "==> Case 1: matching branch lists and YES MERGE text pass"
 write_docs "$BASE_LIST" "$BASE_LIST" "1"
@@ -94,5 +96,13 @@ expect_fail "branch-gap"
 echo "==> Case 7: out-of-order branch numbering fails"
 write_docs "$OUT_OF_ORDER_LIST" "$OUT_OF_ORDER_LIST" "1"
 expect_fail "branch-out-of-order"
+
+echo "==> Case 8: markdown list ordinal gaps fail"
+write_docs "$ORDINAL_GAP_LIST" "$ORDINAL_GAP_LIST" "1"
+expect_fail "ordinal-gap"
+
+echo "==> Case 9: markdown list ordinal offset fails"
+write_docs "$ORDINAL_OFFSET_LIST" "$ORDINAL_OFFSET_LIST" "1"
+expect_fail "ordinal-offset"
 
 echo "SP discipline docs consistency scenario tests passed."
