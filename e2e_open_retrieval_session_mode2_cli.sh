@@ -232,7 +232,7 @@ SERVICE_HINT="General:rs=${RS_K}+${RS_M}"
 
 banner "Creating Mode 2 deal"
 CREATE_RES=$(run_yes "$BINARY" tx nilchain create-deal 50 1000000 5000 --service-hint "$SERVICE_HINT" \
-  --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --output json)
+  --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --gas 500000 --output json)
 CREATE_HASH=$(echo "$CREATE_RES" | jq -r '.txhash')
 CREATE_TX=$(wait_for_tx "$CREATE_HASH" 40 1) || { echo "CreateDeal tx not found"; exit 1; }
 CREATE_CODE=$(echo "$CREATE_TX" | jq -r '.code // .tx_response.code // 0')
@@ -266,7 +266,7 @@ SIZE_BYTES=131072
 
 banner "Updating deal content"
 run_yes "$BINARY" tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$MANIFEST_ROOT" --size "$SIZE_BYTES" --total-mdus 3 --witness-mdus 1 \
-  --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync >/dev/null
+  --from alice --chain-id "$CHAIN_ID" --yes --home "$HOME_DIR" --keyring-backend test --broadcast-mode sync --gas 500000 >/dev/null
 sleep 2
 
 banner "Resolving assigned providers"

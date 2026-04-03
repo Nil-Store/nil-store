@@ -109,7 +109,7 @@ banner "Creating Deal"
 # Use a 3-slot Mode 2 stripe for the multi-SP devnet (K=2,M=1).
 # The gateway /gateway/prove-retrieval endpoint reconstructs the full MDU from per-slot shards on the router
 # and submits the proof "as" the assigned provider.
-CREATE_OUT=$($NILCHAIND tx nilchain create-deal 1000 1000000 1000000 --service-hint "General:rs=2+1" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+CREATE_OUT=$($NILCHAIND tx nilchain create-deal 1000 1000000 1000000 --service-hint "General:rs=2+1" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas 500000 --gas-prices 0.001aatom --output json)
 TX_HASH=$(echo "$CREATE_OUT" | jq -r '.txhash')
 echo "Create Deal Tx: $TX_HASH"
 
@@ -158,7 +158,7 @@ echo "CID: $CID"
 
 # 5. Commit Content
 banner "Committing Content"
-COMMIT_OUT=$($NILCHAIND tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$CID" --size "$SIZE" --total-mdus "$TOTAL_MDUS" --witness-mdus "$WITNESS_MDUS" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+COMMIT_OUT=$($NILCHAIND tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$CID" --size "$SIZE" --total-mdus "$TOTAL_MDUS" --witness-mdus "$WITNESS_MDUS" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas 500000 --gas-prices 0.001aatom --output json)
 echo "Commit Tx: $(echo "$COMMIT_OUT" | jq -r '.txhash')"
 sleep 6
 
