@@ -18,6 +18,7 @@
 10. `stack/sp-discipline-09-evidence-capture`
 11. `stack/sp-discipline-10-stack-integrity-guard`
 12. `stack/sp-discipline-11-doc-consistency-guard`
+13. `stack/sp-discipline-12-ci-policy-handoff`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -87,6 +88,30 @@ All commands below were executed from repo root unless noted.
 17. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
 - Result: pass
 - Notes: Generated a fresh evidence bundle with docs consistency guard enabled.
+
+18. `ruby -e "require 'yaml'; YAML.load_file('ci/workflow_templates/sp_discipline_stack_policy.yml')"`
+- Result: pass
+- Notes: Validated CI policy workflow template syntax.
+
+19. `bash scripts/ci/check_sp_discipline_policy_template.sh`
+- Result: pass
+- Notes: Confirmed template YAML parses and installer dry-run succeeds.
+
+20. `bash scripts/ci/check_sp_discipline_stack_integrity.sh`
+- Result: pass
+- Notes: Stack chain and unmerged-main guard remain green with PR12 branch.
+
+21. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Plan/evidence parity and `YES MERGE` reminder checks pass.
+
+22. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Full matrix pass including policy-template precheck.
+
+23. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated fresh timestamped evidence bundle after PR12 handoff additions.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`

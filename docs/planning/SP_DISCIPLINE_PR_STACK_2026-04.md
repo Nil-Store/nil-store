@@ -36,6 +36,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 10. `stack/sp-discipline-09-evidence-capture`
 11. `stack/sp-discipline-10-stack-integrity-guard`
 12. `stack/sp-discipline-11-doc-consistency-guard`
+13. `stack/sp-discipline-12-ci-policy-handoff`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -284,6 +285,32 @@ Test Gate:
 Exit Criteria:
 - Plan and evidence docs cannot silently drift on stack branch ordering.
 - Gate runner fails immediately if docs diverge on branch list or missing `YES MERGE` language.
+
+## PR 12: CI Policy Workflow Handoff (No Workflow-Scope Token)
+Scope:
+- Add a checked-in workflow template for SP discipline policy enforcement outside `.github/workflows/`.
+- Add installer/check scripts so maintainers with workflow-scoped credentials can apply the template safely.
+- Integrate template validation into the one-command gate runner.
+
+Files (expected):
+- `ci/workflow_templates/sp_discipline_stack_policy.yml`
+- `scripts/ci/install_sp_discipline_policy_workflow.sh`
+- `scripts/ci/check_sp_discipline_policy_template.sh`
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `ruby -e "require 'yaml'; YAML.load_file('ci/workflow_templates/sp_discipline_stack_policy.yml')"` (must pass)
+2. `bash scripts/ci/check_sp_discipline_policy_template.sh` (must pass)
+3. `bash scripts/ci/check_sp_discipline_stack_integrity.sh` (must pass)
+4. `bash scripts/ci/check_sp_discipline_docs_consistency.sh` (must pass)
+5. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass)
+6. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Policy workflow content is versioned and validated without requiring direct workflow-file push permissions.
+- Maintainers can install the workflow template with a single audited command when workflow-scope credentials are available.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
