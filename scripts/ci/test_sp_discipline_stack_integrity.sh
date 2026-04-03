@@ -51,6 +51,8 @@ VALID_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-01-
 DUP_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-01-taxonomy-and-signals`\n3. `stack/sp-discipline-01-taxonomy-and-signals`'
 ORDER_BAD_LIST=$'1. `stack/sp-discipline-01-taxonomy-and-signals`\n2. `stack/sp-discipline-00-merge-gate`'
 MISSING_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-99-not-a-real-branch`'
+ORDINAL_GAP_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n3. `stack/sp-discipline-01-taxonomy-and-signals`'
+INDEX_MISMATCH_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-02-conviction-state`'
 
 echo "==> Case 1: valid stack order passes"
 write_stack_doc "$VALID_LIST"
@@ -89,5 +91,13 @@ if run_case_with_base "$MERGED_BASE_REF"; then
   exit 1
 fi
 echo "OK: expected failure for case: already-merged-into-base"
+
+echo "==> Case 6: markdown list ordinal gap fails"
+write_stack_doc "$ORDINAL_GAP_LIST"
+expect_fail "ordinal-gap"
+
+echo "==> Case 7: list/branch index mismatch fails"
+write_stack_doc "$INDEX_MISMATCH_LIST"
+expect_fail "index-mismatch"
 
 echo "SP discipline stack integrity scenario tests passed."

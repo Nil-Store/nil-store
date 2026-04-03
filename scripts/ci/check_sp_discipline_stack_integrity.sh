@@ -18,8 +18,55 @@ if ! git remote get-url "$REMOTE" >/dev/null 2>&1; then
   exit 2
 fi
 
+extract_numbered_branches() {
+  sed -n 's/^\([0-9][0-9]*\)\. `\(stack\/sp-discipline-[^`]*\)`/\1 \2/p' "$STACK_DOC"
+}
+
+check_list_and_branch_alignment() {
+  local expected_item=1
+  local expected_branch=0
+  local saw_any=0
+  local row
+
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    saw_any=1
+    local item_raw="${row%% *}"
+    local branch="${row#* }"
+    local item_num=$((10#$item_raw))
+    local idx_raw
+    idx_raw="$(printf '%s' "$branch" | sed -nE 's#^stack/sp-discipline-([0-9]+)-.*#\1#p')"
+    if [ -z "$idx_raw" ]; then
+      echo "ERROR: could not parse stack index from branch entry: $branch" >&2
+      exit 1
+    fi
+    local branch_num=$((10#$idx_raw))
+
+    if [ "$item_num" -ne "$expected_item" ]; then
+      printf 'ERROR: non-contiguous markdown list numbering in %s (expected item %d, got %d at %s)\n' \
+        "$STACK_DOC" "$expected_item" "$item_num" "$branch" >&2
+      exit 1
+    fi
+    if [ "$branch_num" -ne "$expected_branch" ]; then
+      printf 'ERROR: list/branch index mismatch in %s (item %d expects branch %02d, got %02d at %s)\n' \
+        "$STACK_DOC" "$item_num" "$expected_branch" "$branch_num" "$branch" >&2
+      exit 1
+    fi
+
+    expected_item=$((expected_item + 1))
+    expected_branch=$((expected_branch + 1))
+  done < <(extract_numbered_branches)
+
+  if [ "$saw_any" -ne 1 ]; then
+    echo "ERROR: expected numbered stack branch rows in $STACK_DOC" >&2
+    exit 2
+  fi
+}
+
 echo "==> Fetching remote refs from $REMOTE..."
 git fetch "$REMOTE" --prune >/dev/null
+
+check_list_and_branch_alignment
 
 STACK_BRANCHES=()
 while IFS= read -r branch; do
