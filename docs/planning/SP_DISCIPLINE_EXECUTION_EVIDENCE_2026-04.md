@@ -27,6 +27,7 @@
 19. `stack/sp-discipline-18-yes-merge-scenarios`
 20. `stack/sp-discipline-19-evidence-capture-scenarios`
 21. `stack/sp-discipline-20-gate-runner-scenarios`
+22. `stack/sp-discipline-21-evidence-collision-guard`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -260,6 +261,26 @@ All commands below were executed from repo root unless noted.
 58. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
 - Result: pass
 - Notes: Final parity check after appending PR20 evidence entries.
+
+59. `bash scripts/ci/test_sp_discipline_evidence_capture.sh`
+- Result: pass
+- Notes: Extended scenario matrix validated artifact collision failure by default and explicit overwrite replacement via `SP_DISCIPLINE_EVIDENCE_OVERWRITE=1`.
+
+60. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Full matrix pass with evidence-collision scenarios integrated into evidence-capture checks.
+
+61. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T111113Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T111113Z.md` after PR21 changes.
+
+62. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Revalidated branch-list parity and `YES MERGE` reminder text after PR21 doc updates.
+
+63. `bash scripts/ci/test_sp_discipline_evidence_capture.sh`
+- Result: pass
+- Notes: Revalidated collision/overwrite scenario coverage after PR21 doc updates.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`

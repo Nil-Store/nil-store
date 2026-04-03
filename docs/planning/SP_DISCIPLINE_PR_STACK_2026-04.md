@@ -45,6 +45,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 19. `stack/sp-discipline-18-yes-merge-scenarios`
 20. `stack/sp-discipline-19-evidence-capture-scenarios`
 21. `stack/sp-discipline-20-gate-runner-scenarios`
+22. `stack/sp-discipline-21-evidence-collision-guard`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -510,6 +511,28 @@ Exit Criteria:
 - Gate-runner control flow is covered by deterministic positive and negative scenario tests.
 - Scenario tests validate override hooks without invoking heavyweight commands.
 - Default runner behavior remains full-matrix unless fast-only is explicitly set.
+
+## PR 21: Evidence Artifact Collision Guard and Overwrite Control
+Scope:
+- Prevent silent overwrite of timestamped evidence artifacts when the same timestamp is reused.
+- Add explicit overwrite opt-in (`SP_DISCIPLINE_EVIDENCE_OVERWRITE=1`) for intentional replacement workflows.
+- Extend evidence-capture scenario tests to cover collision failure and overwrite-enabled replacement.
+
+Files (expected):
+- `scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- `scripts/ci/test_sp_discipline_evidence_capture.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/test_sp_discipline_evidence_capture.sh` (must pass)
+2. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with collision scenarios included)
+3. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Reused timestamps fail fast by default when artifacts already exist.
+- Intentional overwrite is explicit and regression-tested.
+- Full stack gate runner remains green with new evidence collision checks.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):

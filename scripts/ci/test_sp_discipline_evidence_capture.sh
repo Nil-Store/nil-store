@@ -114,4 +114,35 @@ if [ "$MISSING_STATUS" -ne 2 ]; then
   exit 1
 fi
 
+echo "==> Case 4: existing timestamp artifacts fail without overwrite flag"
+TS_COLLIDE="20260403T120004Z"
+COLLIDE_LOG="$OUT_DIR/sp_discipline_stack_gates_${TS_COLLIDE}.log"
+COLLIDE_SUMMARY="$OUT_DIR/sp_discipline_stack_gates_${TS_COLLIDE}.md"
+echo "preexisting log" >"$COLLIDE_LOG"
+echo "preexisting summary" >"$COLLIDE_SUMMARY"
+set +e
+SP_DISCIPLINE_EVIDENCE_DIR="$OUT_DIR" \
+SP_DISCIPLINE_GATE_RUNNER="$RUNNER_OK" \
+SP_DISCIPLINE_EVIDENCE_TS_UTC="$TS_COLLIDE" \
+bash "$CAPTURE_SCRIPT"
+COLLIDE_STATUS=$?
+set -e
+
+if [ "$COLLIDE_STATUS" -ne 2 ]; then
+  echo "ERROR: expected collision exit status 2, got $COLLIDE_STATUS" >&2
+  exit 1
+fi
+expect_contains "$COLLIDE_LOG" "preexisting log"
+expect_contains "$COLLIDE_SUMMARY" "preexisting summary"
+
+echo "==> Case 5: overwrite flag allows replacing existing timestamp artifacts"
+SP_DISCIPLINE_EVIDENCE_DIR="$OUT_DIR" \
+SP_DISCIPLINE_GATE_RUNNER="$RUNNER_OK" \
+SP_DISCIPLINE_EVIDENCE_TS_UTC="$TS_COLLIDE" \
+SP_DISCIPLINE_EVIDENCE_OVERWRITE=1 \
+bash "$CAPTURE_SCRIPT"
+
+expect_contains "$COLLIDE_LOG" "runner ok output"
+expect_contains "$COLLIDE_SUMMARY" "- Result: pass"
+
 echo "SP discipline evidence-capture scenario tests passed."

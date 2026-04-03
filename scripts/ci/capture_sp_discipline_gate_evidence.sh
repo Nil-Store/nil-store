@@ -17,6 +17,17 @@ TS_UTC="${SP_DISCIPLINE_EVIDENCE_TS_UTC:-$(date -u +"%Y%m%dT%H%M%SZ")}"
 LOG_FILE="$OUT_DIR/sp_discipline_stack_gates_${TS_UTC}.log"
 SUMMARY_FILE="$OUT_DIR/sp_discipline_stack_gates_${TS_UTC}.md"
 RUN_COMMAND="bash $GATE_RUNNER_SCRIPT"
+ALLOW_OVERWRITE="${SP_DISCIPLINE_EVIDENCE_OVERWRITE:-0}"
+
+if [ "$ALLOW_OVERWRITE" != "1" ]; then
+  if [ -e "$LOG_FILE" ] || [ -e "$SUMMARY_FILE" ]; then
+    echo "ERROR: evidence artifact already exists for timestamp $TS_UTC" >&2
+    echo "       log: $LOG_FILE" >&2
+    echo "       summary: $SUMMARY_FILE" >&2
+    echo "       Set SP_DISCIPLINE_EVIDENCE_OVERWRITE=1 to replace existing artifacts." >&2
+    exit 2
+  fi
+fi
 
 echo "==> Running full SP discipline stack gates..."
 echo "    log: $LOG_FILE"
