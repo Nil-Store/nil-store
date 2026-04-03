@@ -1,0 +1,10 @@
+[
+  {
+    "user": { "type": "User", "login": "reviewer1" },
+    "body": "Looks good overall, but I want one more test run."
+  },
+  {
+    "user": { "type": "Bot", "login": "ci-bot" },
+    "body": "YES MERGE"
+  }
+]

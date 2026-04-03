@@ -3,6 +3,19 @@
 ## Goal
 Implement a deterministic, testable discipline system so unreliable SPs are progressively restricted and removed from active service, with clear on-chain state transitions and operator UX.
 
+## Testing Depth Contract (Mandatory)
+1. No PR in this stack may be marked ready for review without local green results for all listed PR test gates.
+2. Every PR must include:
+- Exact command transcript (or summarized output with exit codes) for required test gates.
+- Added/updated tests that fail before the change and pass after it.
+- Negative-path tests for adversarial inputs (invalid proofs, replayed evidence, stale sessions, wrong provider identity).
+3. Any flaky test must be fixed or quarantined with owner + issue link before merge approval can be requested.
+4. “Thorough testing” for this stack means all of:
+- Keeper unit coverage for changed behavior.
+- Determinism/replay checks for epoch logic.
+- At least one end-to-end repair path execution where applicable.
+- Manual operator UX verification for any onboarding/dashboard text/state changes.
+
 ## Merge Safety Contract (Mandatory)
 1. All work lands as a stacked PR series, one PR per phase below.
 2. No PR in this stack may be merged to `main` without explicit human approval containing the exact phrase `YES MERGE`.
@@ -158,6 +171,22 @@ Test Gate:
 
 Exit Criteria:
 - Operators understand why a provider is blocked and exactly how to recover.
+
+## Cross-PR Regression Matrix
+Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
+1. Determinism:
+- Re-run the same keeper test subset twice and confirm identical pass/fail and stable snapshots:
+`go test ./nilchain/x/nilchain/keeper -run 'TestCheckMissedProofs_.*|Test.*Discipline.*|Test.*Status.*' -count=2`
+2. Evidence integrity:
+- `go test ./nilchain/x/nilchain/keeper -run 'TestCancelRetrievalSession_RecordsNonResponseEvidence|Test.*Evidence.*'`
+3. Reward and penalty accounting:
+- `go test ./nilchain/x/nilchain/keeper -run 'TestBaseRewardPool_.*|Test.*Penalty.*|Test.*RetrievalFees.*'`
+4. Repair and churn safety:
+- `go test ./nilchain/x/nilchain/keeper -run 'TestCheckMissedProofs_.*|TestCheckMissedProofs_SchedulesDrainRepairs|TestProveLiveness_HealthFailures_StartMode2Repair'`
+5. Multi-SP end-to-end:
+- `./scripts/e2e_deputy_ghost_repair_multi_sp.sh`
+6. UI/operator manual checks (for PR 06 and any UX text changes):
+- Verify wrong-provider, offline, jailed, and recovered-provider states are explicit and include exact remediation commands.
 
 ## Full Stack Validation Before Any Merge to Main
 Run after PR 06 rebased on latest stack head:
