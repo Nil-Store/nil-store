@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
-TEMPLATE="ci/workflow_templates/sp_discipline_stack_policy.yml"
-INSTALLED=".github/workflows/sp_discipline_stack_policy.yml"
+TEMPLATE="${SP_POLICY_TEMPLATE_PATH:-ci/workflow_templates/sp_discipline_stack_policy.yml}"
+INSTALLED="${SP_POLICY_INSTALLED_PATH:-.github/workflows/sp_discipline_stack_policy.yml}"
 REQUIRE_INSTALLED="0"
 
 if [ "${1:-}" = "--require-installed" ]; then

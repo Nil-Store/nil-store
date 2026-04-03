@@ -40,6 +40,9 @@ run_ok "SP discipline policy template" \
 run_ok "SP discipline policy install state" \
   bash scripts/ci/check_sp_discipline_policy_install_state.sh
 
+run_ok "SP discipline policy install-state scenarios" \
+  bash scripts/ci/test_sp_discipline_policy_install_state.sh
+
 expected_fail "YES MERGE negative fixture check (must fail)" \
   bash scripts/ci/check_yes_merge.sh --fixture scripts/ci/fixtures/no_approval.json
 

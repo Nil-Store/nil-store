@@ -20,6 +20,7 @@
 12. `stack/sp-discipline-11-doc-consistency-guard`
 13. `stack/sp-discipline-12-ci-policy-handoff`
 14. `stack/sp-discipline-13-policy-install-state`
+15. `stack/sp-discipline-14-policy-install-tests`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -116,19 +117,31 @@ All commands below were executed from repo root unless noted.
 
 24. `bash scripts/ci/check_sp_discipline_policy_install_state.sh`
 - Result: pass
-- Notes: Passes in template-only mode when workflow file is not yet installed.
+- Notes: Template-only mode still reports clear install guidance.
 
 25. `bash scripts/ci/check_sp_discipline_policy_install_state.sh --require-installed`
 - Result: fail (expected)
-- Notes: Strict mode correctly reports missing installed workflow and install command.
+- Notes: Strict mode fails as expected when workflow file is not installed.
 
-26. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+26. `bash scripts/ci/test_sp_discipline_policy_install_state.sh`
 - Result: pass
-- Notes: Full matrix pass including policy install-state check.
+- Notes: Scenario matrix validated template-only, strict-missing, strict-synced, and drifted cases.
 
-27. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+27. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
 - Result: pass
-- Notes: Generated fresh timestamped evidence bundle after PR13 install-state additions.
+- Notes: Full matrix pass with policy install-state scenario tests included.
+
+28. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated fresh timestamped evidence bundle after PR14 scenario-test additions.
+
+29. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Revalidated full matrix on `stack/sp-discipline-14-policy-install-tests` before commit.
+
+30. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T095647Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T095647Z.md`.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`

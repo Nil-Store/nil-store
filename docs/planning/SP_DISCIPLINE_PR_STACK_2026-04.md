@@ -38,6 +38,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 12. `stack/sp-discipline-11-doc-consistency-guard`
 13. `stack/sp-discipline-12-ci-policy-handoff`
 14. `stack/sp-discipline-13-policy-install-state`
+15. `stack/sp-discipline-14-policy-install-tests`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -334,6 +335,29 @@ Test Gate:
 Exit Criteria:
 - Operators can see whether policy enforcement is template-only or fully installed.
 - Strict mode fails with actionable guidance when the workflow file is missing or drifted.
+
+## PR 14: Policy Install-State Scenario Tests
+Scope:
+- Add deterministic scenario tests for policy install-state behavior across template-only, strict-missing, strict-synced, and drifted cases.
+- Allow install-state checker path overrides via env vars so scenarios run in isolated temp directories.
+- Integrate scenario tests into the one-command gate runner.
+
+Files (expected):
+- `scripts/ci/check_sp_discipline_policy_install_state.sh`
+- `scripts/ci/test_sp_discipline_policy_install_state.sh`
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/test_sp_discipline_policy_install_state.sh` (must pass)
+2. `bash scripts/ci/check_sp_discipline_policy_install_state.sh --require-installed` (must fail in template-only repo state)
+3. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with scenario tests included)
+4. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Policy install-state behavior is regression-tested across both positive and negative paths.
+- Gate runner includes explicit scenario-level verification, not just a single happy-path probe.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
