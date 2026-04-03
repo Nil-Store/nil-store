@@ -115,12 +115,14 @@ else
   data_file="$combined"
 fi
 
-count="$(jq -r '
+phrase_re='(^|[^[:alnum:]_])YES MERGE([^[:alnum:]_]|$)'
+
+count="$(jq -r --arg re "$phrase_re" '
   [ .[]
     | select((.user.type // "") == "User")
     | (.body // "")
     | tostring
-    | select(contains("YES MERGE"))
+    | select(test($re))
   ] | length
 ' "$data_file")"
 
