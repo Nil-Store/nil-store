@@ -12,7 +12,9 @@ import (
 	"nilchain/x/nilchain/types"
 )
 
-// CheckMissedProofs iterates over all deals and slashes providers who have missed their proof window.
+// CheckMissedProofs evaluates epoch quota compliance and triggers deterministic
+// repair/replacement workflows (plus evidence summaries and reward gating) for
+// persistently non-compliant assignments.
 func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	params := k.GetParams(sdkCtx)

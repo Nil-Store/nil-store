@@ -386,11 +386,12 @@ Following the latter half of `scripts/e2e_deputy_ghost_repair_multi_sp.sh`:
 4. Wait for the next epoch boundary (see the script’s `wait_for_height` logic) and inspect `nilchain query nilchain get-deal --id <id>` to confirm the targeted `mode2_slots` entry shows `status=REPAIRING` with a `pending_provider`.
 5. Use the planner again to ensure it now returns the pending provider, proving the healing path defers traffic away from repairing slots.
 
-## 5. Economics, slashing, and quotas
+## 5. Economics, repairs, and quotas
 
 Manual checks derived from keeper tests:
 
 - Query `nilchain query nilchain params` and `nilchain query nilchain list-deals` to examine `Params.max_drain_bytes_per_epoch`, `Params.max_repairing_bytes_ratio_bps`, and deal heat statistics.
+- Verify current enforcement behavior: missed quotas and repeated failures should trigger `REPAIRING` slot transitions and evidence summaries; direct provider stake slashing/jailing is not the primary devnet enforcement path yet.
 - Execute `nilchain tx nilchain set-provider-draining <provider>` to test that new placement requests avoid that provider, as tested in `nilchain/x/nilchain/keeper/draining_test.go`.
 - Open sponsored retrieval sessions and vouchers via `/gateway/plan-retrieval-session` + `/gateway/session-receipt`; inspect `nilchain query nilchain retrieval-sessions` to ensure quotas decrement just like `msg_server_sponsored_sessions_test.go`.
 - Watch reward distribution by querying `nilchain query nilchain rewards` or running dedicated `go test ./nilchain/x/nilchain/keeper/base_rewards_test.go` for a reference baseline.
