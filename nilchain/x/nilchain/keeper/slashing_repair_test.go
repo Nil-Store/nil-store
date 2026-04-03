@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"cosmossdk.io/collections"
+	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 
@@ -45,6 +46,8 @@ func TestCheckMissedProofs_StartsMode2SlotRepair(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
 
 	dealID := uint64(1)
 	deal := types.Deal{
@@ -119,6 +122,9 @@ func TestCheckMissedProofs_StartsMode2SlotRepair(t *testing.T) {
 	totalDiscipline, err := f.keeper.ProviderDisciplineTotal.Get(sdkCtx, providerA)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), totalDiscipline)
+	rewards, err := f.keeper.ProviderRewards.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(4), rewards)
 }
 
 func TestCheckMissedProofs_Mode2RepairFallbackReusesProvider(t *testing.T) {
@@ -153,6 +159,7 @@ func TestCheckMissedProofs_Mode2RepairFallbackReusesProvider(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
 
 	dealID := uint64(1)
 	deal := types.Deal{
@@ -235,6 +242,7 @@ func TestCheckMissedProofs_CompletesMode2SlotRepairWhenQuotaMet(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
 
 	dealID := uint64(1)
 	deal := types.Deal{
@@ -325,6 +333,7 @@ func TestCheckMissedProofs_DeputyServedTriggersRepairEvenIfQuotaMet(t *testing.T
 		})
 		require.NoError(t, err)
 	}
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
 
 	dealID := uint64(1)
 	deal := types.Deal{
@@ -400,4 +409,7 @@ func TestCheckMissedProofs_DeputyServedTriggersRepairEvenIfQuotaMet(t *testing.T
 	totalDiscipline, err := f.keeper.ProviderDisciplineTotal.Get(sdkCtx, providerA)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), totalDiscipline)
+	rewards, err := f.keeper.ProviderRewards.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(4), rewards)
 }

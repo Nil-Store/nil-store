@@ -46,6 +46,7 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, resDeal.AssignedProviders)
 	assignedProvider := resDeal.AssignedProviders[0]
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdk.UnwrapSDKContext(f.ctx), assignedProvider, math.NewInt(5)))
 
 	manifestRoot := make([]byte, 48)
 	for i := range manifestRoot {
@@ -108,6 +109,9 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 	windowEpoch, err := f.keeper.ProviderDisciplineWindowEpoch.Get(ctxExpired, assignedProvider)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), windowEpoch)
+	rewards, err := f.keeper.ProviderRewards.Get(ctxExpired, assignedProvider)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(4), rewards)
 
 	var (
 		foundEvidence bool
@@ -140,6 +144,9 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, proofCount)
+	rewards, err = f.keeper.ProviderRewards.Get(ctxExpired, assignedProvider)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(4), rewards)
 
 	// Open another session in a later epoch and verify deterministic decay+increment.
 	ctxLaterOpen := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(205)
@@ -175,4 +182,7 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 	windowEpoch, err = f.keeper.ProviderDisciplineWindowEpoch.Get(ctxLaterCancel, assignedProvider)
 	require.NoError(t, err)
 	require.Equal(t, uint64(3), windowEpoch)
+	rewards, err = f.keeper.ProviderRewards.Get(ctxLaterCancel, assignedProvider)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(3), rewards)
 }

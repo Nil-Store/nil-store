@@ -3627,6 +3627,9 @@ func (k Keeper) recordEvidenceSummary(ctx sdk.Context, dealID uint64, provider s
 	if err := k.incrementProviderDiscipline(ctx, provider, kind, ok); err != nil {
 		ctx.Logger().Error("failed to increment provider discipline state", "provider", provider, "kind", kind, "error", err)
 	}
+	if err := k.applyEvidencePenalty(ctx, provider, kind, ok); err != nil {
+		ctx.Logger().Error("failed to apply provider evidence penalty", "provider", provider, "kind", kind, "error", err)
+	}
 
 	return nil
 }
@@ -3648,4 +3651,54 @@ func shouldCountEvidenceAsFailedChallenge(kind string, ok bool) bool {
 	default:
 		return false
 	}
+}
+
+func evidencePenaltyUnits(kind string, ok bool) uint64 {
+	if ok {
+		return 0
+	}
+	switch strings.TrimSpace(strings.ToLower(kind)) {
+	case "system_proof_invalid",
+		"system_proof_rejected",
+		"system_proof_wrong_challenge",
+		"system_proof_wrong_provider":
+		return 3
+	case "retrieval_non_response",
+		"deputy_miss_repair_started",
+		"quota_miss_repair_started",
+		"provider_degraded_repair_started":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func (k Keeper) applyEvidencePenalty(ctx sdk.Context, provider string, kind string, ok bool) error {
+	units := evidencePenaltyUnits(kind, ok)
+	if units == 0 {
+		return nil
+	}
+
+	currentRewards, err := k.ProviderRewards.Get(ctx, provider)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	if !currentRewards.IsPositive() {
+		return nil
+	}
+
+	params := k.GetParams(ctx)
+	penaltyUnit := params.BaseRetrievalFee.Amount
+	if !penaltyUnit.IsPositive() {
+		penaltyUnit = math.NewInt(1)
+	}
+	penalty := penaltyUnit.MulRaw(int64(units))
+	if penalty.GT(currentRewards) {
+		penalty = currentRewards
+	}
+
+	return k.ProviderRewards.Set(ctx, provider, currentRewards.Sub(penalty))
 }
