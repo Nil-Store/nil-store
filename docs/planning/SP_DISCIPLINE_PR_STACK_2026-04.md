@@ -49,6 +49,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 23. `stack/sp-discipline-22-doc-sequence-guard`
 24. `stack/sp-discipline-23-doc-ordinal-guard`
 25. `stack/sp-discipline-24-stack-ordinal-guard`
+26. `stack/sp-discipline-25-stack-duplicate-diagnostics`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -602,6 +603,29 @@ Exit Criteria:
 - Stack integrity check fails fast on ordinal gaps or list/branch index mismatches.
 - New negative scenarios are deterministic and regression-tested.
 - Full stack gate runner remains green with stack-ordinal guard checks enabled.
+
+## PR 25: Stack Integrity Duplicate-First Diagnostics and Scenario Assertions
+Scope:
+- Prioritize duplicate-branch detection in stack integrity checks so duplicate rows report a dedicated duplicate error.
+- Keep ordinal/index alignment enforcement intact after duplicate validation.
+- Strengthen stack-integrity scenario tests with deterministic failure-message assertions for duplicate, missing-ref, ordinal-gap, and index-mismatch paths.
+
+Files (expected):
+- `scripts/ci/check_sp_discipline_stack_integrity.sh`
+- `scripts/ci/test_sp_discipline_stack_integrity.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/test_sp_discipline_stack_integrity.sh` (must pass)
+2. `bash scripts/ci/check_sp_discipline_stack_integrity.sh` (must pass)
+3. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with stack-integrity diagnostics unchanged for happy path)
+4. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Duplicate branch rows fail with explicit duplicate diagnostics instead of masked index-mismatch errors.
+- Scenario suite asserts key failure messages for duplicate/missing-ref/ordinal/index guardrails.
+- Full stack gate runner remains green.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):

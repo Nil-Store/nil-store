@@ -31,6 +31,7 @@
 23. `stack/sp-discipline-22-doc-sequence-guard`
 24. `stack/sp-discipline-23-doc-ordinal-guard`
 25. `stack/sp-discipline-24-stack-ordinal-guard`
+26. `stack/sp-discipline-25-stack-duplicate-diagnostics`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -356,6 +357,38 @@ All commands below were executed from repo root unless noted.
 81. `bash scripts/ci/check_sp_discipline_stack_integrity.sh`
 - Result: pass
 - Notes: Revalidated stack ancestry/merged guards with local PR24 head chained after PR23.
+
+82. `bash scripts/ci/test_sp_discipline_stack_integrity.sh`
+- Result: pass
+- Notes: Scenario suite now asserts deterministic failure diagnostics for duplicate branches, missing refs, ordinal gaps, and index mismatches.
+
+83. `bash scripts/ci/check_sp_discipline_stack_integrity.sh`
+- Result: pass
+- Notes: Revalidated stack integrity with duplicate-first diagnostics enabled before ordinal/index enforcement.
+
+84. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Revalidated plan/evidence parity and `YES MERGE` reminder after adding branch 26 docs entries.
+
+85. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Full matrix pass with updated stack-integrity scenario diagnostics.
+
+86. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T115036Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T115036Z.md` after PR25 changes.
+
+87. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Final branch-list parity and `YES MERGE` reminder validation after appending PR25 evidence entries.
+
+88. `bash scripts/ci/check_sp_discipline_stack_integrity.sh`
+- Result: pass
+- Notes: Final stack ancestry/merged validation with PR25 local head chained after PR24.
+
+89. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Final consistency re-check after appending PR25 closeout entries.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`

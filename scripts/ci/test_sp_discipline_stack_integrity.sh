@@ -40,8 +40,28 @@ run_case_with_base() {
 expect_fail() {
   local label="$1"
   shift
-  if run_case "$@"; then
+  local output
+  if output="$(run_case "$@" 2>&1)"; then
     echo "ERROR: expected failure for case: $label" >&2
+    exit 1
+  fi
+  echo "OK: expected failure for case: $label"
+}
+
+expect_fail_with() {
+  local label="$1"
+  local expected_substring="$2"
+  shift 2
+  local output
+  if output="$(run_case "$@" 2>&1)"; then
+    echo "ERROR: expected failure for case: $label" >&2
+    exit 1
+  fi
+  if ! printf '%s\n' "$output" | grep -Fq "$expected_substring"; then
+    echo "ERROR: expected failure output for case '$label' to contain: $expected_substring" >&2
+    echo "---- output start ----" >&2
+    printf '%s\n' "$output" >&2
+    echo "---- output end ----" >&2
     exit 1
   fi
   echo "OK: expected failure for case: $label"
@@ -50,7 +70,7 @@ expect_fail() {
 VALID_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-01-taxonomy-and-signals`'
 DUP_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-01-taxonomy-and-signals`\n3. `stack/sp-discipline-01-taxonomy-and-signals`'
 ORDER_BAD_LIST=$'1. `stack/sp-discipline-01-taxonomy-and-signals`\n2. `stack/sp-discipline-00-merge-gate`'
-MISSING_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-99-not-a-real-branch`'
+MISSING_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-01-not-a-real-branch`'
 ORDINAL_GAP_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n3. `stack/sp-discipline-01-taxonomy-and-signals`'
 INDEX_MISMATCH_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-02-conviction-state`'
 
@@ -60,15 +80,15 @@ run_case
 
 echo "==> Case 2: duplicate stack entries fail"
 write_stack_doc "$DUP_LIST"
-expect_fail "duplicate-branches"
+expect_fail_with "duplicate-branches" "duplicate stack branches found"
 
 echo "==> Case 3: missing branch reference fails"
 write_stack_doc "$MISSING_LIST"
-expect_fail "missing-branch"
+expect_fail_with "missing-branch" "missing required stack branch ref"
 
-echo "==> Case 4: ancestry order violation fails"
+echo "==> Case 4: list/branch order mismatch fails"
 write_stack_doc "$ORDER_BAD_LIST"
-expect_fail "order-violation"
+expect_fail_with "order-violation" "list/branch index mismatch"
 
 MERGED_BASE_REF=""
 for candidate in \
@@ -94,10 +114,10 @@ echo "OK: expected failure for case: already-merged-into-base"
 
 echo "==> Case 6: markdown list ordinal gap fails"
 write_stack_doc "$ORDINAL_GAP_LIST"
-expect_fail "ordinal-gap"
+expect_fail_with "ordinal-gap" "non-contiguous markdown list numbering"
 
 echo "==> Case 7: list/branch index mismatch fails"
 write_stack_doc "$INDEX_MISMATCH_LIST"
-expect_fail "index-mismatch"
+expect_fail_with "index-mismatch" "list/branch index mismatch"
 
 echo "SP discipline stack integrity scenario tests passed."

@@ -66,8 +66,6 @@ check_list_and_branch_alignment() {
 echo "==> Fetching remote refs from $REMOTE..."
 git fetch "$REMOTE" --prune >/dev/null
 
-check_list_and_branch_alignment
-
 STACK_BRANCHES=()
 while IFS= read -r branch; do
   [ -n "$branch" ] || continue
@@ -89,6 +87,8 @@ if [ -n "$DUP_BRANCHES" ]; then
   echo "$DUP_BRANCHES" >&2
   exit 1
 fi
+
+check_list_and_branch_alignment
 
 HEAD_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 STACK_REFS=()
