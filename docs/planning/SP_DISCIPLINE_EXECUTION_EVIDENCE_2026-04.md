@@ -21,6 +21,7 @@
 13. `stack/sp-discipline-12-ci-policy-handoff`
 14. `stack/sp-discipline-13-policy-install-state`
 15. `stack/sp-discipline-14-policy-install-tests`
+16. `stack/sp-discipline-15-doc-consistency-scenarios`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -142,6 +143,22 @@ All commands below were executed from repo root unless noted.
 30. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
 - Result: pass
 - Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T095647Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T095647Z.md`.
+
+31. `bash scripts/ci/test_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Scenario matrix validated mismatch, duplicate plan/evidence branches, and missing `YES MERGE` failures.
+
+32. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Repo docs pass with strict duplicate-branch detection enabled.
+
+33. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Full matrix pass with docs-consistency scenarios integrated into the gate runner.
+
+34. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated `_artifacts/ci/sp_discipline_stack_gates_20260403T100655Z.log` and `_artifacts/ci/sp_discipline_stack_gates_20260403T100655Z.md` after PR15 changes.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`
