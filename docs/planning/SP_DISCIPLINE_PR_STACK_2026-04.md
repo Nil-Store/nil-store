@@ -35,6 +35,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 9. `stack/sp-discipline-08-gate-runner`
 10. `stack/sp-discipline-09-evidence-capture`
 11. `stack/sp-discipline-10-stack-integrity-guard`
+12. `stack/sp-discipline-11-doc-consistency-guard`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -262,6 +263,27 @@ Test Gate:
 Exit Criteria:
 - Stack branch order is machine-checked before every full gate run.
 - The gate runner blocks when stack branches are missing, out of order, or already merged into `main`.
+
+## PR 11: Plan/Evidence Doc Consistency Guard
+Scope:
+- Add a docs consistency check that verifies stack branch lists match between plan and evidence docs.
+- Verify `YES MERGE` reminder text exists in both docs to preserve explicit merge safety messaging.
+- Integrate this check into the one-command gate runner.
+
+Files (expected):
+- `scripts/ci/check_sp_discipline_docs_consistency.sh`
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/check_sp_discipline_docs_consistency.sh` (must pass)
+2. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with docs check included)
+3. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Plan and evidence docs cannot silently drift on stack branch ordering.
+- Gate runner fails immediately if docs diverge on branch list or missing `YES MERGE` language.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):

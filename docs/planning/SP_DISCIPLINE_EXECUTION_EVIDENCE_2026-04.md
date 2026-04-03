@@ -17,6 +17,7 @@
 9. `stack/sp-discipline-08-gate-runner`
 10. `stack/sp-discipline-09-evidence-capture`
 11. `stack/sp-discipline-10-stack-integrity-guard`
+12. `stack/sp-discipline-11-doc-consistency-guard`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -74,6 +75,18 @@ All commands below were executed from repo root unless noted.
 14. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
 - Result: pass
 - Notes: Generated a fresh timestamped evidence bundle after enabling integrity checks in the gate runner.
+
+15. `bash scripts/ci/check_sp_discipline_docs_consistency.sh`
+- Result: pass
+- Notes: Verified stack branch list parity and explicit `YES MERGE` wording in both plan and evidence docs.
+
+16. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Includes stack integrity + docs consistency checks before test matrix execution.
+
+17. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated a fresh evidence bundle with docs consistency guard enabled.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`

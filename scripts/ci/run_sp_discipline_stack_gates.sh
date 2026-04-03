@@ -31,6 +31,9 @@ run_ok() {
 run_ok "SP discipline stack integrity" \
   bash scripts/ci/check_sp_discipline_stack_integrity.sh
 
+run_ok "SP discipline docs consistency" \
+  bash scripts/ci/check_sp_discipline_docs_consistency.sh
+
 expected_fail "YES MERGE negative fixture check (must fail)" \
   bash scripts/ci/check_yes_merge.sh --fixture scripts/ci/fixtures/no_approval.json
 
