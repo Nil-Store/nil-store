@@ -163,6 +163,26 @@ test('provider onboarding flow only marks publish step ready after registration 
   assert.match(waitingForHealth.nextActionMessage, /Wait for provider health to converge/i)
 })
 
+test('provider onboarding flow keeps publish step active when provider is offline or jailed on-chain', () => {
+  const offline = buildProviderOnboardingFlow({
+    ...baseInput(),
+    providerStatusBlocker: 'offline',
+  })
+
+  assert.equal(offline.currentStepId, 'publish')
+  assert.equal(offline.stepReadyById.publish, false)
+  assert.match(offline.nextActionMessage, /Provider is Offline on-chain/i)
+
+  const jailed = buildProviderOnboardingFlow({
+    ...baseInput(),
+    providerStatusBlocker: 'jailed',
+  })
+
+  assert.equal(jailed.currentStepId, 'publish')
+  assert.equal(jailed.stepReadyById.publish, false)
+  assert.match(jailed.nextActionMessage, /Provider is Jailed on-chain/i)
+})
+
 test('provider onboarding flow reaches console handoff only after publish checks are healthy', () => {
   const flow = buildProviderOnboardingFlow(baseInput())
 
