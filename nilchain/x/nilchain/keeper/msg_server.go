@@ -420,8 +420,8 @@ func (k msgServer) RequestProviderLink(goCtx context.Context, msg *types.MsgRequ
 	}
 
 	pending := types.PendingProviderLink{
-		Provider:     provider,
-		Operator:     operator,
+		Provider:        provider,
+		Operator:        operator,
 		RequestedHeight: ctx.BlockHeight(),
 	}
 	if err := k.PendingProviderLinks.Set(ctx, provider, pending); err != nil {
@@ -3623,6 +3623,9 @@ func (k Keeper) recordEvidenceSummary(ctx sdk.Context, dealID uint64, provider s
 		if err := k.IncrementHeat(ctx, dealID, 0, true); err != nil {
 			ctx.Logger().Error("failed to increment heat for evidence summary", "deal", dealID, "kind", kind, "error", err)
 		}
+	}
+	if err := k.incrementProviderDiscipline(ctx, provider, kind, ok); err != nil {
+		ctx.Logger().Error("failed to increment provider discipline state", "provider", provider, "kind", kind, "error", err)
 	}
 
 	return nil

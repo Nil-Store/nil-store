@@ -38,7 +38,7 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 
 	resDeal, err := msgServer.CreateDeal(f.ctx, &types.MsgCreateDeal{
 		Creator:             owner,
-		DurationBlocks:      100,
+		DurationBlocks:      1000,
 		ServiceHint:         "General",
 		InitialEscrowAmount: math.NewInt(1000000),
 		MaxMonthlySpend:     math.NewInt(1000000),
@@ -99,6 +99,16 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), failures)
 
+	nonResponseDiscipline, err := f.keeper.ProviderDisciplineNonResponse.Get(ctxExpired, assignedProvider)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), nonResponseDiscipline)
+	totalDiscipline, err := f.keeper.ProviderDisciplineTotal.Get(ctxExpired, assignedProvider)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), totalDiscipline)
+	windowEpoch, err := f.keeper.ProviderDisciplineWindowEpoch.Get(ctxExpired, assignedProvider)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), windowEpoch)
+
 	var (
 		foundEvidence bool
 		proofCount    int
@@ -130,4 +140,39 @@ func TestCancelRetrievalSession_RecordsNonResponseEvidence(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, proofCount)
+
+	// Open another session in a later epoch and verify deterministic decay+increment.
+	ctxLaterOpen := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(205)
+	openRes2, err := msgServer.OpenRetrievalSession(ctxLaterOpen, &types.MsgOpenRetrievalSession{
+		Creator:        owner,
+		DealId:         resDeal.DealId,
+		Provider:       assignedProvider,
+		ManifestRoot:   deal.ManifestRoot,
+		StartMduIndex:  0,
+		StartBlobIndex: 0,
+		BlobCount:      1,
+		Nonce:          2,
+		ExpiresAt:      206,
+	})
+	require.NoError(t, err)
+	require.Len(t, openRes2.SessionId, 32)
+
+	ctxLaterCancel := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(210)
+	_, err = msgServer.CancelRetrievalSession(ctxLaterCancel, &types.MsgCancelRetrievalSession{
+		Creator:   owner,
+		SessionId: openRes2.SessionId,
+	})
+	require.NoError(t, err)
+
+	// Epoch moved from 1 -> 3 (default epoch_len_blocks=100), so linear decay clears
+	// previous count (1 -> 0), then the new event increments back to 1.
+	nonResponseDiscipline, err = f.keeper.ProviderDisciplineNonResponse.Get(ctxLaterCancel, assignedProvider)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), nonResponseDiscipline)
+	totalDiscipline, err = f.keeper.ProviderDisciplineTotal.Get(ctxLaterCancel, assignedProvider)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), totalDiscipline)
+	windowEpoch, err = f.keeper.ProviderDisciplineWindowEpoch.Get(ctxLaterCancel, assignedProvider)
+	require.NoError(t, err)
+	require.Equal(t, uint64(3), windowEpoch)
 }

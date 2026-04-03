@@ -112,6 +112,13 @@ func TestCheckMissedProofs_StartsMode2SlotRepair(t *testing.T) {
 	heat, err := f.keeper.DealHeatStates.Get(sdkCtx, dealID)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, heat.FailedChallengesTotal, uint64(1))
+
+	quotaMissDiscipline, err := f.keeper.ProviderDisciplineQuotaMiss.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), quotaMissDiscipline)
+	totalDiscipline, err := f.keeper.ProviderDisciplineTotal.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), totalDiscipline)
 }
 
 func TestCheckMissedProofs_Mode2RepairFallbackReusesProvider(t *testing.T) {
@@ -386,4 +393,11 @@ func TestCheckMissedProofs_DeputyServedTriggersRepairEvenIfQuotaMet(t *testing.T
 	heat, err := f.keeper.DealHeatStates.Get(sdkCtx, dealID)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, heat.FailedChallengesTotal, uint64(1))
+
+	deputyMissDiscipline, err := f.keeper.ProviderDisciplineDeputyMiss.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), deputyMissDiscipline)
+	totalDiscipline, err := f.keeper.ProviderDisciplineTotal.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), totalDiscipline)
 }
