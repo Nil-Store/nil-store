@@ -19,6 +19,7 @@
 11. `stack/sp-discipline-10-stack-integrity-guard`
 12. `stack/sp-discipline-11-doc-consistency-guard`
 13. `stack/sp-discipline-12-ci-policy-handoff`
+14. `stack/sp-discipline-13-policy-install-state`
 
 ## Mandatory Gate Results
 All commands below were executed from repo root unless noted.
@@ -112,6 +113,22 @@ All commands below were executed from repo root unless noted.
 23. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
 - Result: pass
 - Notes: Generated fresh timestamped evidence bundle after PR12 handoff additions.
+
+24. `bash scripts/ci/check_sp_discipline_policy_install_state.sh`
+- Result: pass
+- Notes: Passes in template-only mode when workflow file is not yet installed.
+
+25. `bash scripts/ci/check_sp_discipline_policy_install_state.sh --require-installed`
+- Result: fail (expected)
+- Notes: Strict mode correctly reports missing installed workflow and install command.
+
+26. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+- Result: pass
+- Notes: Full matrix pass including policy install-state check.
+
+27. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- Result: pass
+- Notes: Generated fresh timestamped evidence bundle after PR13 install-state additions.
 
 ## Test Harness Hardening Included
 - `scripts/run_devnet_alpha_multi_sp.sh`

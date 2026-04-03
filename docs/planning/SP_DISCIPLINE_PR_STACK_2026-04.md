@@ -37,6 +37,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 11. `stack/sp-discipline-10-stack-integrity-guard`
 12. `stack/sp-discipline-11-doc-consistency-guard`
 13. `stack/sp-discipline-12-ci-policy-handoff`
+14. `stack/sp-discipline-13-policy-install-state`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -311,6 +312,28 @@ Test Gate:
 Exit Criteria:
 - Policy workflow content is versioned and validated without requiring direct workflow-file push permissions.
 - Maintainers can install the workflow template with a single audited command when workflow-scope credentials are available.
+
+## PR 13: Policy Install-State Guard
+Scope:
+- Add an install-state checker that reports whether the workflow template is installed and synchronized.
+- Support strict mode (`--require-installed`) for environments that require active workflow installation.
+- Integrate non-strict install-state checks into the one-command gate runner.
+
+Files (expected):
+- `scripts/ci/check_sp_discipline_policy_install_state.sh`
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/check_sp_discipline_policy_install_state.sh` (must pass in template-only mode)
+2. `bash scripts/ci/check_sp_discipline_policy_install_state.sh --require-installed` (must fail when workflow is not installed)
+3. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with install-state check included)
+4. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Operators can see whether policy enforcement is template-only or fully installed.
+- Strict mode fails with actionable guidance when the workflow file is missing or drifted.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
