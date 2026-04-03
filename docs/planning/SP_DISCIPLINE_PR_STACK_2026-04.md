@@ -33,6 +33,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 7. `stack/sp-discipline-06-ui-and-runbooks`
 8. `stack/sp-discipline-07-test-hardening`
 9. `stack/sp-discipline-08-gate-runner`
+10. `stack/sp-discipline-09-evidence-capture`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -218,6 +219,27 @@ Test Gate:
 Exit Criteria:
 - A single CI/local command executes all mandatory stack gates.
 - The runbook/evidence docs list that command as canonical pre-merge validation.
+
+## PR 09: Evidence Capture Automation
+Scope:
+- Add a wrapper command that runs the full stack gates and writes timestamped evidence artifacts.
+- Emit both raw logs and a concise markdown summary with exit code and merge-safety reminder.
+- Keep artifacts outside tracked docs by default to avoid manual transcript drift.
+
+Files (expected):
+- `scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass)
+2. Verify generated files exist under `_artifacts/ci/`:
+   - `sp_discipline_stack_gates_<timestamp>.log`
+   - `sp_discipline_stack_gates_<timestamp>.md`
+
+Exit Criteria:
+- Operators can generate a full, timestamped evidence bundle with one command.
+- Evidence summary explicitly includes the `YES MERGE` merge block requirement.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
