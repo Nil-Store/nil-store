@@ -32,6 +32,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 6. `stack/sp-discipline-05-repair-integration`
 7. `stack/sp-discipline-06-ui-and-runbooks`
 8. `stack/sp-discipline-07-test-hardening`
+9. `stack/sp-discipline-08-gate-runner`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -199,6 +200,25 @@ Exit Criteria:
 - E2E repair script passes without local one-off edits.
 - Evidence log includes command list + pass/fail outcomes for all mandatory gates.
 
+## PR 08: Stack Gate Runner and Repeatable Validation
+Scope:
+- Add a one-command runner for the full SP discipline gate matrix.
+- Keep `YES MERGE` negative/positive fixture checks as explicit first-class gates.
+- Make local stack validation repeatable before opening or updating stacked PRs.
+
+Files (expected):
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass)
+2. Re-run `bash scripts/ci/run_sp_discipline_stack_gates.sh` to confirm deterministic pass/fail behavior.
+
+Exit Criteria:
+- A single CI/local command executes all mandatory stack gates.
+- The runbook/evidence docs list that command as canonical pre-merge validation.
+
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
 1. Determinism:
@@ -219,11 +239,9 @@ Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
 
 ## Full Stack Validation Before Any Merge to Main
 Run after PR 06 rebased on latest stack head:
-1. `go test ./nilchain/x/nilchain/keeper`
-2. `go test ./nilchain/x/nilchain/...`
-3. `./scripts/e2e_deputy_ghost_repair_multi_sp.sh`
-4. Manual runbook checks from `docs/manual-devnet-runbook.md` Section 5
-5. Frontend onboarding + dashboard smoke with wrong-provider and recovered-provider scenarios
+1. `bash scripts/ci/run_sp_discipline_stack_gates.sh`
+2. Manual runbook checks from `docs/manual-devnet-runbook.md` Section 5
+3. Frontend onboarding + dashboard smoke with wrong-provider and recovered-provider scenarios
 
 ## Rollout Strategy
 1. Shadow mode first: compute convictions and surface status proposals without enforcement.
