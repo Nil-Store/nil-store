@@ -455,7 +455,6 @@ export function SpOnboarding() {
       providerRegistered,
       providerRepoReady,
       publicHealthReady,
-      providerOnchainStatus,
       providerStatusBlocker,
       walletReady,
       endpointReady,
