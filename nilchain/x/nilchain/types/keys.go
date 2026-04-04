@@ -62,4 +62,13 @@ var (
 	CreditSeenKey              = collections.NewPrefix("CreditSeen/value/")
 	SyntheticSeenKey           = collections.NewPrefix("SyntheticSeen/value/")
 	DeputySeenKey              = collections.NewPrefix("DeputySeen/value/")
+
+	// --- Provider discipline windows (conviction state, epoch-decayed) ---
+	ProviderDisciplineWindowEpochKey  = collections.NewPrefix("ProviderDisciplineWindowEpoch/value/")
+	ProviderDisciplineInvalidProofKey = collections.NewPrefix("ProviderDisciplineInvalidProof/value/")
+	ProviderDisciplineNonResponseKey  = collections.NewPrefix("ProviderDisciplineNonResponse/value/")
+	ProviderDisciplineQuotaMissKey    = collections.NewPrefix("ProviderDisciplineQuotaMiss/value/")
+	ProviderDisciplineDeputyMissKey   = collections.NewPrefix("ProviderDisciplineDeputyMiss/value/")
+	ProviderDisciplineHealthFailKey   = collections.NewPrefix("ProviderDisciplineHealthFail/value/")
+	ProviderDisciplineTotalKey        = collections.NewPrefix("ProviderDisciplineTotal/value/")
 )

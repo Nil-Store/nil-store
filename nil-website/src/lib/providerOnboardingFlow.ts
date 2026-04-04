@@ -12,6 +12,7 @@ export interface ProviderOnboardingFlowInput {
   endpointReady: boolean
   providerRegistered: boolean
   publicHealthReady: boolean
+  providerStatusBlocker?: 'offline' | 'jailed' | null
 }
 
 export interface ProviderOnboardingStepDefinition {
@@ -61,7 +62,7 @@ export const PROVIDER_ONBOARDING_STEPS: ProviderOnboardingStepDefinition[] = [
     id: 'publish',
     label: 'Publish Endpoint + Bootstrap',
     anchor: 'step-publish-bootstrap',
-    doneWhen: 'public endpoint is defined and bootstrap plus health converge',
+    doneWhen: 'public endpoint is defined, provider is active on-chain, and bootstrap plus health converge',
   },
   {
     id: 'console',
@@ -142,6 +143,12 @@ function publishNextAction(input: ProviderOnboardingFlowInput): string {
   if (!input.endpointReady) {
     return 'Finish Step 4 so the bootstrap command has the public endpoint.'
   }
+  if (input.providerStatusBlocker === 'jailed') {
+    return 'Provider is Jailed on-chain. Run the Step 4 recovery commands, keep the daemon healthy, and refresh until status returns to Active.'
+  }
+  if (input.providerStatusBlocker === 'offline') {
+    return 'Provider is Offline on-chain. Run the Step 4 recovery commands, keep the daemon healthy, and refresh until status returns to Active.'
+  }
   if (!input.providerRegistered && !input.publicHealthReady) {
     return 'Run the provider host bootstrap command, then watch registration and public health converge.'
   }
@@ -176,7 +183,11 @@ export function buildProviderOnboardingFlow(
     wallet: input.walletReady && input.funded && input.hasOperatorAddress,
     host: input.providerRepoReady,
     pairing: input.providerKeyReady && input.pairingConfirmed,
-    publish: input.pairingConfirmed && input.endpointReady && input.providerRegistered && input.publicHealthReady,
+    publish: input.pairingConfirmed
+      && input.endpointReady
+      && input.providerRegistered
+      && input.publicHealthReady
+      && !input.providerStatusBlocker,
     console: false,
   }
 

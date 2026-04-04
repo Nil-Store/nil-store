@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"cosmossdk.io/collections"
+	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 
@@ -45,6 +46,7 @@ func TestCheckMissedProofs_StartsMode2SlotRepair(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
 
 	dealID := uint64(1)
 	deal := types.Deal{
@@ -112,6 +114,16 @@ func TestCheckMissedProofs_StartsMode2SlotRepair(t *testing.T) {
 	heat, err := f.keeper.DealHeatStates.Get(sdkCtx, dealID)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, heat.FailedChallengesTotal, uint64(1))
+
+	quotaMissDiscipline, err := f.keeper.ProviderDisciplineQuotaMiss.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), quotaMissDiscipline)
+	totalDiscipline, err := f.keeper.ProviderDisciplineTotal.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), totalDiscipline)
+	rewards, err := f.keeper.ProviderRewards.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(4), rewards)
 }
 
 func TestCheckMissedProofs_Mode2RepairFallbackReusesProvider(t *testing.T) {
@@ -146,6 +158,7 @@ func TestCheckMissedProofs_Mode2RepairFallbackReusesProvider(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
 
 	dealID := uint64(1)
 	deal := types.Deal{
@@ -228,6 +241,7 @@ func TestCheckMissedProofs_CompletesMode2SlotRepairWhenQuotaMet(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
 
 	dealID := uint64(1)
 	deal := types.Deal{
@@ -318,6 +332,7 @@ func TestCheckMissedProofs_DeputyServedTriggersRepairEvenIfQuotaMet(t *testing.T
 		})
 		require.NoError(t, err)
 	}
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
 
 	dealID := uint64(1)
 	deal := types.Deal{
@@ -386,4 +401,206 @@ func TestCheckMissedProofs_DeputyServedTriggersRepairEvenIfQuotaMet(t *testing.T
 	heat, err := f.keeper.DealHeatStates.Get(sdkCtx, dealID)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, heat.FailedChallengesTotal, uint64(1))
+
+	deputyMissDiscipline, err := f.keeper.ProviderDisciplineDeputyMiss.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), deputyMissDiscipline)
+	totalDiscipline, err := f.keeper.ProviderDisciplineTotal.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), totalDiscipline)
+	rewards, err := f.keeper.ProviderRewards.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(4), rewards)
+}
+
+func TestCheckMissedProofs_Mode2NonActiveProviderStartsRepair(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	params.EvictAfterMissedEpochs = 3
+	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
+
+	mkAddr := func(tag byte) string {
+		addr := make([]byte, 20)
+		addr[19] = tag
+		out, err := f.addressCodec.BytesToString(addr)
+		require.NoError(t, err)
+		return out
+	}
+
+	providerA := mkAddr(0xA1)
+	providerB := mkAddr(0xB2)
+	providerC := mkAddr(0xC3)
+	providerD := mkAddr(0xD4)
+
+	for _, addr := range []string{providerA, providerB, providerC, providerD} {
+		_, err := msgServer.RegisterProvider(sdkCtx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 1_000_000_000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
+
+	// Mark providerA non-active; this should trigger status-driven repair.
+	pA, err := f.keeper.Providers.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	pA.Status = "Offline"
+	require.NoError(t, f.keeper.Providers.Set(sdkCtx, providerA, pA))
+
+	dealID := uint64(1)
+	deal := types.Deal{
+		Id:             dealID,
+		Owner:          mkAddr(0xEE),
+		StartBlock:     1,
+		EndBlock:       10_000,
+		RedundancyMode: 2,
+		Mode2Profile:   &types.StripeReplicaProfile{K: 2, M: 1},
+		Providers:      []string{providerA, providerB, providerC},
+		Mode2Slots: []*types.DealSlot{
+			{Slot: 0, Provider: providerA, Status: types.SlotStatus_SLOT_STATUS_ACTIVE},
+			{Slot: 1, Provider: providerB, Status: types.SlotStatus_SLOT_STATUS_ACTIVE},
+			{Slot: 2, Provider: providerC, Status: types.SlotStatus_SLOT_STATUS_ACTIVE},
+		},
+		TotalMdus:   3,
+		WitnessMdus: 1,
+		CurrentGen:  1,
+		ServiceHint: "General",
+	}
+	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
+
+	epochID := uint64(1)
+	require.NoError(t, f.keeper.Mode2EpochCredits.Set(
+		sdkCtx,
+		collections.Join(collections.Join(dealID, uint32(1)), epochID),
+		1,
+	))
+	require.NoError(t, f.keeper.Mode2EpochCredits.Set(
+		sdkCtx,
+		collections.Join(collections.Join(dealID, uint32(2)), epochID),
+		1,
+	))
+
+	require.NoError(t, f.keeper.CheckMissedProofs(sdkCtx))
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, dealID)
+	require.NoError(t, err)
+	require.Equal(t, types.SlotStatus_SLOT_STATUS_REPAIRING, updated.Mode2Slots[0].Status)
+	require.Equal(t, providerD, updated.Mode2Slots[0].PendingProvider)
+
+	var foundEvidence bool
+	require.NoError(t, f.keeper.Proofs.Walk(sdkCtx, nil, func(_ uint64, proof types.Proof) (bool, error) {
+		if strings.Contains(proof.Commitment, "evidence:provider_status_repair_started") {
+			foundEvidence = true
+			require.Equal(t, providerA, proof.Creator)
+			require.False(t, proof.Valid)
+		}
+		return false, nil
+	}))
+	require.True(t, foundEvidence)
+
+	healthFailDiscipline, err := f.keeper.ProviderDisciplineHealthFail.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), healthFailDiscipline)
+	rewards, err := f.keeper.ProviderRewards.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(4), rewards)
+}
+
+func TestCheckMissedProofs_Mode1NonActiveProviderReplaced(t *testing.T) {
+	f := initFixture(t)
+	msgServer := keeper.NewMsgServerImpl(f.keeper)
+
+	sdkCtx := sdk.UnwrapSDKContext(f.ctx).WithBlockHeight(5)
+
+	params := types.DefaultParams()
+	params.EpochLenBlocks = 5
+	params.EvictAfterMissedEpochs = 3
+	require.NoError(t, f.keeper.Params.Set(sdkCtx, params))
+
+	mkAddr := func(tag byte) string {
+		addr := make([]byte, 20)
+		addr[19] = tag
+		out, err := f.addressCodec.BytesToString(addr)
+		require.NoError(t, err)
+		return out
+	}
+
+	providerA := mkAddr(0xA1)
+	providerB := mkAddr(0xB2)
+	providerC := mkAddr(0xC3)
+
+	for _, addr := range []string{providerA, providerB, providerC} {
+		_, err := msgServer.RegisterProvider(sdkCtx, &types.MsgRegisterProvider{
+			Creator:      addr,
+			Capabilities: "General",
+			TotalStorage: 1_000_000_000,
+			Endpoints:    testProviderEndpoints,
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
+
+	pA, err := f.keeper.Providers.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	pA.Status = "Offline"
+	require.NoError(t, f.keeper.Providers.Set(sdkCtx, providerA, pA))
+
+	dealID := uint64(7)
+	deal := types.Deal{
+		Id:             dealID,
+		Owner:          mkAddr(0xEE),
+		StartBlock:     1,
+		EndBlock:       10_000,
+		Providers:      []string{providerA, providerB},
+		TotalMdus:      3,
+		WitnessMdus:    1,
+		CurrentGen:     1,
+		ServiceHint:    "General",
+		RedundancyMode: 1,
+	}
+	require.NoError(t, f.keeper.Deals.Set(sdkCtx, dealID, deal))
+
+	epochID := uint64(1)
+	require.NoError(t, f.keeper.Mode1EpochCredits.Set(
+		sdkCtx,
+		collections.Join(collections.Join(dealID, providerC), epochID),
+		1,
+	))
+	require.NoError(t, f.keeper.Mode1EpochCredits.Set(
+		sdkCtx,
+		collections.Join(collections.Join(dealID, providerB), epochID),
+		1,
+	))
+
+	require.NoError(t, f.keeper.CheckMissedProofs(sdkCtx))
+
+	updated, err := f.keeper.Deals.Get(sdkCtx, dealID)
+	require.NoError(t, err)
+	require.Equal(t, providerC, updated.Providers[0])
+	require.Equal(t, uint64(2), updated.CurrentGen)
+
+	var foundEvidence bool
+	require.NoError(t, f.keeper.Proofs.Walk(sdkCtx, nil, func(_ uint64, proof types.Proof) (bool, error) {
+		if strings.Contains(proof.Commitment, "evidence:mode1_provider_repair_started") {
+			foundEvidence = true
+			require.Equal(t, providerA, proof.Creator)
+			require.False(t, proof.Valid)
+		}
+		return false, nil
+	}))
+	require.True(t, foundEvidence)
+
+	healthFailDiscipline, err := f.keeper.ProviderDisciplineHealthFail.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), healthFailDiscipline)
+	rewards, err := f.keeper.ProviderRewards.Get(sdkCtx, providerA)
+	require.NoError(t, err)
+	require.Equal(t, math.NewInt(4), rewards)
 }

@@ -12,7 +12,9 @@ import (
 	"nilchain/x/nilchain/types"
 )
 
-// CheckMissedProofs iterates over all deals and slashes providers who have missed their proof window.
+// CheckMissedProofs evaluates epoch quota compliance and triggers deterministic
+// repair/replacement workflows (plus evidence summaries and reward gating) for
+// persistently non-compliant assignments.
 func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	params := k.GetParams(sdkCtx)
@@ -46,7 +48,54 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 
 		switch stripe.mode {
 		case 1:
-			for _, provider := range deal.Providers {
+			dealChanged := false
+			for providerIdx, provider := range deal.Providers {
+				provider = strings.TrimSpace(provider)
+				if provider == "" {
+					continue
+				}
+				p, perr := k.Providers.Get(ctx, provider)
+				if perr != nil {
+					if !errors.Is(perr, collections.ErrNotFound) {
+						return false, perr
+					}
+				} else if strings.TrimSpace(p.Status) != "Active" {
+					replacement, rerr := k.selectMode1ReplacementProvider(sdkCtx, deal, providerIdx, epochID)
+					if rerr != nil {
+						sdkCtx.Logger().Error(
+							"failed to select mode1 replacement provider",
+							"deal", dealID,
+							"index", providerIdx,
+							"provider", provider,
+							"error", rerr,
+						)
+						continue
+					}
+
+					oldProvider := provider
+					deal.Providers[providerIdx] = replacement
+					deal.CurrentGen++
+					dealChanged = true
+					_ = k.Mode1MissedEpochs.Remove(ctx, collections.Join(dealID, oldProvider))
+
+					extra := make([]byte, 0, 4)
+					extra = binary.BigEndian.AppendUint32(extra, uint32(providerIdx))
+					eid := deriveEvidenceID("mode1_provider_repair_started", dealID, epochID, extra)
+					if err := k.recordEvidenceSummary(sdkCtx, dealID, oldProvider, "mode1_provider_repair_started", eid[:], "chain", false); err != nil {
+						sdkCtx.Logger().Error("failed to record evidence summary", "error", err)
+					}
+
+					sdkCtx.Logger().Info(
+						"mode1 provider replaced due to non-active status",
+						"deal", dealID,
+						"index", providerIdx,
+						"old_provider", oldProvider,
+						"new_provider", replacement,
+						"epoch", epochID,
+					)
+					provider = replacement
+				}
+
 				quota := requiredBlobsMode1(params, deal, in)
 				if quota == 0 {
 					continue
@@ -92,6 +141,11 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					if err := k.Mode1MissedEpochs.Remove(ctx, missedKey); err != nil && !errors.Is(err, collections.ErrNotFound) {
 						return false, err
 					}
+				}
+			}
+			if dealChanged {
+				if err := k.Deals.Set(ctx, dealID, deal); err != nil {
+					return false, err
 				}
 			}
 		case 2:
@@ -184,6 +238,54 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 					}
 					if entry != nil && entry.Status != types.SlotStatus_SLOT_STATUS_ACTIVE {
 						continue
+					}
+					if entry != nil && entry.Status == types.SlotStatus_SLOT_STATUS_ACTIVE {
+						providerActive := false
+						providerRecord, perr := k.Providers.Get(ctx, strings.TrimSpace(entry.Provider))
+						if perr == nil {
+							providerActive = strings.TrimSpace(providerRecord.Status) == "Active"
+						} else if !errors.Is(perr, collections.ErrNotFound) {
+							return false, perr
+						}
+						if !providerActive && strings.TrimSpace(entry.PendingProvider) == "" {
+							pending, err := k.selectMode2ReplacementProvider(sdkCtx, deal, slot, epochID)
+							if err != nil {
+								sdkCtx.Logger().Error(
+									"failed to select replacement provider for non-active slot provider",
+									"deal", dealID,
+									"slot", slotIdx,
+									"provider", entry.Provider,
+									"error", err,
+								)
+								continue
+							}
+
+							entry.Status = types.SlotStatus_SLOT_STATUS_REPAIRING
+							entry.PendingProvider = strings.TrimSpace(pending)
+							entry.StatusSinceHeight = sdkCtx.BlockHeight()
+							entry.RepairTargetGen = deal.CurrentGen
+							deal.Mode2Slots[slot] = entry
+							dealChanged = true
+							_ = k.Mode2DeputyMissedEpochs.Remove(ctx, missedKey)
+							_ = k.Mode2MissedEpochs.Remove(ctx, missedKey)
+
+							extra := make([]byte, 0, 4)
+							extra = binary.BigEndian.AppendUint32(extra, slot)
+							eid := deriveEvidenceID("provider_status_repair_started", dealID, epochID, extra)
+							if err := k.recordEvidenceSummary(sdkCtx, dealID, entry.Provider, "provider_status_repair_started", eid[:], "chain", false); err != nil {
+								sdkCtx.Logger().Error("failed to record evidence summary", "error", err)
+							}
+
+							sdkCtx.Logger().Info(
+								"slot repair started due to non-active provider status",
+								"deal", dealID,
+								"slot", slotIdx,
+								"provider", entry.Provider,
+								"pending_provider", entry.PendingProvider,
+								"repair_target_gen", entry.RepairTargetGen,
+							)
+							continue
+						}
 					}
 				}
 

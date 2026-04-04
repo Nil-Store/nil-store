@@ -17,6 +17,61 @@ banner() { printf '\n>>> %s\n' "$*"; }
 cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
 
+wait_for_tx_json() {
+  local hash="$1"
+  local attempts="${2:-40}"
+  local delay="${3:-1}"
+  local i out
+  for i in $(seq 1 "$attempts"); do
+    out=$($NILCHAIND query tx "$hash" --home "$CHAIN_HOME" --output json 2>/dev/null || true)
+    if [ -n "$out" ] && echo "$out" | jq -e '.txhash // .tx_response.txhash // empty' >/dev/null 2>&1; then
+      echo "$out"
+      return 0
+    fi
+    sleep "$delay"
+  done
+  return 1
+}
+
+parse_create_deal_id() {
+  python3 -c '
+import base64, json, sys
+def maybe_b64(s: str) -> str:
+  if not s:
+    return ""
+  try:
+    pad = "=" * ((4 - (len(s) % 4)) % 4)
+    return base64.b64decode((s + pad).encode("utf-8"), validate=False).decode("utf-8", errors="ignore")
+  except Exception:
+    return ""
+try:
+  tx = json.load(sys.stdin)
+except Exception:
+  print("")
+  raise SystemExit(0)
+events = []
+for item in (tx.get("logs") or []):
+  events.extend(item.get("events") or [])
+events.extend(tx.get("events") or [])
+for ev in events:
+  ev_type = ev.get("type") or ""
+  if ev_type not in ("create_deal", "nilchain.nilchain.v1.EventCreateDeal"):
+    continue
+  for a in (ev.get("attributes") or []):
+    key = a.get("key") or ""
+    val = a.get("value") or ""
+    dkey = maybe_b64(key)
+    dval = maybe_b64(val)
+    if key in ("deal_id", "id"):
+      print(val)
+      raise SystemExit(0)
+    if dkey in ("deal_id", "id"):
+      print(dval or val)
+      raise SystemExit(0)
+print("")
+'
+}
+
 current_epoch() {
   local epoch_len height
 
@@ -54,24 +109,32 @@ banner "Creating Deal"
 # Use a 3-slot Mode 2 stripe for the multi-SP devnet (K=2,M=1).
 # The gateway /gateway/prove-retrieval endpoint reconstructs the full MDU from per-slot shards on the router
 # and submits the proof "as" the assigned provider.
-CREATE_OUT=$($NILCHAIND tx nilchain create-deal 1000 1000000 1000000 --service-hint "General:rs=2+1" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+CREATE_OUT=$($NILCHAIND tx nilchain create-deal 1000 1000000 1000000 --service-hint "General:rs=2+1" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas 500000 --gas-prices 0.001aatom --output json)
 TX_HASH=$(echo "$CREATE_OUT" | jq -r '.txhash')
 echo "Create Deal Tx: $TX_HASH"
 
 banner "Waiting for Deal on Chain..."
-sleep 6
-TX_QUERY=$($NILCHAIND query tx "$TX_HASH" --output json 2>/dev/null || echo "")
-DEAL_ID=$(echo "$TX_QUERY" | jq -r '
-  .events? // []
-  | map(select(.type == "nilchain.nilchain.v1.EventCreateDeal" or .type == "create_deal"))
-  | map(.attributes // [])
-  | add
-  | map(select(.key == "deal_id" or .key == "id"))
-  | .[0].value // empty
-')
+TX_QUERY="$(wait_for_tx_json "$TX_HASH" 40 1 || true)"
+if [ -z "$TX_QUERY" ]; then
+  echo "Create deal failed: tx not found for hash $TX_HASH"
+  exit 1
+fi
+CREATE_CODE="$(echo "$TX_QUERY" | jq -r '.code // .tx_response.code // 0')"
+if [ "$CREATE_CODE" != "0" ]; then
+  CREATE_RAW_LOG="$(echo "$TX_QUERY" | jq -r '.raw_log // .tx_response.raw_log // empty')"
+  echo "Create deal failed: tx code=$CREATE_CODE raw_log=${CREATE_RAW_LOG:-unknown}"
+  exit 1
+fi
+DEAL_ID="$(echo "$TX_QUERY" | parse_create_deal_id)"
 if [ -z "$DEAL_ID" ]; then
-  DEAL_LIST=$($NILCHAIND query nilchain list-deals --output json)
-  DEAL_ID=$(echo "$DEAL_LIST" | jq -r '.deals[-1].id')
+  for _ in {1..10}; do
+    DEAL_LIST="$($NILCHAIND query nilchain list-deals --output json)"
+    DEAL_ID="$(echo "$DEAL_LIST" | jq -r '.deals // [] | .[-1].id // empty')"
+    if [ -n "$DEAL_ID" ] && [ "$DEAL_ID" != "null" ]; then
+      break
+    fi
+    sleep 1
+  done
 fi
 echo "Deal ID: $DEAL_ID"
 if [ -z "$DEAL_ID" ] || [ "$DEAL_ID" == "null" ]; then
@@ -95,7 +158,7 @@ echo "CID: $CID"
 
 # 5. Commit Content
 banner "Committing Content"
-COMMIT_OUT=$($NILCHAIND tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$CID" --size "$SIZE" --total-mdus "$TOTAL_MDUS" --witness-mdus "$WITNESS_MDUS" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas-prices 0.001aatom --output json)
+COMMIT_OUT=$($NILCHAIND tx nilchain update-deal-content --deal-id "$DEAL_ID" --cid "$CID" --size "$SIZE" --total-mdus "$TOTAL_MDUS" --witness-mdus "$WITNESS_MDUS" --chain-id 31337 --from provider1 --yes --keyring-backend test --home "$CHAIN_HOME" --gas 500000 --gas-prices 0.001aatom --output json)
 echo "Commit Tx: $(echo "$COMMIT_OUT" | jq -r '.txhash')"
 sleep 6
 

@@ -154,6 +154,8 @@ ensure_nil_core() {
   nil_core_has_symbols() {
     local sym
     local file=""
+    local symbol_dump=""
+    local normalized_symbols=""
 
     # Prefer dynamic libraries because `nm` on archive `.a` can return non-zero
     # (causing false negatives under `set -o pipefail`).
@@ -178,6 +180,26 @@ ensure_nil_core() {
       nm_supports_dash_d="1"
     fi
 
+    if [ "$nm_supports_dash_d" = "1" ]; then
+      symbol_dump="$(nm -D "$file" 2>/dev/null || true)"
+    else
+      symbol_dump="$(nm "$file" 2>/dev/null || true)"
+    fi
+    if [ -z "$symbol_dump" ]; then
+      return 1
+    fi
+
+    # Normalize symbol names across platforms/toolchains:
+    # - macOS prepends C symbols with "_"
+    # - some toolchains append symbol version suffixes "@@..."
+    normalized_symbols="$(
+      printf '%s\n' "$symbol_dump" \
+        | awk '{print $NF}' \
+        | sed -E 's/^_+//; s/@.*$//' \
+        | grep -E '^[A-Za-z][A-Za-z0-9_]*$' \
+        || true
+    )"
+
     for sym in \
       nil_compute_mdu_root_from_witness_flat \
       nil_expand_mdu_rs \
@@ -186,14 +208,8 @@ ensure_nil_core() {
       nil_mdu0_builder_load_with_commitments \
       nil_encode_payload_to_mdu \
       nil_decode_payload_from_mdu; do
-      if [ "$nm_supports_dash_d" = "1" ]; then
-        if ! nm -D "$file" 2>/dev/null | awk '{print $3}' | sed 's/@.*$//' | grep -Fxq "$sym"; then
-          return 1
-        fi
-      else
-        if ! nm "$file" 2>/dev/null | awk '{print $3}' | sed 's/@.*$//' | grep -Fxq "$sym"; then
-          return 1
-        fi
+      if ! printf '%s\n' "$normalized_symbols" | grep -Fxq "$sym"; then
+        return 1
       fi
     done
 

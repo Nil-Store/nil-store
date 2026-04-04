@@ -4,12 +4,16 @@ import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 
 import {
+  buildProviderStatusRecoveryCommand,
   buildProviderAgentPrompt,
   buildProviderBootstrapCommand,
   buildCloudflareTunnelBootstrapCommand,
   buildProviderEndpointPlan,
   deriveEndpointInputPrefillFromProviderEndpoint,
+  formatProviderOnchainStatusLabel,
   buildProviderHealthCommands,
+  isProviderOnchainStatusBlocked,
+  normalizeProviderOnchainStatus,
   buildProviderPairCommand,
   buildProviderLinkCommand,
   evaluateProviderRunbookReadiness,
@@ -136,6 +140,63 @@ test('buildProviderEndpointPlan rejects invalid endpoint inputs', () => {
     }),
     null,
   )
+})
+
+test('provider on-chain status helpers normalize labels and block decisions', () => {
+  assert.equal(normalizeProviderOnchainStatus('Active'), 'active')
+  assert.equal(normalizeProviderOnchainStatus('offline'), 'offline')
+  assert.equal(normalizeProviderOnchainStatus('JAILED'), 'jailed')
+  assert.equal(normalizeProviderOnchainStatus(''), 'unknown')
+
+  assert.equal(formatProviderOnchainStatusLabel('Active'), 'Active')
+  assert.equal(formatProviderOnchainStatusLabel('offline'), 'Offline')
+  assert.equal(formatProviderOnchainStatusLabel('JAILED'), 'Jailed')
+  assert.equal(formatProviderOnchainStatusLabel('mystery-state'), 'mystery-state')
+  assert.equal(formatProviderOnchainStatusLabel(''), 'Unknown')
+
+  assert.equal(isProviderOnchainStatusBlocked('Active'), false)
+  assert.equal(isProviderOnchainStatusBlocked('offline'), true)
+  assert.equal(isProviderOnchainStatusBlocked('JAILED'), true)
+})
+
+test('buildProviderStatusRecoveryCommand emits a fully copyable repair command when required values are present', () => {
+  const fix = buildProviderStatusRecoveryCommand({
+    onchainStatus: 'jailed',
+    providerKey: 'provider-main',
+    operatorAddress: 'nil1operator123',
+    providerEndpoint: '/dns4/testasdf.nil-store.com/tcp/443/https',
+    authToken: 'custom-auth-token',
+    approvedProviderAddress: 'nil1providerxyz',
+    publicBase: 'https://testasdf.nil-store.com:443',
+  })
+
+  assert.equal(fix.blocked, true)
+  assert.equal(fix.status, 'jailed')
+  assert.equal(fix.command !== null, true)
+  assert.equal(fix.missing.length, 0)
+  assert.match(fix.note, /Jailed status/i)
+  assert.match(fix.command || '', /PROVIDER_KEY='provider-main' \.\/scripts\/run_devnet_provider\.sh stop \|\| true/)
+  assert.match(fix.command || '', /OPERATOR_ADDRESS='nil1operator123'/)
+  assert.match(fix.command || '', /EXPECTED_PROVIDER_ADDRESS='nil1providerxyz'/)
+  assert.match(fix.command || '', /PROVIDER_ENDPOINT='\/dns4\/testasdf\.nil-store\.com\/tcp\/443\/https'/)
+  assert.match(fix.command || '', /NIL_GATEWAY_SP_AUTH='custom-auth-token'/)
+  assert.match(fix.command || '', /run_devnet_provider\.sh bootstrap/)
+  assert.match(fix.command || '', /run_devnet_provider\.sh verify/)
+  assert.match(fix.command || '', /https:\/\/testasdf\.nil-store\.com:443\/status/)
+})
+
+test('buildProviderStatusRecoveryCommand reports missing required values without placeholders', () => {
+  const fix = buildProviderStatusRecoveryCommand({
+    onchainStatus: 'offline',
+    providerKey: '',
+    operatorAddress: '',
+    providerEndpoint: '',
+  })
+
+  assert.equal(fix.command, null)
+  assert.deepEqual(fix.missing, ['provider key', 'operator address', 'provider endpoint'])
+  assert.equal(fix.blocked, true)
+  assert.equal(fix.status, 'offline')
 })
 
 test('buildProviderBootstrapCommand emits a focused bootstrap command and opts into partial mode when operator data is absent', () => {

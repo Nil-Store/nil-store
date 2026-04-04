@@ -26,7 +26,13 @@ import {
   buildProviderRegisterCommand,
   findOperatorProviderRecord,
 } from '../lib/providerConsole'
-import { buildProviderHealthCommands } from '../lib/providerOnboarding'
+import {
+  DEVNET_SHARED_GATEWAY_AUTH_TOKEN,
+  buildProviderHealthCommands,
+  buildProviderStatusRecoveryCommand,
+  formatProviderOnchainStatusLabel,
+  isProviderOnchainStatusBlocked,
+} from '../lib/providerOnboarding'
 
 const PROVIDER_PLAYBOOK_URL = 'https://github.com/Nil-Store/nil-store/blob/main/DEVNET_MULTI_PROVIDER.md'
 const LOCAL_DEMO_STACK_CMD = './scripts/ensure_stack_local.sh'
@@ -170,6 +176,9 @@ export function SpDashboard() {
   const providerDaemonStatusReady = String(publicStatus?.persona || '').trim().toLowerCase() === 'provider-daemon'
   const providerStatusDetail = publicStatus?.provider ?? null
   const effectiveControlBase = providerStatusDetail?.public_base || selectedControlBase || activeRecord?.primaryBase || null
+  const providerOnchainStatusRaw = String(activeRecord?.registryStatus || providerStatusDetail?.onchain_status || '').trim()
+  const providerOnchainStatusLabel = formatProviderOnchainStatusLabel(providerOnchainStatusRaw)
+  const providerOnchainStatusBlocked = isProviderOnchainStatusBlocked(providerOnchainStatusRaw)
   const healthCommands = useMemo(
     () => buildProviderHealthCommands(providerStatusDetail?.public_base || activeRecord?.primaryBase || null, rotationProviderKey),
     [activeRecord?.primaryBase, providerStatusDetail?.public_base, rotationProviderKey],
@@ -177,6 +186,27 @@ export function SpDashboard() {
   const rotationCommand = useMemo(
     () => buildProviderRegisterCommand({ providerKey: rotationProviderKey, providerEndpoint: rotationEndpoint }),
     [rotationEndpoint, rotationProviderKey],
+  )
+  const providerStatusRecoveryFix = useMemo(
+    () => buildProviderStatusRecoveryCommand({
+      onchainStatus: providerOnchainStatusRaw,
+      providerKey: rotationProviderKey,
+      operatorAddress: nilAddress || '',
+      providerEndpoint: String(rotationEndpoint || activeRecord?.endpoints?.[0] || '').trim(),
+      authToken: DEVNET_SHARED_GATEWAY_AUTH_TOKEN,
+      approvedProviderAddress: activeRecord?.provider || '',
+      publicBase: effectiveControlBase || activeRecord?.primaryBase || '',
+    }),
+    [
+      activeRecord?.endpoints,
+      activeRecord?.primaryBase,
+      activeRecord?.provider,
+      effectiveControlBase,
+      nilAddress,
+      providerOnchainStatusRaw,
+      rotationEndpoint,
+      rotationProviderKey,
+    ],
   )
 
   useEffect(() => {
@@ -315,10 +345,20 @@ export function SpDashboard() {
     }
   }
 
+  const activeIssues = useMemo(() => {
+    const merged = [...(publicStatus?.issues || []), ...(adminResponse?.issues || [])]
+    if (providerOnchainStatusBlocked) {
+      merged.unshift(
+        `on-chain provider status is ${providerOnchainStatusLabel}; new assignments are blocked until status returns to Active`,
+      )
+    }
+    return merged
+  }, [adminResponse?.issues, providerOnchainStatusBlocked, providerOnchainStatusLabel, publicStatus?.issues])
+
   const registeredCount = records.filter((record) => record.registered).length
-  const healthyCurrent = providerDaemonStatusReady
+  const healthyCurrent = !providerOnchainStatusBlocked && (providerDaemonStatusReady
     ? Boolean(providerStatusDetail?.public_health_ok)
-    : healthProbe.status === 'ok' && healthProbe.base === effectiveControlBase
+    : healthProbe.status === 'ok' && healthProbe.base === effectiveControlBase)
   const adminStatus = adminResponse?.provider
   const controlPlaneReady = Boolean(isConnected && !needsReconnect && effectiveControlBase)
 
@@ -601,7 +641,10 @@ export function SpDashboard() {
                     Pairing, registration, and public health are derived directly from the operator wallet and on-chain provider state. Provider keys remain server-side.
                   </p>
                 </div>
-                <StatusPill label={healthyCurrent ? 'Healthy' : activeRecord?.registered ? 'Registered' : 'Paired'} state={healthyCurrent ? 'ready' : activeRecord?.registered ? 'pending' : 'pending'} />
+                <StatusPill
+                  label={providerOnchainStatusBlocked ? providerOnchainStatusLabel : healthyCurrent ? 'Healthy' : activeRecord?.registered ? 'Registered' : 'Paired'}
+                  state={providerOnchainStatusBlocked ? 'action' : healthyCurrent ? 'ready' : activeRecord?.registered ? 'pending' : 'pending'}
+                />
               </div>
 
               <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -619,7 +662,9 @@ export function SpDashboard() {
                 </div>
                 <div className="border border-border bg-background/40 p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">On-chain status</div>
-                  <div className="mt-2 font-mono-data text-foreground">{activeRecord?.registryStatus || (activeRecord?.registered ? 'registered' : 'not registered')}</div>
+                  <div className={`mt-2 font-mono-data ${providerOnchainStatusBlocked ? 'text-destructive' : 'text-foreground'}`}>
+                    {activeRecord?.registered ? providerOnchainStatusLabel : 'not registered'}
+                  </div>
                 </div>
               </div>
 
@@ -643,6 +688,40 @@ export function SpDashboard() {
                   )}
                 </div>
               </div>
+              {providerOnchainStatusBlocked ? (
+                <div className="mt-4 space-y-3 border border-destructive/40 bg-background p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">On-chain status blocker</div>
+                  <div className="text-sm text-foreground">
+                    This provider is <span className="font-semibold">{providerOnchainStatusLabel}</span> on-chain and is excluded from new assignments.
+                  </div>
+                  <div className="text-sm text-muted-foreground">{providerStatusRecoveryFix.note}</div>
+                  {providerStatusRecoveryFix.command ? (
+                    <>
+                      <div className="flex flex-wrap gap-3">
+                        <CopyButton
+                          label="Copy recovery commands"
+                          onClick={() => void handleCopy('On-chain status recovery commands', providerStatusRecoveryFix.command || '')}
+                        />
+                        <Link
+                          to="/sp-onboarding"
+                          className="inline-flex items-center gap-2 border border-border bg-background/60 px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary/40"
+                        >
+                          <Shield className="h-4 w-4" />
+                          Open Onboarding Recovery
+                        </Link>
+                      </div>
+                      <pre className="overflow-x-auto border border-border bg-background/70 p-4 text-xs text-muted-foreground">{providerStatusRecoveryFix.command}</pre>
+                    </>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      Could not build recovery commands yet. Missing: {providerStatusRecoveryFix.missing.join(', ')}.
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground">
+                    Commands default to <span className="font-mono">NIL_GATEWAY_SP_AUTH={DEVNET_SHARED_GATEWAY_AUTH_TOKEN}</span>. If your hub uses a custom secret, replace it before running.
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             <section className="glass-panel industrial-border p-6">
@@ -739,11 +818,11 @@ export function SpDashboard() {
                 </div>
               ) : null}
 
-              {(publicStatus?.issues?.length || adminResponse?.issues?.length) ? (
+              {activeIssues.length ? (
                 <div className="mt-5 border border-destructive/30 bg-destructive/5 p-4">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-destructive">Active issues</div>
                   <div className="mt-3 space-y-2 text-sm text-destructive">
-                    {[...(publicStatus?.issues || []), ...(adminResponse?.issues || [])].map((issue) => (
+                    {activeIssues.map((issue) => (
                       <div key={issue}>{issue}</div>
                     ))}
                   </div>

@@ -1,0 +1,107 @@
+name: SP Discipline Stack Policy
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+  issue_comment:
+    types:
+      - created
+      - edited
+  pull_request_review:
+    types:
+      - submitted
+      - edited
+  pull_request_review_comment:
+    types:
+      - created
+      - edited
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to validate YES MERGE approval for"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  yes-merge-approval:
+    name: YES MERGE Approval
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null) ||
+      github.event_name == 'pull_request_review' ||
+      github.event_name == 'pull_request_review_comment' ||
+      github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve PR number
+        id: pr
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PR_NUMBER="${{ inputs.pr_number }}"
+          else
+            PR_NUMBER="$(jq -r '.pull_request.number // .issue.number // empty' "$GITHUB_EVENT_PATH")"
+          fi
+          if [ -z "${PR_NUMBER:-}" ] || [ "$PR_NUMBER" = "null" ]; then
+            echo "ERROR: unable to resolve PR number for YES MERGE check" >&2
+            exit 2
+          fi
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Validate human YES MERGE approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/ci/check_yes_merge.sh \
+            --repo "${{ github.repository }}" \
+            --pr-number "${{ steps.pr.outputs.pr_number }}" \
+            --token "${{ github.token }}"
+
+  stack-preflight:
+    name: Stack Preflight
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'pull_request' &&
+      startsWith(github.event.pull_request.head.ref, 'stack/sp-discipline-')
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Validate stack integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/ci/check_sp_discipline_stack_integrity.sh
+
+      - name: Validate plan/evidence docs consistency
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/ci/check_sp_discipline_docs_consistency.sh
