@@ -47,7 +47,6 @@ func TestCheckMissedProofs_StartsMode2SlotRepair(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
-	require.NoError(t, f.keeper.ProviderRewards.Set(sdkCtx, providerA, math.NewInt(5)))
 
 	dealID := uint64(1)
 	deal := types.Deal{

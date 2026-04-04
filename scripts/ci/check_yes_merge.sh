@@ -57,7 +57,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_cmd jq
-require_cmd curl
 
 data_file=""
 tmpdir=""
@@ -80,6 +79,7 @@ else
     usage >&2
     exit 2
   fi
+  require_cmd curl
 
   tmpdir="$(mktemp -d)"
   issue_comments="$tmpdir/issue_comments.json"
@@ -90,26 +90,43 @@ else
   api_base="https://api.github.com/repos/$repo"
   auth_header="Authorization: Bearer $token"
 
-  curl -fsSL \
-    -H "Accept: application/vnd.github+json" \
-    -H "$auth_header" \
-    -H "X-GitHub-Api-Version: 2022-11-28" \
-    "$api_base/issues/$pr_number/comments?per_page=100" \
-    -o "$issue_comments"
+  fetch_paginated() {
+    local endpoint="$1"
+    local out_file="$2"
+    local page=1
+    local per_page=100
+    local page_file="$tmpdir/page.json"
+    local merged_file="$tmpdir/merged.json"
+    local page_count=0
 
-  curl -fsSL \
-    -H "Accept: application/vnd.github+json" \
-    -H "$auth_header" \
-    -H "X-GitHub-Api-Version: 2022-11-28" \
-    "$api_base/pulls/$pr_number/comments?per_page=100" \
-    -o "$review_comments"
+    printf '[]\n' >"$out_file"
+    while true; do
+      curl -fsSL \
+        -H "Accept: application/vnd.github+json" \
+        -H "$auth_header" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        "$api_base/$endpoint?per_page=$per_page&page=$page" \
+        -o "$page_file"
 
-  curl -fsSL \
-    -H "Accept: application/vnd.github+json" \
-    -H "$auth_header" \
-    -H "X-GitHub-Api-Version: 2022-11-28" \
-    "$api_base/pulls/$pr_number/reviews?per_page=100" \
-    -o "$reviews"
+      if ! jq -e 'type == "array"' "$page_file" >/dev/null; then
+        echo "ERROR: expected array response from GitHub API for $endpoint page $page" >&2
+        exit 1
+      fi
+
+      jq -s '.[0] + .[1]' "$out_file" "$page_file" >"$merged_file"
+      mv "$merged_file" "$out_file"
+
+      page_count="$(jq 'length' "$page_file")"
+      if [[ "$page_count" -lt "$per_page" ]]; then
+        break
+      fi
+      page=$((page + 1))
+    done
+  }
+
+  fetch_paginated "issues/$pr_number/comments" "$issue_comments"
+  fetch_paginated "pulls/$pr_number/comments" "$review_comments"
+  fetch_paginated "pulls/$pr_number/reviews" "$reviews"
 
   jq -s 'add' "$issue_comments" "$review_comments" "$reviews" > "$combined"
   data_file="$combined"

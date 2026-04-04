@@ -54,7 +54,12 @@ func (k Keeper) CheckMissedProofs(ctx context.Context) error {
 				if provider == "" {
 					continue
 				}
-				if p, perr := k.Providers.Get(ctx, provider); perr == nil && strings.TrimSpace(p.Status) != "Active" {
+				p, perr := k.Providers.Get(ctx, provider)
+				if perr != nil {
+					if !errors.Is(perr, collections.ErrNotFound) {
+						return false, perr
+					}
+				} else if strings.TrimSpace(p.Status) != "Active" {
 					replacement, rerr := k.selectMode1ReplacementProvider(sdkCtx, deal, providerIdx, epochID)
 					if rerr != nil {
 						sdkCtx.Logger().Error(
