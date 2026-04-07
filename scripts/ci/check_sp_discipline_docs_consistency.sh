@@ -21,6 +21,36 @@ extract_branches() {
   sed -n 's/^[0-9][0-9]*\. `\(stack\/sp-discipline-[^`]*\)`/\1/p' "$file"
 }
 
+check_branch_sequence() {
+  local label="$1"
+  local branches="$2"
+  local expected=0
+  local saw_any=0
+
+  while IFS= read -r branch; do
+    [ -n "$branch" ] || continue
+    saw_any=1
+    local idx_raw
+    idx_raw="$(printf '%s' "$branch" | sed -nE 's#^stack/sp-discipline-([0-9]+)-.*#\1#p')"
+    if [ -z "$idx_raw" ]; then
+      echo "ERROR: could not parse stack index from $label branch entry: $branch" >&2
+      exit 1
+    fi
+    local idx_num=$((10#$idx_raw))
+    if [ "$idx_num" -ne "$expected" ]; then
+      printf 'ERROR: non-contiguous stack numbering in %s doc list (expected %02d, got %02d at %s)\n' \
+        "$label" "$expected" "$idx_num" "$branch" >&2
+      exit 1
+    fi
+    expected=$((expected + 1))
+  done <<< "$branches"
+
+  if [ "$saw_any" -ne 1 ]; then
+    echo "ERROR: no stack branches parsed from $label doc list" >&2
+    exit 1
+  fi
+}
+
 check_no_duplicates() {
   local label="$1"
   local branches="$2"
@@ -43,6 +73,8 @@ fi
 
 check_no_duplicates "plan" "$PLAN_BRANCHES"
 check_no_duplicates "evidence" "$EVIDENCE_BRANCHES"
+check_branch_sequence "plan" "$PLAN_BRANCHES"
+check_branch_sequence "evidence" "$EVIDENCE_BRANCHES"
 
 if [ "$PLAN_BRANCHES" != "$EVIDENCE_BRANCHES" ]; then
   echo "ERROR: stack branch lists differ between plan and evidence docs" >&2

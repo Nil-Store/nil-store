@@ -64,6 +64,8 @@ BASE_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-01-t
 MISMATCH_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-02-conviction-state`'
 DUP_PLAN_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-01-taxonomy-and-signals`\n3. `stack/sp-discipline-01-taxonomy-and-signals`'
 DUP_EVIDENCE_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-01-taxonomy-and-signals`\n3. `stack/sp-discipline-01-taxonomy-and-signals`'
+GAP_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-02-conviction-state`'
+OUT_OF_ORDER_LIST=$'1. `stack/sp-discipline-00-merge-gate`\n2. `stack/sp-discipline-02-conviction-state`\n3. `stack/sp-discipline-01-taxonomy-and-signals`'
 
 echo "==> Case 1: matching branch lists and YES MERGE text pass"
 write_docs "$BASE_LIST" "$BASE_LIST" "1"
@@ -84,5 +86,13 @@ expect_fail "evidence-duplicate"
 echo "==> Case 5: missing YES MERGE reminder text fails"
 write_docs "$BASE_LIST" "$BASE_LIST" "0"
 expect_fail "missing-yes-merge"
+
+echo "==> Case 6: non-contiguous branch numbering fails"
+write_docs "$GAP_LIST" "$GAP_LIST" "1"
+expect_fail "branch-gap"
+
+echo "==> Case 7: out-of-order branch numbering fails"
+write_docs "$OUT_OF_ORDER_LIST" "$OUT_OF_ORDER_LIST" "1"
+expect_fail "branch-out-of-order"
 
 echo "SP discipline docs consistency scenario tests passed."
