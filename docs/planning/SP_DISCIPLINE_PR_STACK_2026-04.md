@@ -44,6 +44,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 18. `stack/sp-discipline-17-policy-template-scenarios`
 19. `stack/sp-discipline-18-yes-merge-scenarios`
 20. `stack/sp-discipline-19-evidence-capture-scenarios`
+21. `stack/sp-discipline-20-gate-runner-scenarios`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -486,6 +487,29 @@ Exit Criteria:
 - Evidence capture behavior is covered by deterministic positive and negative scenario tests.
 - Evidence capture can be scenario-tested without executing the full heavyweight gate matrix.
 - Gate runner includes explicit scenario coverage for evidence automation integrity.
+
+## PR 20: Gate Runner Scenario Tests and Fast-Mode Overrides
+Scope:
+- Add deterministic gate-runner scenario tests for happy-path, early-stop failure propagation, and expected-fail guard behavior.
+- Add path and command override env hooks so `run_sp_discipline_stack_gates.sh` can be scenario-tested in isolated temp environments.
+- Add explicit fast-only mode (`SP_DISCIPLINE_STACK_FAST_ONLY=1`) for bounded scenario execution while preserving default full-matrix behavior.
+- Integrate gate-runner scenarios into the one-command runner before heavyweight keeper/e2e/frontend checks.
+
+Files (expected):
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `scripts/ci/test_sp_discipline_gate_runner.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/test_sp_discipline_gate_runner.sh` (must pass)
+2. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with gate-runner scenarios included)
+3. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Gate-runner control flow is covered by deterministic positive and negative scenario tests.
+- Scenario tests validate override hooks without invoking heavyweight commands.
+- Default runner behavior remains full-matrix unless fast-only is explicitly set.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
