@@ -5,6 +5,7 @@ import { Menu, X, Github, ChevronDown, Zap, Rocket, Trophy, Activity, Coins, Cpu
 import { motion, AnimatePresence } from "framer-motion";
 import { NavDropdown, NavItem } from "./NavDropdown";
 import { LivingGrid } from "./LivingGrid";
+import { DashboardCta } from "./DashboardCta";
 
 export const Layout = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -53,9 +54,9 @@ export const Layout = () => {
       type: "dropdown", 
       name: "Explore", 
       items: [
-        { name: "Store Data", path: "/alpha/storage", description: "Alpha user quickstart.", icon: <Database className="w-5 h-5" /> },
-        { name: "Become A Provider", path: "/alpha/provider", description: "Alpha provider onboarding.", icon: <Server className="w-5 h-5" /> },
-        { name: "Alpha Status", path: "/alpha/status", description: "Shared launch status surface.", icon: <Activity className="w-5 h-5" /> },
+        { name: "Store Data", path: "/alpha/storage", description: "Testnet user quickstart.", icon: <Database className="w-5 h-5" /> },
+        { name: "Become A Provider", path: "/alpha/provider", description: "Testnet provider onboarding.", icon: <Server className="w-5 h-5" /> },
+        { name: "Testnet Status", path: "/alpha/status", description: "Shared testnet status surface.", icon: <Activity className="w-5 h-5" /> },
         { name: "SP Dashboard", path: "/sp-dashboard", description: "Provider ops console.", icon: <Server className="w-5 h-5" /> },
         { name: "Leaderboard", path: "/leaderboard", description: "Top performing Storage Providers.", icon: <Trophy className="w-5 h-5" /> },
         { name: "Live Proofs", path: "/proofs", description: "Real-time verification stream.", icon: <Activity className="w-5 h-5" /> },
@@ -169,16 +170,9 @@ export const Layout = () => {
               </a>
 
               <ModeToggle />
-              
-              {/* PRIMARY CTA: Launch Console */}
-              <Link 
-                to="/alpha/storage"
-                className="hidden sm:flex items-center gap-3 px-6 py-3 bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-[0.2em] shadow-[0_0_24px_rgba(0,0,0,0.08)] dark:shadow-[0_0_24px_hsl(var(--primary)_/_0.22)] dark:drop-shadow-[0_0_8px_hsl(var(--primary)_/_0.30)] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] transition-all"
-              >
-                <Database className="w-4 h-4 fill-current" />
-                Start Storing
-              </Link>
 
+              <DashboardCta className="hidden sm:flex" label="Dashboard" to="/dashboard" />
+              
               {/* Mobile Toggle */}
               <button 
                 onClick={() => setIsOpen(!isOpen)} 
@@ -268,11 +262,11 @@ export const Layout = () => {
       </nav>
 
       {/* Main Content Spacer */}
-      <main className="pt-20">
+      <main className="pt-20 relative z-10">
         <Outlet />
       </main>
 
-      <footer className="py-12 border-t border-border bg-card mt-24 relative overflow-hidden">
+      <footer className="py-12 border-t border-border bg-card mt-24 relative z-10 overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-[1px] bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-60" />
         
         <div className="container mx-auto px-4 text-center text-muted-foreground text-sm relative z-10">
