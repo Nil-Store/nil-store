@@ -43,6 +43,7 @@ Implement a deterministic, testable discipline system so unreliable SPs are prog
 17. `stack/sp-discipline-16-stack-integrity-scenarios`
 18. `stack/sp-discipline-17-policy-template-scenarios`
 19. `stack/sp-discipline-18-yes-merge-scenarios`
+20. `stack/sp-discipline-19-evidence-capture-scenarios`
 
 Each branch is cut from the previous stack branch, not from `main`.
 
@@ -461,6 +462,30 @@ Exit Criteria:
 - `YES MERGE` guard behavior is covered by deterministic positive and negative scenario tests.
 - Near-miss phrases are explicitly rejected by the checker.
 - Gate runner includes explicit scenario coverage for merge-approval enforcement.
+
+## PR 19: Evidence Capture Scenario Tests and Deterministic Overrides
+Scope:
+- Harden evidence capture automation with deterministic timestamp overrides for reproducible scenario assertions.
+- Add gate-runner path override support so capture behavior can be tested in isolated temp environments.
+- Add deterministic evidence-capture scenarios for pass/fail runner outcomes and missing-runner handling.
+- Integrate evidence-capture scenarios into the gate runner before heavyweight keeper/e2e/frontend checks.
+
+Files (expected):
+- `scripts/ci/capture_sp_discipline_gate_evidence.sh`
+- `scripts/ci/test_sp_discipline_evidence_capture.sh`
+- `scripts/ci/run_sp_discipline_stack_gates.sh`
+- `docs/planning/SP_DISCIPLINE_PR_STACK_2026-04.md`
+- `docs/planning/SP_DISCIPLINE_EXECUTION_EVIDENCE_2026-04.md`
+
+Test Gate:
+1. `bash scripts/ci/test_sp_discipline_evidence_capture.sh` (must pass)
+2. `bash scripts/ci/run_sp_discipline_stack_gates.sh` (must pass with evidence-capture scenarios included)
+3. `bash scripts/ci/capture_sp_discipline_gate_evidence.sh` (must pass and write artifacts)
+
+Exit Criteria:
+- Evidence capture behavior is covered by deterministic positive and negative scenario tests.
+- Evidence capture can be scenario-tested without executing the full heavyweight gate matrix.
+- Gate runner includes explicit scenario coverage for evidence automation integrity.
 
 ## Cross-PR Regression Matrix
 Run this matrix at minimum for PRs 02-06 (state/economics/repair/UX affecting):
